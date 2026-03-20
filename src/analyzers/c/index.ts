@@ -6,10 +6,12 @@ import type {
   ScannedApplication,
   ScannedModule,
   ModuleImport,
+  ModuleSymbols,
 } from "../types.js";
 import { slugify } from "../../core/slugify.js";
 import { parseCIncludes } from "./includes.js";
 import { extractCStructure } from "./structure.js";
+import { extractCSymbols } from "./symbols.js";
 
 export const cAnalyzer: LanguageAnalyzer = {
   id: "c",
@@ -86,6 +88,18 @@ export const cAnalyzer: LanguageAnalyzer = {
       externalDependencies: [],
       internalImports: [],
     };
+  },
+
+  async analyzeModule(modulePath: string, _config: ScanConfig): Promise<ModuleSymbols> {
+    const files: Array<{ path: string; content: string }> = [];
+    const entries = fs.readdirSync(modulePath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && (entry.name.endsWith(".h") || entry.name.endsWith(".c"))) {
+        const content = fs.readFileSync(path.join(modulePath, entry.name), "utf-8");
+        files.push({ path: entry.name, content });
+      }
+    }
+    return extractCSymbols(files);
   },
 };
 
