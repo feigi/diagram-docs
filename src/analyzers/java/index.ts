@@ -7,10 +7,12 @@ import type {
   ScannedModule,
   ExternalDep,
   ModuleImport,
+  ModuleSymbols,
 } from "../types.js";
 import { slugify } from "../../core/slugify.js";
 import { parseJavaImports } from "./imports.js";
 import { extractPackages, detectSpringAnnotations } from "./packages.js";
+import { extractJavaSymbols } from "./symbols.js";
 
 function parsePomDependencies(pomPath: string): ExternalDep[] {
   if (!fs.existsSync(pomPath)) return [];
@@ -94,6 +96,18 @@ export const javaAnalyzer: LanguageAnalyzer = {
       externalDependencies,
       internalImports: [],
     };
+  },
+
+  async analyzeModule(modulePath: string, _config: ScanConfig): Promise<ModuleSymbols> {
+    const files: Array<{ path: string; content: string }> = [];
+    const entries = fs.readdirSync(modulePath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(".java")) {
+        const content = fs.readFileSync(path.join(modulePath, entry.name), "utf-8");
+        files.push({ path: entry.name, content });
+      }
+    }
+    return extractJavaSymbols(files);
   },
 };
 
