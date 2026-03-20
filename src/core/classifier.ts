@@ -13,7 +13,7 @@ export interface FolderSignals {
   childFolderNames: string[];
   readmeSnippet: string | null;
   hasSourceFiles: boolean;
-  isPackageDir?: boolean;
+  isPackageDir: boolean;
 }
 
 const BUILD_FILES = new Set([
@@ -68,10 +68,10 @@ const PACKAGE_MARKERS = new Set(["__init__.py"]);
  * Collect signals from a folder for classification.
  * Scans the current folder and one level of children for performance.
  */
-export async function collectSignals(
+export function collectSignals(
   folderPath: string,
   rootPath: string,
-): Promise<FolderSignals> {
+): FolderSignals {
   const buildFiles: string[] = [];
   const infraFiles: string[] = [];
   const childFolderNames: string[] = [];
@@ -98,6 +98,7 @@ export async function collectSignals(
       childFolderNames: [],
       readmeSnippet: null,
       hasSourceFiles: false,
+      isPackageDir: false,
     };
   }
 
@@ -123,7 +124,10 @@ export async function collectSignals(
         languageSet.add(lang);
       }
 
-      // Check for package markers
+      // Check for package markers.
+      // __init__.py sets isPackageDir (used for component classification when no
+      // build file is present) and hasPackageStructure (used for container
+      // classification when a build file is present).
       if (PACKAGE_MARKERS.has(name)) {
         isPackageDir = true;
         hasPackageStructure = true;

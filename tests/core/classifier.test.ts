@@ -15,6 +15,7 @@ describe("inferRole", () => {
       childFolderNames: ["order-service", "user-service", "gateway"],
       readmeSnippet: null,
       hasSourceFiles: false,
+      isPackageDir: false,
     };
     expect(inferRole(signals)).toBe("system");
   });
@@ -31,6 +32,7 @@ describe("inferRole", () => {
       childFolderNames: ["src", "test"],
       readmeSnippet: null,
       hasSourceFiles: true,
+      isPackageDir: false,
     };
     expect(inferRole(signals)).toBe("container");
   });
@@ -47,6 +49,7 @@ describe("inferRole", () => {
       childFolderNames: [],
       readmeSnippet: null,
       hasSourceFiles: true,
+      isPackageDir: false,
     };
     expect(inferRole(signals)).toBe("code-only");
   });
@@ -80,6 +83,7 @@ describe("inferRole", () => {
       childFolderNames: [],
       readmeSnippet: null,
       hasSourceFiles: false,
+      isPackageDir: false,
     };
     expect(inferRole(signals)).toBe("skip");
   });
@@ -97,7 +101,7 @@ describe("collectSignals", () => {
     fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "src", "App.java"), "class App {}");
 
-    const signals = await collectSignals(tmpDir, tmpDir);
+    const signals = collectSignals(tmpDir, tmpDir);
     expect(signals.buildFiles).toContain("pom.xml");
     expect(signals.hasSourceFiles).toBe(true);
     expect(signals.sourceLanguages).toContain("java");
@@ -116,7 +120,7 @@ describe("collectSignals", () => {
       fs.writeFileSync(path.join(tmpDir, svc, "pom.xml"), "<project/>");
     }
 
-    const signals = await collectSignals(tmpDir, tmpDir);
+    const signals = collectSignals(tmpDir, tmpDir);
     expect(signals.childrenWithBuildFiles).toBe(3);
 
     fs.rmSync(tmpDir, { recursive: true });
