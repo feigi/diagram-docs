@@ -226,6 +226,20 @@ function buildRelationships(
     }
   }
 
+  // Build a global lookup from module name → module ID across all apps
+  const moduleNameToId = new Map<string, string>();
+  for (const app of apps) {
+    for (const m of app.modules) {
+      moduleNameToId.set(m.name, m.id);
+    }
+  }
+
+  // Map component ID → container ID for promoting cross-container relationships
+  const componentToContainer = new Map<string, string>();
+  for (const comp of components) {
+    componentToContainer.set(comp.id, comp.containerId);
+  }
+
   for (const app of apps) {
     // Cross-app imports → container-level relationships
     for (const imp of app.internalImports) {
@@ -242,13 +256,7 @@ function buildRelationships(
       }
     }
 
-    // Intra-app module imports → component-level relationships
-    // Build a lookup from module name → module ID for fallback resolution
-    const moduleNameToId = new Map<string, string>();
-    for (const m of app.modules) {
-      moduleNameToId.set(m.name, m.id);
-    }
-
+    // Module imports → component-level relationships
     for (const mod of app.modules) {
       const sourceComp = componentByModule.get(mod.id);
       if (!sourceComp) continue;
@@ -271,6 +279,7 @@ function buildRelationships(
         const targetComp = componentByModule.get(targetModId);
         if (!targetComp || targetComp === sourceComp) continue;
 
+        // Emit component-level relationship
         const key = `${sourceComp}->${targetComp}`;
         if (!seen.has(key)) {
           seen.add(key);
@@ -279,6 +288,21 @@ function buildRelationships(
             targetId: targetComp,
             label: "Uses",
           });
+        }
+
+        // Promote to container-level relationship if cross-container
+        const srcContainer = componentToContainer.get(sourceComp);
+        const tgtContainer = componentToContainer.get(targetComp);
+        if (srcContainer && tgtContainer && srcContainer !== tgtContainer) {
+          const containerKey = `${srcContainer}->${tgtContainer}`;
+          if (!seen.has(containerKey)) {
+            seen.add(containerKey);
+            relationships.push({
+              sourceId: srcContainer,
+              targetId: tgtContainer,
+              label: "Uses",
+            });
+          }
         }
       }
     }
