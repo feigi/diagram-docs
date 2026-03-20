@@ -81,14 +81,30 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
           ]
         : [];
     }
-    return modules.map((mod) => ({
-      id: slugify(`${app.id}-${lastSegment(mod.name)}`),
-      containerId: app.id,
-      name: humanizeName(lastSegment(mod.name)),
-      description: `${humanizeName(lastSegment(mod.name))} module`,
-      technology: inferComponentTechnology(mod, app.language),
-      moduleIds: [mod.id],
-    }));
+    // Detect duplicate last-segments to disambiguate names
+    const segmentCount = new Map<string, number>();
+    for (const mod of modules) {
+      const seg = lastSegment(mod.name);
+      segmentCount.set(seg, (segmentCount.get(seg) ?? 0) + 1);
+    }
+
+    return modules.map((mod) => {
+      const seg = lastSegment(mod.name);
+      const needsDisambiguation = (segmentCount.get(seg) ?? 0) > 1;
+      // Use the module's unique ID as component ID (already globally unique)
+      // For display name, add parent context when ambiguous
+      const displayName = needsDisambiguation
+        ? disambiguatedName(mod.name)
+        : humanizeName(seg);
+      return {
+        id: mod.id,
+        containerId: app.id,
+        name: displayName,
+        description: `${displayName} module`,
+        technology: inferComponentTechnology(mod, app.language),
+        moduleIds: [mod.id],
+      };
+    });
   });
 
   // External systems: promoted from known dependencies
@@ -120,39 +136,73 @@ function filterModules(
 
   if (granularity === "overview") return modules; // We'll collapse in the caller
 
-  // "balanced" — filter by excludePatterns, collapse large sibling groups
+  // "balanced" — filter by excludePatterns, then collapse to keep diagrams readable
+  const MAX_COMPONENTS = 20;
+
   let filtered = modules.filter(
     (m) =>
       !excludePatterns.some((pat) => m.name.toLowerCase().includes(pat)),
   );
 
-  // Collapse sibling packages with >10 modules
-  if (filtered.length > 10) {
-    // Group by parent path and keep representative modules
-    const groups = new Map<string, ScannedModule[]>();
-    for (const mod of filtered) {
-      const parent = mod.name.includes(".")
-        ? mod.name.split(".").slice(0, -1).join(".")
-        : mod.name.includes("/")
-          ? mod.name.split("/").slice(0, -1).join("/")
-          : "";
-      const existing = groups.get(parent) ?? [];
-      existing.push(mod);
-      groups.set(parent, existing);
-    }
+  if (filtered.length <= MAX_COMPONENTS) return filtered;
 
-    // If a parent group has >10 modules, keep only the first as representative
+  // Group by parent path and collapse large sibling groups
+  const groups = new Map<string, ScannedModule[]>();
+  for (const mod of filtered) {
+    const parent = mod.name.includes(".")
+      ? mod.name.split(".").slice(0, -1).join(".")
+      : mod.name.includes("/")
+        ? mod.name.split("/").slice(0, -1).join("/")
+        : "";
+    const existing = groups.get(parent) ?? [];
+    existing.push(mod);
+    groups.set(parent, existing);
+  }
+
+  // Keep one representative per group when there are too many
+  filtered = [];
+  for (const [, mods] of groups) {
+    if (mods.length > 3) {
+      filtered.push(mods[0]); // representative
+    } else {
+      filtered.push(...mods);
+    }
+  }
+
+  // If still too many, take top-level groups only (group at a higher level)
+  if (filtered.length > MAX_COMPONENTS) {
+    const topGroups = new Map<string, ScannedModule[]>();
+    for (const mod of filtered) {
+      const parts = mod.name.includes(".")
+        ? mod.name.split(".")
+        : mod.name.split("/");
+      const topKey = parts.slice(0, Math.min(parts.length - 1, 3)).join(".");
+      const existing = topGroups.get(topKey) ?? [];
+      existing.push(mod);
+      topGroups.set(topKey, existing);
+    }
     filtered = [];
-    for (const [, mods] of groups) {
-      if (mods.length > 10) {
-        filtered.push(mods[0]);
-      } else {
-        filtered.push(...mods);
-      }
+    for (const [, mods] of topGroups) {
+      filtered.push(mods[0]);
     }
   }
 
   return filtered;
+}
+
+/**
+ * Build a display name using the last two segments for disambiguation.
+ * "com.bmw.los.next.charging.availability" → "Charging Availability"
+ */
+function disambiguatedName(moduleName: string): string {
+  const parts = moduleName.includes(".")
+    ? moduleName.split(".")
+    : moduleName.includes("/")
+      ? moduleName.split("/")
+      : [moduleName];
+
+  const significant = parts.slice(-2);
+  return significant.map((p) => humanizeName(p)).join(" ");
 }
 
 function inferComponentTechnology(

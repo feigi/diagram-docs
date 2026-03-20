@@ -235,7 +235,7 @@ function renderD2Files(d2Files: string[], config: Config): void {
           d2Path,
           outPath,
         ],
-        { stdio: "pipe" },
+        { stdio: "pipe", timeout: 30_000 },
       );
       rendered++;
       console.error(`Rendered: ${relPath}`);
@@ -246,6 +246,10 @@ function renderD2Files(d2Files: string[], config: Config): void {
           "Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install",
         );
         return;
+      }
+      if (msg.includes("ETIMEDOUT") || msg.includes("killed")) {
+        console.error(`Warning: rendering timed out for ${relPath} (diagram may be too large)`);
+        continue;
       }
       console.error(`Warning: failed to render ${relPath}: ${msg}`);
     }
