@@ -4,7 +4,7 @@ import { toD2Id, sortById, sortRelationships } from "./stability.js";
 
 /**
  * Generate L4 Code diagram for a single module.
- * Shows: classes, interfaces, functions, structs and their relationships.
+ * Shows: classes, interfaces, functions, structs, enums, and their relationships.
  */
 export function generateCodeDiagram(
   symbols: ModuleSymbols,

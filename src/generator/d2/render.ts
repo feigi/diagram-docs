@@ -15,9 +15,7 @@ export function renderD2Files(d2Files: string[], config: Config): void {
     const outPath = d2Path.replace(/\.d2$/, `.${ext}`);
     const relPath = path.relative(process.cwd(), outPath);
 
-    // Skip rendering if the output is already newer than all D2 inputs.
-    // The user-facing D2 file imports _generated/*.d2 and styles.d2,
-    // so check all three.
+    // Skip rendering if the output is already newer than all contributing D2 sources.
     if (isUpToDate(d2Path, outPath)) {
       skipped++;
       continue;
@@ -63,7 +61,9 @@ export function renderD2Files(d2Files: string[], config: Config): void {
 
 /**
  * Check if the rendered output is up-to-date with all D2 source files
- * that contribute to it (the user file, its _generated/ import, and styles.d2).
+ * that contribute to it: the user-facing D2 file, the corresponding
+ * _generated/*.d2 file, the local styles.d2, and (for nested diagrams)
+ * the parent-level styles.d2.
  */
 function isUpToDate(d2Path: string, outPath: string): boolean {
   if (!fs.existsSync(outPath)) return false;

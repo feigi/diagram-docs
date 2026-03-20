@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-const roleEnum = z.enum(["system", "container", "component", "code-only", "skip"]);
+export const roleEnum = z.enum(["system", "container", "component", "code-only", "skip"]);
 
 export const configSchema = z
   .object({
@@ -30,7 +30,7 @@ export const configSchema = z
     agent: z
       .object({
         enabled: z.boolean().default(true),
-        provider: z.string().default("anthropic"),
+        provider: z.enum(["anthropic", "openai"]).default("anthropic"),
         model: z.string().default("claude-sonnet-4-20250514"),
       })
       .default({}),

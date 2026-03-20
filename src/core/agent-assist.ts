@@ -2,7 +2,7 @@ import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as YAML from "yaml";
-import type { Config, FolderRole } from "../config/schema.js";
+import { type Config, type FolderRole, roleEnum } from "../config/schema.js";
 import type { FolderSignals } from "./classifier.js";
 
 /* ------------------------------------------------------------------ */
@@ -58,8 +58,10 @@ export function loadAgentCache(rootDir: string): Map<string, CacheEntry> {
         map.set(key, entry);
       }
     }
-  } catch {
-    // Corrupted cache — start fresh
+  } catch (err: unknown) {
+    console.error(
+      `Warning: agent cache at ${filePath} is corrupted, starting fresh: ${err instanceof Error ? err.message : err}`,
+    );
   }
   return map;
 }
@@ -71,29 +73,29 @@ export function saveAgentCache(
   rootDir: string,
   cache: Map<string, CacheEntry>,
 ): void {
-  const filePath = cachePath(rootDir);
-  const dir = path.dirname(filePath);
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+  try {
+    const filePath = cachePath(rootDir);
+    const dir = path.dirname(filePath);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    const obj: Record<string, CacheEntry> = {};
+    for (const [key, entry] of cache) {
+      obj[key] = entry;
+    }
+    fs.writeFileSync(filePath, YAML.stringify(obj), "utf-8");
+  } catch (err: unknown) {
+    console.error(
+      `Warning: failed to save agent cache: ${err instanceof Error ? err.message : err}`,
+    );
   }
-  const obj: Record<string, CacheEntry> = {};
-  for (const [key, entry] of cache) {
-    obj[key] = entry;
-  }
-  fs.writeFileSync(filePath, YAML.stringify(obj), "utf-8");
 }
 
 /* ------------------------------------------------------------------ */
 /*  Response parsing                                                  */
 /* ------------------------------------------------------------------ */
 
-const VALID_ROLES = new Set<FolderRole>([
-  "system",
-  "container",
-  "component",
-  "code-only",
-  "skip",
-]);
+const VALID_ROLES = new Set<FolderRole>(roleEnum.options);
 
 const FALLBACK: AgentClassification = {
   role: "skip",
@@ -129,7 +131,10 @@ export function parseAgentResponse(text: string): AgentClassification {
         : 0;
 
     return { role, name, description, confidence };
-  } catch {
+  } catch (err: unknown) {
+    console.error(
+      `Warning: could not parse LLM classification response: ${text.slice(0, 200)}${text.length > 200 ? "..." : ""}`,
+    );
     return { ...FALLBACK };
   }
 }
@@ -140,14 +145,16 @@ export function parseAgentResponse(text: string): AgentClassification {
 
 function buildPrompt(
   folderPath: string,
+  rootDir: string,
   signals: FolderSignals,
   heuristicRole: FolderRole,
   parentContext?: string,
 ): string {
+  const relPath = path.relative(rootDir, folderPath) || ".";
   const lines: string[] = [
     "Classify this folder in a software project for C4 architecture diagramming.",
     "",
-    `Folder: ${folderPath}`,
+    `Folder: ${relPath}`,
     `Heuristic role: ${heuristicRole}`,
   ];
 
@@ -198,7 +205,7 @@ async function callAnthropic(
     messages: [{ role: "user", content: prompt }],
   });
   const block = response.content[0];
-  if (block.type === "text") return block.text;
+  if (block?.type === "text") return block.text;
   return "";
 }
 
@@ -253,7 +260,7 @@ export async function agentClassify(
   }
 
   // Build prompt and call LLM
-  const prompt = buildPrompt(folderPath, signals, heuristicRole, parentContext);
+  const prompt = buildPrompt(folderPath, rootDir, signals, heuristicRole, parentContext);
   const { provider, model } = config.agent;
 
   let responseText: string;
@@ -263,8 +270,21 @@ export async function agentClassify(
     } else {
       responseText = await callOpenAI(prompt, model);
     }
-  } catch {
-    // LLM unavailable — fall back to heuristic
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("MODULE_NOT_FOUND") || msg.includes("Cannot find module")) {
+      console.error(
+        `Warning: ${provider} SDK not installed. Run: npm install ${provider === "anthropic" ? "@anthropic-ai/sdk" : "openai"}`,
+      );
+    } else if (msg.includes("401") || msg.includes("auth") || msg.includes("API key")) {
+      console.error(
+        `Warning: ${provider} authentication failed. Check your API key.`,
+      );
+    } else {
+      console.error(
+        `Warning: LLM classification failed for ${path.relative(rootDir, folderPath) || "."}, falling back to heuristic: ${msg}`,
+      );
+    }
     return {
       role: heuristicRole,
       name: "",

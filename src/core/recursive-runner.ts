@@ -2,7 +2,8 @@
  * Recursive descent orchestrator.
  *
  * `processFolder` is the main entry point — it classifies a folder,
- * generates the appropriate C4 diagrams, and recurses into children.
+ * generates the appropriate C4 diagrams, scaffolds user-facing D2 files,
+ * and recurses into children.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -42,7 +43,7 @@ function getExcludeDirs(config: Config): Set<string> {
 
 /**
  * Write a file only if its content has changed (preserves mtime for
- * downstream rendering caches).
+ * downstream rendering caches — see `isUpToDate` in `render.ts`).
  */
 function writeIfChanged(filePath: string, content: string): boolean {
   if (fs.existsSync(filePath)) {
@@ -54,7 +55,8 @@ function writeIfChanged(filePath: string, content: string): boolean {
 }
 
 /**
- * Map of file extension to analyzer language ID.
+ * Map of file extensions to analyzer language IDs.
+ * Only includes languages with `analyzeModule` support (used for L4 code diagrams).
  */
 const EXT_TO_LANGUAGE: Record<string, string> = {
   ".java": "java",
@@ -71,7 +73,10 @@ function detectLanguage(folderPath: string): string | null {
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(folderPath, { withFileTypes: true });
-  } catch {
+  } catch (err: unknown) {
+    console.error(
+      `Warning: cannot read directory for language detection ${folderPath}: ${err instanceof Error ? err.message : err}`,
+    );
     return null;
   }
   for (const entry of entries) {
@@ -238,7 +243,8 @@ async function generateContainerDiagrams(
 
   for (const container of model.containers) {
     const componentD2 = generateComponentDiagram(model, container.id);
-    const componentPath = path.join(generatedDir, "component.d2");
+    const suffix = model.containers.length === 1 ? "" : `-${container.id}`;
+    const componentPath = path.join(generatedDir, `component${suffix}.d2`);
     writeIfChanged(componentPath, componentD2);
     d2Files.push(componentPath);
   }
@@ -292,7 +298,7 @@ async function generateCodeDiagrams(
 /* ------------------------------------------------------------------ */
 
 /**
- * Recursively process a folder: classify, generate diagrams, recurse.
+ * Recursively process a folder: classify, generate diagrams, scaffold, recurse.
  *
  * @param folderPath - Absolute path to the folder to process
  * @param rootPath   - Absolute path to the project root
@@ -364,37 +370,43 @@ export async function processFolder(
   }
 
   // 5. Generate diagrams based on role
-  switch (role) {
-    case "system": {
-      const systemFiles = await generateSystemDiagrams(
-        folderPath,
-        rootPath,
-        config,
-        folderName,
-        folderDesc,
-      );
-      d2Files.push(...systemFiles);
-      break;
+  try {
+    switch (role) {
+      case "system": {
+        const systemFiles = await generateSystemDiagrams(
+          folderPath,
+          rootPath,
+          config,
+          folderName,
+          folderDesc,
+        );
+        d2Files.push(...systemFiles);
+        break;
+      }
+      case "container": {
+        const containerFiles = await generateContainerDiagrams(
+          folderPath,
+          config,
+          folderName,
+          folderDesc,
+        );
+        d2Files.push(...containerFiles);
+        break;
+      }
+      case "component":
+      case "code-only": {
+        const codeFiles = await generateCodeDiagrams(folderPath, config);
+        d2Files.push(...codeFiles);
+        break;
+      }
     }
-    case "container": {
-      const containerFiles = await generateContainerDiagrams(
-        folderPath,
-        config,
-        folderName,
-        folderDesc,
-      );
-      d2Files.push(...containerFiles);
-      break;
-    }
-    case "component":
-    case "code-only": {
-      const codeFiles = await generateCodeDiagrams(folderPath, config);
-      d2Files.push(...codeFiles);
-      break;
-    }
+  } catch (err: unknown) {
+    console.error(
+      `Warning: diagram generation failed for ${relPath || "."} (${role}): ${err instanceof Error ? err.message : err}`,
+    );
   }
 
-  // 5b. Scaffold user-facing D2 files for this role
+  // 6. Scaffold user-facing D2 files for this role
   const outputDir = path.join(folderPath, config.output.docsDir, "architecture");
   scaffoldForRole(
     outputDir,
@@ -406,12 +418,19 @@ export async function processFolder(
       : undefined,
   );
 
-  // 6. Recurse into child directories
+  // 7. Recurse into child directories
   const excludeDirs = getExcludeDirs(config);
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(folderPath, { withFileTypes: true });
-  } catch {
+  } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EMFILE" || code === "ENFILE") {
+      throw err;
+    }
+    console.error(
+      `Warning: cannot read directory ${relPath || "."}: ${err instanceof Error ? err.message : err}. Skipping subtree.`,
+    );
     return d2Files;
   }
 

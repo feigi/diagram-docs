@@ -85,8 +85,10 @@ export function collectSignals(
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(folderPath, { withFileTypes: true });
-  } catch {
-    // If we can't read the directory, return empty signals
+  } catch (err: unknown) {
+    console.error(
+      `Warning: cannot read directory ${folderPath}: ${err instanceof Error ? err.message : err}. Returning empty signals.`,
+    );
     return {
       buildFiles: [],
       childrenWithBuildFiles: 0,
@@ -142,7 +144,7 @@ export function collectSignals(
           );
           readmeSnippet = content.slice(0, 200);
         } catch {
-          // Ignore read errors
+          // README is non-critical — skip silently
         }
       }
     } else if (entry.isDirectory() && !EXCLUDED_DIRS.has(name)) {
@@ -154,7 +156,10 @@ export function collectSignals(
         childEntries = fs.readdirSync(path.join(folderPath, name), {
           withFileTypes: true,
         });
-      } catch {
+      } catch (err: unknown) {
+        console.error(
+          `Warning: cannot read child directory ${name}: ${err instanceof Error ? err.message : err}`,
+        );
         continue;
       }
 

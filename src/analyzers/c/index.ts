@@ -92,11 +92,22 @@ export const cAnalyzer: LanguageAnalyzer = {
 
   async analyzeModule(modulePath: string, _config: ScanConfig): Promise<ModuleSymbols> {
     const files: Array<{ path: string; content: string }> = [];
-    const entries = fs.readdirSync(modulePath, { withFileTypes: true });
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(modulePath, { withFileTypes: true });
+    } catch {
+      return { symbols: [], relationships: [] };
+    }
     for (const entry of entries) {
       if (entry.isFile() && (entry.name.endsWith(".h") || entry.name.endsWith(".c"))) {
-        const content = fs.readFileSync(path.join(modulePath, entry.name), "utf-8");
-        files.push({ path: entry.name, content });
+        try {
+          const content = fs.readFileSync(path.join(modulePath, entry.name), "utf-8");
+          files.push({ path: entry.name, content });
+        } catch (err: unknown) {
+          console.error(
+            `Warning: cannot read ${path.join(modulePath, entry.name)}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
       }
     }
     return extractCSymbols(files);

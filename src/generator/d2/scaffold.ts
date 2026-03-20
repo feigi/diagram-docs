@@ -5,7 +5,8 @@ import { generateStyles } from "./styles.js";
 
 /**
  * Scaffold user-facing D2 files for a given role.
- * Only creates files that don't already exist — never overwrites user work.
+ * Diagram files are only created if missing (never overwrites user work).
+ * The styles.d2 file is updated when its content changes.
  */
 export function scaffoldForRole(
   outputDir: string,

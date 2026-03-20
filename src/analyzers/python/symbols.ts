@@ -27,12 +27,14 @@ export function extractPythonSymbols(
       const parentsList = match[2];
       const id = slugify(name);
 
-      symbols.push({
-        id,
-        name,
-        kind: "class",
-        visibility: name.startsWith("_") ? "private" : "public",
-      });
+      if (!symbols.some((s) => s.id === id)) {
+        symbols.push({
+          id,
+          name,
+          kind: "class",
+          visibility: name.startsWith("_") ? "private" : "public",
+        });
+      }
 
       // Track extends relationships for each parent class
       if (parentsList) {
@@ -60,14 +62,22 @@ export function extractPythonSymbols(
       if (name.startsWith("_")) continue;
 
       const id = slugify(name);
-      symbols.push({
-        id,
-        name,
-        kind: "function",
-        visibility: "public",
-      });
+      if (!symbols.some((s) => s.id === id)) {
+        symbols.push({
+          id,
+          name,
+          kind: "function",
+          visibility: "public",
+        });
+      }
     }
   }
 
-  return { symbols, relationships };
+  // Filter relationships to only reference known symbols
+  const knownIds = new Set(symbols.map((s) => s.id));
+  const filteredRelationships = relationships.filter(
+    (r) => knownIds.has(r.sourceId) && knownIds.has(r.targetId),
+  );
+
+  return { symbols, relationships: filteredRelationships };
 }

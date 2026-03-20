@@ -2,7 +2,7 @@ import { D2Writer } from "./writer.js";
 
 /**
  * Generate C4-style definitions for D2 diagrams.
- * Uses D2 vars and classes for consistent C4 styling.
+ * Defines D2 style classes for consistent C4 styling.
  */
 export function generateStyles(theme: number, layout: string): string {
   const w = new D2Writer();

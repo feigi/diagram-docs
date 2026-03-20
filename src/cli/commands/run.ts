@@ -22,7 +22,13 @@ export const runCommand = new Command("run")
       `Agent assist: ${config.agent.enabled ? `enabled (${config.agent.provider}/${config.agent.model})` : "disabled"}`,
     );
 
-    await processFolder(rootDir, rootDir, config);
-
-    console.error("Done.");
+    try {
+      const d2Files = await processFolder(rootDir, rootDir, config);
+      console.error(`Done. Generated ${d2Files.length} D2 file(s).`);
+    } catch (err: unknown) {
+      console.error(
+        `Error: recursive analysis failed: ${err instanceof Error ? err.message : err}`,
+      );
+      process.exitCode = 1;
+    }
   });

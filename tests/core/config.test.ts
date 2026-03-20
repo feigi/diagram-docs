@@ -50,4 +50,12 @@ describe("configSchema", () => {
       }),
     ).toThrow();
   });
+
+  it("validates agent provider enum", () => {
+    expect(() =>
+      configSchema.parse({
+        agent: { provider: "google" },
+      }),
+    ).toThrow();
+  });
 });

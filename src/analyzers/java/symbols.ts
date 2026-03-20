@@ -37,6 +37,8 @@ export function extractJavaSymbols(
 
       const id = slugify(name);
 
+      if (symbols.some((s) => s.id === id)) continue;
+
       symbols.push({
         id,
         name,

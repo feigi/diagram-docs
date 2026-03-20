@@ -4,6 +4,9 @@ import { extractPythonSymbols } from "../../src/analyzers/python/symbols.js";
 describe("extractPythonSymbols", () => {
   it("extracts class with inheritance", () => {
     const source = `
+class BaseService:
+    pass
+
 class OrderService(BaseService):
     def __init__(self, repo: OrderRepository):
         self.repo = repo
@@ -15,8 +18,23 @@ class OrderService(BaseService):
     expect(result.symbols).toContainEqual(
       expect.objectContaining({ name: "OrderService", kind: "class" }),
     );
+    expect(result.symbols).toContainEqual(
+      expect.objectContaining({ name: "BaseService", kind: "class" }),
+    );
     const rel = result.relationships.find((r) => r.kind === "extends");
     expect(rel).toBeDefined();
+    expect(rel!.sourceId).toContain("order");
+    expect(rel!.targetId).toContain("base");
+  });
+
+  it("filters relationships to unknown parent classes", () => {
+    const source = `
+class OrderService(ExternalBase):
+    pass
+`;
+    const result = extractPythonSymbols([{ path: "service.py", content: source }]);
+    expect(result.symbols).toHaveLength(1);
+    expect(result.relationships).toHaveLength(0);
   });
 
   it("extracts top-level functions", () => {
