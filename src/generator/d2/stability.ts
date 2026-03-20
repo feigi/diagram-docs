@@ -2,10 +2,10 @@ import { slugify } from "../../core/slugify.js";
 
 /**
  * Derive a stable D2 shape ID from a model element ID.
- * Ensures IDs are valid D2 identifiers and deterministic.
+ * Uses underscores — hyphens in bare D2 identifiers cause parse errors.
  */
 export function toD2Id(modelId: string): string {
-  return slugify(modelId);
+  return slugify(modelId).replace(/-/g, "_");
 }
 
 /**

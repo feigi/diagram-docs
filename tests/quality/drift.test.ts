@@ -105,7 +105,7 @@ function measureDrift(
   const pairedAdded = new Set<string>();
 
   for (const removed of removedIds) {
-    const suffix = removed.split("-").slice(-1)[0];
+    const suffix = removed.split("_").slice(-1)[0];
     const candidate = addedIds.find(
       (a) => !pairedAdded.has(a) && a.endsWith(suffix),
     );

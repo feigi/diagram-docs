@@ -75,9 +75,11 @@ export class D2Writer {
   }
 
   private quote(text: string): string {
-    // Only quote if the text contains special characters
-    if (/[{}:;|#\n]/.test(text)) {
-      return `|${text}|`;
+    // Quote if the text contains D2 special characters or literal \n sequences
+    if (/[{}:;|#\n\[\]()]/.test(text) || text.includes("\\n")) {
+      // Convert literal \n to real newlines inside pipe-delimited block strings
+      const expanded = text.replace(/\\n/g, "\n");
+      return `|${expanded}|`;
     }
     return text;
   }

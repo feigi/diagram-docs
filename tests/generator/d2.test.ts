@@ -42,7 +42,7 @@ describe("D2 Context Diagram", () => {
     expect(d2).toContain("# C4 Context Diagram");
     expect(d2).toContain("user");
     expect(d2).toContain("system");
-    expect(d2).toContain("email-provider");
+    expect(d2).toContain("email_provider");
     expect(d2).toContain("class: person");
     expect(d2).toContain("class: system");
     expect(d2).toContain("class: external-system");
@@ -62,8 +62,8 @@ describe("D2 Container Diagram", () => {
     const d2 = generateContainerDiagram(model);
 
     expect(d2).toContain("# C4 Container Diagram");
-    expect(d2).toContain("user-api");
-    expect(d2).toContain("order-service");
+    expect(d2).toContain("user_api");
+    expect(d2).toContain("order_service");
     expect(d2).toContain("class: container");
     // Containers should be inside system boundary
     expect(d2).toContain("system:");
