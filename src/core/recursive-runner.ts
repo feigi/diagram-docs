@@ -8,7 +8,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 
 import type { Config, FolderRole } from "../config/schema.js";
-import type { ArchitectureModel, ScanConfig } from "../analyzers/types.js";
+import type { ScanConfig } from "../analyzers/types.js";
 import { collectSignals, inferRole } from "./classifier.js";
 import { agentClassify } from "./agent-assist.js";
 import { humanizeName } from "./humanize.js";
@@ -19,7 +19,6 @@ import { generateComponentDiagram } from "../generator/d2/component.js";
 import { generateCodeDiagram } from "../generator/d2/code.js";
 import { discoverApplications } from "./discovery.js";
 import { getAnalyzer } from "../analyzers/registry.js";
-import { slugify } from "./slugify.js";
 import { scaffoldForRole } from "../generator/d2/scaffold.js";
 
 /* ------------------------------------------------------------------ */
