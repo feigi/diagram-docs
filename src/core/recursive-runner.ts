@@ -20,6 +20,7 @@ import { generateCodeDiagram } from "../generator/d2/code.js";
 import { discoverApplications } from "./discovery.js";
 import { getAnalyzer } from "../analyzers/registry.js";
 import { slugify } from "./slugify.js";
+import { scaffoldForRole } from "../generator/d2/scaffold.js";
 
 /* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
@@ -298,6 +299,7 @@ async function generateCodeDiagrams(
  * @param rootPath   - Absolute path to the project root
  * @param config     - Resolved configuration
  * @param parentContext - Optional context string from the parent folder
+ * @param parentFolderPath - Absolute path to the parent folder (for scaffold breadcrumbs)
  * @returns List of generated D2 file paths
  */
 export async function processFolder(
@@ -305,6 +307,7 @@ export async function processFolder(
   rootPath: string,
   config: Config,
   parentContext?: string,
+  parentFolderPath?: string,
 ): Promise<string[]> {
   const d2Files: string[] = [];
 
@@ -392,6 +395,18 @@ export async function processFolder(
     }
   }
 
+  // 5b. Scaffold user-facing D2 files for this role
+  const outputDir = path.join(folderPath, config.output.docsDir, "architecture");
+  scaffoldForRole(
+    outputDir,
+    role,
+    folderName,
+    config,
+    parentFolderPath
+      ? { outputDir: path.join(parentFolderPath, config.output.docsDir, "architecture") }
+      : undefined,
+  );
+
   // 6. Recurse into child directories
   const excludeDirs = getExcludeDirs(config);
   let entries: fs.Dirent[];
@@ -415,6 +430,7 @@ export async function processFolder(
       rootPath,
       config,
       childContext,
+      folderPath,
     );
     d2Files.push(...childFiles);
   }
