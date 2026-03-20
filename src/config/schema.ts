@@ -54,7 +54,7 @@ export const configSchema = z.object({
 
   submodules: z
     .object({
-      enabled: z.boolean().default(false),
+      enabled: z.boolean().default(true),
       docsDir: z.string().default("docs"),
       overrides: z
         .record(
