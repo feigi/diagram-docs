@@ -8,6 +8,7 @@ import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
+import { checkDrift } from "../../generator/d2/drift.js";
 import type { Config } from "../../config/schema.js";
 
 export const generateCommand = new Command("generate")
@@ -67,6 +68,12 @@ export const generateCommand = new Command("generate")
     scaffoldUserFiles(outputDir, model, config);
 
     console.error(`Done. ${filesWritten} generated file(s) written to ${config.output.dir}/`);
+
+    // Check for stale references in user customizations
+    const driftWarnings = checkDrift(outputDir, model);
+    for (const w of driftWarnings) {
+      console.error(`Warning: ${w.file}:${w.line}: ${w.message}`);
+    }
 
     // Render user-facing D2 files to PNG
     const d2Files: string[] = [];
