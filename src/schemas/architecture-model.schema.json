@@ -1,0 +1,90 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ArchitectureModel",
+  "description": "Input to diagram-docs generate command — produced by an agent or manually",
+  "type": "object",
+  "required": ["version", "system"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "system": {
+      "type": "object",
+      "required": ["name", "description"],
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      }
+    },
+    "actors": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" }
+        }
+      }
+    },
+    "externalSystems": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "description"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "technology": { "type": "string" }
+        }
+      }
+    },
+    "containers": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["id", "applicationId", "name", "description", "technology"],
+        "properties": {
+          "id": { "type": "string" },
+          "applicationId": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "technology": { "type": "string" }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["id", "containerId", "name", "description", "technology"],
+        "properties": {
+          "id": { "type": "string" },
+          "containerId": { "type": "string" },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "technology": { "type": "string" },
+          "moduleIds": { "type": "array", "items": { "type": "string" }, "default": [] }
+        }
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "targetId", "label"],
+        "properties": {
+          "sourceId": { "type": "string" },
+          "targetId": { "type": "string" },
+          "label": { "type": "string" },
+          "technology": { "type": "string" }
+        }
+      }
+    }
+  }
+}

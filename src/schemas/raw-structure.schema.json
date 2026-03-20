@@ -1,0 +1,76 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "RawStructure",
+  "description": "Output of diagram-docs scan command",
+  "type": "object",
+  "required": ["version", "scannedAt", "checksum", "applications"],
+  "properties": {
+    "version": { "type": "integer", "const": 1 },
+    "scannedAt": { "type": "string", "format": "date-time" },
+    "checksum": { "type": "string" },
+    "applications": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "path", "name", "language", "buildFile", "modules", "externalDependencies", "internalImports"],
+        "properties": {
+          "id": { "type": "string" },
+          "path": { "type": "string" },
+          "name": { "type": "string" },
+          "language": { "type": "string", "enum": ["java", "python", "c"] },
+          "buildFile": { "type": "string" },
+          "modules": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["id", "path", "name", "files", "exports", "imports", "metadata"],
+              "properties": {
+                "id": { "type": "string" },
+                "path": { "type": "string" },
+                "name": { "type": "string" },
+                "files": { "type": "array", "items": { "type": "string" } },
+                "exports": { "type": "array", "items": { "type": "string" } },
+                "imports": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["source", "isExternal"],
+                    "properties": {
+                      "source": { "type": "string" },
+                      "resolved": { "type": "string" },
+                      "isExternal": { "type": "boolean" }
+                    }
+                  }
+                },
+                "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+              }
+            }
+          },
+          "externalDependencies": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name"],
+              "properties": {
+                "name": { "type": "string" },
+                "version": { "type": "string" }
+              }
+            }
+          },
+          "internalImports": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["sourceModuleId", "targetApplicationId", "targetPath"],
+              "properties": {
+                "sourceModuleId": { "type": "string" },
+                "targetApplicationId": { "type": "string" },
+                "targetPath": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

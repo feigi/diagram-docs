@@ -1,0 +1,72 @@
+version: 1
+system:
+  name: "Test Monorepo"
+  description: "A test system with multiple services"
+
+actors:
+  - id: user
+    name: User
+    description: "End user of the system"
+
+externalSystems:
+  - id: email-provider
+    name: Email Provider
+    description: "Sends transactional emails"
+    technology: SMTP
+
+containers:
+  - id: user-api
+    applicationId: services-user-api
+    name: User API
+    description: "Handles user management"
+    technology: Java / Spring Boot
+  - id: order-service
+    applicationId: services-order-service
+    name: Order Service
+    description: "Handles order processing"
+    technology: Python / FastAPI
+
+components:
+  - id: user-controller
+    containerId: user-api
+    name: User Controller
+    description: "REST endpoint for users"
+    technology: Spring MVC
+    moduleIds: ["services-user-api-com-example-user"]
+  - id: user-repository
+    containerId: user-api
+    name: User Repository
+    description: "Data access for users"
+    technology: Spring Data JPA
+    moduleIds: ["services-user-api-com-example-repo"]
+  - id: order-handler
+    containerId: order-service
+    name: Order Handler
+    description: "REST endpoint for orders"
+    technology: FastAPI
+    moduleIds: ["services-order-service-orders"]
+
+relationships:
+  - sourceId: user
+    targetId: user-api
+    label: "Manages users via"
+    technology: HTTPS
+  - sourceId: user
+    targetId: order-service
+    label: "Places orders via"
+    technology: HTTPS
+  - sourceId: order-service
+    targetId: user-api
+    label: "Looks up users"
+    technology: HTTP/JSON
+  - sourceId: user-api
+    targetId: email-provider
+    label: "Sends welcome emails"
+    technology: SMTP
+  - sourceId: user-controller
+    targetId: user-repository
+    label: "Reads/writes users"
+  - sourceId: order-handler
+    targetId: user-api
+    label: "Fetches user details"
+    technology: HTTP
