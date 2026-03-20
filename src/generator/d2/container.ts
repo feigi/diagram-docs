@@ -42,7 +42,7 @@ export function generateContainerDiagram(
       const props: Record<string, string> = { "class": "container" };
       if (options?.componentLinks) {
         const ext = options.format ?? "svg";
-        props.link = `containers/${container.id}/component.${ext}`;
+        props.link = `./containers/${container.id}/component.${ext}`;
       }
       w.shape(
         id,
