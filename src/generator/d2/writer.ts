@@ -75,11 +75,12 @@ export class D2Writer {
   }
 
   private quote(text: string): string {
-    // Quote if the text contains D2 special characters or literal \n sequences
-    if (/[{}:;|#\n\[\]()]/.test(text) || text.includes("\\n")) {
-      // Convert literal \n to real newlines inside pipe-delimited block strings
-      const expanded = text.replace(/\\n/g, "\n");
-      return `|${expanded}|`;
+    // D2 supports \n as newline in labels natively.
+    // Use double-quoted strings when text contains reserved characters.
+    if (/[{}:;|#\[\]()'"\\]/.test(text) || text.includes("\\n")) {
+      // Escape any double quotes in the text
+      const escaped = text.replace(/"/g, '\\"');
+      return `"${escaped}"`;
     }
     return text;
   }
