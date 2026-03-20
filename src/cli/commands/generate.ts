@@ -8,7 +8,6 @@ import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
-import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
 import { renderD2Files } from "../../generator/d2/render.js";
 import type { Config } from "../../config/schema.js";
@@ -107,19 +106,6 @@ export const generateCommand = new Command("generate")
       d2Files.push(
         path.join(outputDir, "containers", container.id, "component.d2"),
       );
-    }
-
-    // Per-folder submodule docs — always enabled
-    {
-      const subResults = generateSubmoduleDocs(
-        configDir,
-        outputDir,
-        model,
-        config,
-      );
-      for (const sub of subResults) {
-        d2Files.push(...sub.d2Files);
-      }
     }
 
     renderD2Files(d2Files, config);
