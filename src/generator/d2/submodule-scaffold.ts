@@ -19,7 +19,7 @@ export interface SubmoduleOutputInfo {
 }
 
 /**
- * Generate per-folder docs for each application when submodules are enabled.
+ * Generate per-folder docs for each application.
  * Returns info about each generated folder for use in rendering.
  */
 export function generateSubmoduleDocs(

@@ -18,7 +18,6 @@ export const generateCommand = new Command("generate")
   .description("Generate D2 diagrams from an architecture model")
   .option("-m, --model <path>", "Path to architecture-model.yaml")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
-  .option("--submodules", "Generate per-folder docs for each application")
   .action((options) => {
     const { config, configDir } = loadConfig(options.config);
     const model = resolveModel(options.model, configDir, config);
