@@ -1,0 +1,48 @@
+{
+  "$comment": "Ground truth for tests/fixtures/monorepo/services/user-api. Hand-verified from source.",
+  "language": "java",
+  "modules": [
+    {
+      "name": "com.example.user",
+      "exports": ["UserController"]
+    },
+    {
+      "name": "com.example.repo",
+      "exports": ["UserRepository"]
+    }
+  ],
+  "imports": [
+    {
+      "source": "com.example.repo.UserRepository",
+      "inModule": "com.example.user",
+      "isExternal": false
+    },
+    {
+      "source": "org.springframework.web.bind.annotation.RestController",
+      "inModule": "com.example.user",
+      "isExternal": true
+    },
+    {
+      "source": "org.springframework.web.bind.annotation.GetMapping",
+      "inModule": "com.example.user",
+      "isExternal": true
+    },
+    {
+      "source": "org.springframework.stereotype.Repository",
+      "inModule": "com.example.repo",
+      "isExternal": true
+    }
+  ],
+  "externalDependencies": [
+    { "name": "org.springframework.boot:spring-boot-starter-web" },
+    { "name": "org.postgresql:postgresql" }
+  ],
+  "metadata": {
+    "com.example.user": {
+      "spring.stereotypes": "@RestController"
+    },
+    "com.example.repo": {
+      "spring.stereotypes": "@Repository"
+    }
+  }
+}

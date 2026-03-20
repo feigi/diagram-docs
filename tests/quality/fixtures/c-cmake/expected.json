@@ -1,0 +1,28 @@
+{
+  "$comment": "Ground truth for tests/fixtures/monorepo/libs/mathlib. Hand-verified from source.",
+  "language": "c",
+  "modules": [
+    {
+      "name": "include",
+      "exports": ["math_ops"]
+    },
+    {
+      "name": "src",
+      "exports": []
+    }
+  ],
+  "imports": [
+    {
+      "source": "math_ops.h",
+      "inModule": "src",
+      "isExternal": false
+    },
+    {
+      "source": "stdio.h",
+      "inModule": "src",
+      "isExternal": true
+    }
+  ],
+  "externalDependencies": [],
+  "metadata": {}
+}

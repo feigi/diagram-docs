@@ -1,0 +1,47 @@
+{
+  "$comment": "Ground truth for tests/fixtures/monorepo/services/order-service. Hand-verified from source.",
+  "language": "python",
+  "modules": [
+    {
+      "name": "orders",
+      "exports": ["Order", "OrderHandler"]
+    }
+  ],
+  "imports": [
+    {
+      "source": "fastapi",
+      "inModule": "orders",
+      "isExternal": true
+    },
+    {
+      "source": "orders.models",
+      "inModule": "orders",
+      "isExternal": false
+    },
+    {
+      "source": "orders.db",
+      "inModule": "orders",
+      "isExternal": false
+    },
+    {
+      "source": "sqlalchemy",
+      "inModule": "orders",
+      "isExternal": true
+    },
+    {
+      "source": "sqlalchemy.ext.declarative",
+      "inModule": "orders",
+      "isExternal": true
+    }
+  ],
+  "externalDependencies": [
+    { "name": "fastapi" },
+    { "name": "sqlalchemy" },
+    { "name": "httpx" }
+  ],
+  "metadata": {
+    "orders": {
+      "framework": "fastapi"
+    }
+  }
+}

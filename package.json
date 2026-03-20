@@ -11,6 +11,11 @@
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:quality": "vitest run tests/quality/",
+    "test:correctness": "vitest run tests/quality/correctness.test.ts",
+    "test:drift": "vitest run tests/quality/drift.test.ts",
+    "test:tokens": "vitest run tests/quality/token-efficiency.test.ts",
+    "bench": "vitest bench",
     "lint": "eslint src/",
     "typecheck": "tsc --noEmit"
   },
@@ -21,8 +26,12 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@types/diff": "^7.0.2",
     "@types/node": "^22.13.0",
+    "diff": "^8.0.3",
     "eslint": "^9.19.0",
+    "gpt-tokenizer": "^3.4.0",
+    "jsondiffpatch": "^0.7.3",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
