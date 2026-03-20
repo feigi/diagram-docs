@@ -54,19 +54,19 @@ export function scaffoldUserFiles(
 
   // Component diagrams
   if (config.levels.component) {
-    const componentsDir = path.join(outputDir, "components");
-    if (!fs.existsSync(componentsDir)) {
-      fs.mkdirSync(componentsDir, { recursive: true });
-    }
-
     for (const container of model.containers) {
+      const containerDir = path.join(outputDir, "containers", container.id);
+      if (!fs.existsSync(containerDir)) {
+        fs.mkdirSync(containerDir, { recursive: true });
+      }
+
       scaffoldFile(
-        path.join(componentsDir, `${container.id}.d2`),
+        path.join(containerDir, "component.d2"),
         [
           `# C4 Component Diagram — ${container.name}`,
           "",
-          `...@../_generated/components/${container.id}.d2`,
-          `...@../styles.d2`,
+          `...@_generated/component.d2`,
+          `...@../../styles.d2`,
           "",
           "# Add your customizations below this line",
           "",

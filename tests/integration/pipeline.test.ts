@@ -100,7 +100,9 @@ describe("Integration: Scan → Generate pipeline", () => {
     }
     fs.writeFileSync(path.join(OUTPUT_DIR, "context.d2"), context);
     fs.writeFileSync(path.join(OUTPUT_DIR, "container.d2"), container);
-    fs.writeFileSync(path.join(OUTPUT_DIR, "component-user-api.d2"), component);
+    const componentDir = path.join(OUTPUT_DIR, "containers", "user-api");
+    fs.mkdirSync(componentDir, { recursive: true });
+    fs.writeFileSync(path.join(componentDir, "component.d2"), component);
   });
 
   it("scan output is valid JSON matching the schema", () => {

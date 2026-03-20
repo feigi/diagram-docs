@@ -2,11 +2,19 @@ import type { ArchitectureModel } from "../../analyzers/types.js";
 import { D2Writer } from "./writer.js";
 import { toD2Id, sortById, sortRelationships } from "./stability.js";
 
+export interface ContainerDiagramOptions {
+  componentLinks?: boolean;
+  format?: string;
+}
+
 /**
  * Generate L2 Container diagram.
  * Shows: actors, containers within the system boundary, external systems.
  */
-export function generateContainerDiagram(model: ArchitectureModel): string {
+export function generateContainerDiagram(
+  model: ArchitectureModel,
+  options?: ContainerDiagramOptions,
+): string {
   const w = new D2Writer();
 
   w.comment("C4 Container Diagram (Level 2)");
@@ -31,10 +39,15 @@ export function generateContainerDiagram(model: ArchitectureModel): string {
 
     for (const container of sortById(model.containers)) {
       const id = toD2Id(container.id);
+      const props: Record<string, string> = { "class": "container" };
+      if (options?.componentLinks) {
+        const ext = options.format ?? "svg";
+        props.link = `containers/${container.id}/component.${ext}`;
+      }
       w.shape(
         id,
         `${container.name}\\n\\n[Container: ${container.technology}]\\n${container.description}`,
-        { "class": "container" },
+        props,
       );
     }
   });

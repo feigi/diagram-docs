@@ -27,11 +27,12 @@ export function checkDrift(
   ];
 
   // Component diagram files
-  const componentsDir = path.join(outputDir, "components");
-  if (fs.existsSync(componentsDir)) {
-    for (const entry of fs.readdirSync(componentsDir)) {
-      if (entry.endsWith(".d2") && !entry.startsWith("_")) {
-        userFiles.push(path.join(componentsDir, entry));
+  const containersDir = path.join(outputDir, "containers");
+  if (fs.existsSync(containersDir)) {
+    for (const entry of fs.readdirSync(containersDir)) {
+      const componentFile = path.join(containersDir, entry, "component.d2");
+      if (fs.existsSync(componentFile)) {
+        userFiles.push(componentFile);
       }
     }
   }

@@ -39,7 +39,10 @@ export const generateCommand = new Command("generate")
 
     // L2: Container diagram
     if (config.levels.container) {
-      const d2 = generateContainerDiagram(model);
+      const d2 = generateContainerDiagram(model, {
+        componentLinks: config.levels.component,
+        format: config.output.format,
+      });
       fs.writeFileSync(path.join(generatedDir, "container.d2"), d2, "utf-8");
       filesWritten++;
       console.error("Generated: _generated/container.d2");
@@ -47,20 +50,27 @@ export const generateCommand = new Command("generate")
 
     // L3: Component diagrams (one per container)
     if (config.levels.component) {
-      const componentsDir = path.join(generatedDir, "components");
-      if (!fs.existsSync(componentsDir)) {
-        fs.mkdirSync(componentsDir, { recursive: true });
-      }
-
       for (const container of model.containers) {
+        const containerGenDir = path.join(
+          outputDir,
+          "containers",
+          container.id,
+          "_generated",
+        );
+        if (!fs.existsSync(containerGenDir)) {
+          fs.mkdirSync(containerGenDir, { recursive: true });
+        }
+
         const d2 = generateComponentDiagram(model, container.id);
         fs.writeFileSync(
-          path.join(componentsDir, `${container.id}.d2`),
+          path.join(containerGenDir, "component.d2"),
           d2,
           "utf-8",
         );
         filesWritten++;
-        console.error(`Generated: _generated/components/${container.id}.d2`);
+        console.error(
+          `Generated: containers/${container.id}/_generated/component.d2`,
+        );
       }
     }
 
@@ -75,7 +85,7 @@ export const generateCommand = new Command("generate")
       console.error(`Warning: ${w.file}:${w.line}: ${w.message}`);
     }
 
-    // Render user-facing D2 files to PNG
+    // Render user-facing D2 files
     const d2Files: string[] = [];
     if (config.levels.context) {
       d2Files.push(path.join(outputDir, "context.d2"));
@@ -85,7 +95,9 @@ export const generateCommand = new Command("generate")
     }
     if (config.levels.component) {
       for (const container of model.containers) {
-        d2Files.push(path.join(outputDir, "components", `${container.id}.d2`));
+        d2Files.push(
+          path.join(outputDir, "containers", container.id, "component.d2"),
+        );
       }
     }
 
@@ -99,27 +111,28 @@ function renderD2Files(d2Files: string[], config: Config): void {
   for (const d2Path of d2Files) {
     if (!fs.existsSync(d2Path)) continue;
 
-    const pngPath = d2Path.replace(/\.d2$/, ".png");
-    const relPath = path.relative(process.cwd(), pngPath);
+    const ext = config.output.format;
+    const outPath = d2Path.replace(/\.d2$/, `.${ext}`);
+    const relPath = path.relative(process.cwd(), outPath);
     try {
       execFileSync("d2", [
         `--theme=${config.output.theme}`,
         `--layout=${config.output.layout}`,
         d2Path,
-        pngPath,
+        outPath,
       ], { stdio: "pipe" });
       rendered++;
       console.error(`Rendered: ${relPath}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("ENOENT")) {
-        console.error("Warning: d2 CLI not found. Install it to render PNG files: https://d2lang.com/releases/install");
+        console.error("Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install");
         return;
       }
       console.error(`Warning: failed to render ${relPath}: ${msg}`);
     }
   }
   if (rendered > 0) {
-    console.error(`Rendered ${rendered} PNG file(s).`);
+    console.error(`Rendered ${rendered} ${config.output.format.toUpperCase()} file(s).`);
   }
 }

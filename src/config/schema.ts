@@ -48,6 +48,7 @@ export const configSchema = z.object({
       dir: z.string().default("docs/architecture"),
       theme: z.number().default(0),
       layout: z.string().default("elk"),
+      format: z.enum(["svg", "png"]).default("svg"),
     })
     .default({}),
 });

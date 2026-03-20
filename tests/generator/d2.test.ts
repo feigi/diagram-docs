@@ -75,6 +75,33 @@ describe("D2 Container Diagram", () => {
     const d2b = generateContainerDiagram(model);
     expect(d2a).toBe(d2b);
   });
+
+  it("includes link properties when componentLinks is enabled", () => {
+    const model = loadModel(MODEL_PATH);
+    const d2 = generateContainerDiagram(model, { componentLinks: true, format: "svg" });
+
+    // Each container should have a link to its component diagram
+    for (const container of model.containers) {
+      expect(d2).toContain(
+        `link: containers/${container.id}/component.svg`,
+      );
+    }
+  });
+
+  it("does not include link properties by default", () => {
+    const model = loadModel(MODEL_PATH);
+    const d2 = generateContainerDiagram(model);
+
+    expect(d2).not.toContain("link:");
+  });
+
+  it("uses png extension when format is png", () => {
+    const model = loadModel(MODEL_PATH);
+    const d2 = generateContainerDiagram(model, { componentLinks: true, format: "png" });
+
+    expect(d2).toContain("component.png");
+    expect(d2).not.toContain("component.svg");
+  });
 });
 
 describe("D2 Component Diagram", () => {
