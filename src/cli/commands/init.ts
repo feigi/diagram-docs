@@ -19,19 +19,23 @@ const DEFAULT_CONFIG = {
       "**/target/**",
     ],
   },
-  levels: {
-    context: true,
-    container: true,
-    component: false,
+  agent: {
+    enabled: true,
+    provider: "anthropic",
+    model: "claude-sonnet-4-20250514",
   },
   abstraction: {
     granularity: "balanced",
     excludePatterns: ["logging", "metrics", "middleware", "config", "utils"],
+    codeLevel: {
+      minSymbols: 2,
+    },
   },
   output: {
-    dir: "docs/architecture",
+    docsDir: "docs",
     theme: 0,
     layout: "elk",
+    format: "svg",
   },
 };
 

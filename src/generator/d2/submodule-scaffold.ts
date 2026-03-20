@@ -29,16 +29,15 @@ export function generateSubmoduleDocs(
   config: Config,
 ): SubmoduleOutputInfo[] {
   const results: SubmoduleOutputInfo[] = [];
-  const subCfg = config.submodules;
 
   for (const container of model.containers) {
-    // Check for explicit exclude
-    const override = subCfg.overrides[container.applicationId];
-    if (override?.exclude) continue;
+    // Check for explicit skip in overrides
+    const override = config.overrides[container.applicationId];
+    if (override?.role === "skip") continue;
 
     // Use the container's path if available, otherwise fall back to applicationId
     const appPath = container.path ?? container.applicationId.replace(/-/g, "/");
-    const docsDir = override?.docsDir ?? subCfg.docsDir;
+    const docsDir = config.output.docsDir;
     const outputDir = path.join(repoRoot, appPath, docsDir, "architecture");
     const generatedDir = path.join(outputDir, "_generated");
 

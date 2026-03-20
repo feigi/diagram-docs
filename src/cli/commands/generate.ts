@@ -23,7 +23,7 @@ export const generateCommand = new Command("generate")
     const { config, configDir } = loadConfig(options.config);
     const model = resolveModel(options.model, configDir, config);
 
-    const outputDir = path.resolve(configDir, config.output.dir);
+    const outputDir = path.resolve(configDir, config.output.docsDir, "architecture");
     const generatedDir = path.join(outputDir, "_generated");
 
     // Ensure output directories exist
@@ -34,8 +34,8 @@ export const generateCommand = new Command("generate")
     let filesWritten = 0;
     let filesUnchanged = 0;
 
-    // L1: Context diagram
-    if (config.levels.context) {
+    // L1: Context diagram — always generated
+    {
       const d2 = generateContextDiagram(model);
       if (writeIfChanged(path.join(generatedDir, "context.d2"), d2)) {
         filesWritten++;
@@ -44,16 +44,13 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    // L2: Container diagram
-    if (config.levels.container) {
-      const useSubmoduleLinks =
-        options.submodules || config.submodules.enabled;
+    // L2: Container diagram — always generated
+    {
       const d2 = generateContainerDiagram(model, {
-        componentLinks: config.levels.component,
+        componentLinks: true,
         format: config.output.format,
-        submoduleLinkResolver: useSubmoduleLinks
-          ? (containerId) => resolveSubmoduleLink(containerId, model, config, outputDir)
-          : undefined,
+        submoduleLinkResolver: (containerId) =>
+          resolveSubmoduleLink(containerId, model, config, outputDir),
       });
       if (writeIfChanged(path.join(generatedDir, "container.d2"), d2)) {
         filesWritten++;
@@ -62,34 +59,33 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    // L3: Component diagrams (one per container)
-    if (config.levels.component) {
-      for (const container of model.containers) {
-        const containerGenDir = path.join(
-          outputDir,
-          "containers",
-          container.id,
-          "_generated",
-        );
-        if (!fs.existsSync(containerGenDir)) {
-          fs.mkdirSync(containerGenDir, { recursive: true });
-        }
+    // L3: Component diagrams (one per container) — always generated
+    for (const container of model.containers) {
+      const containerGenDir = path.join(
+        outputDir,
+        "containers",
+        container.id,
+        "_generated",
+      );
+      if (!fs.existsSync(containerGenDir)) {
+        fs.mkdirSync(containerGenDir, { recursive: true });
+      }
 
-        const d2 = generateComponentDiagram(model, container.id);
-        if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
-          filesWritten++;
-        } else {
-          filesUnchanged++;
-        }
+      const d2 = generateComponentDiagram(model, container.id);
+      if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
+        filesWritten++;
+      } else {
+        filesUnchanged++;
       }
     }
 
     // Scaffold user-facing files (only creates, never overwrites)
     scaffoldUserFiles(outputDir, model, config);
 
+    const archDir = path.join(config.output.docsDir, "architecture");
     if (filesWritten > 0) {
       console.error(
-        `Done. ${filesWritten} generated file(s) written to ${config.output.dir}/`,
+        `Done. ${filesWritten} generated file(s) written to ${archDir}/`,
       );
     }
     if (filesUnchanged > 0) {
@@ -106,22 +102,16 @@ export const generateCommand = new Command("generate")
 
     // Collect all D2 files to render
     const d2Files: string[] = [];
-    if (config.levels.context) {
-      d2Files.push(path.join(outputDir, "context.d2"));
-    }
-    if (config.levels.container) {
-      d2Files.push(path.join(outputDir, "container.d2"));
-    }
-    if (config.levels.component) {
-      for (const container of model.containers) {
-        d2Files.push(
-          path.join(outputDir, "containers", container.id, "component.d2"),
-        );
-      }
+    d2Files.push(path.join(outputDir, "context.d2"));
+    d2Files.push(path.join(outputDir, "container.d2"));
+    for (const container of model.containers) {
+      d2Files.push(
+        path.join(outputDir, "containers", container.id, "component.d2"),
+      );
     }
 
-    // Per-folder submodule docs
-    if (options.submodules || config.submodules.enabled) {
+    // Per-folder submodule docs — always enabled
+    {
       const subResults = generateSubmoduleDocs(
         configDir,
         outputDir,
@@ -189,10 +179,12 @@ function resolveSubmoduleLink(
   if (!container) return null;
 
   const appPath = container.path ?? container.applicationId.replace(/-/g, "/");
-  const override = config.submodules.overrides[container.applicationId];
-  if (override?.exclude) return null;
 
-  const docsDir = override?.docsDir ?? config.submodules.docsDir;
+  // Check overrides for skip role
+  const override = config.overrides[container.applicationId];
+  if (override?.role === "skip") return null;
+
+  const docsDir = config.output.docsDir;
   const targetDir = path.resolve(
     path.dirname(rootOutputDir),
     "..",

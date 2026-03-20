@@ -1,72 +1,77 @@
 import { z } from "zod";
 
-export const configSchema = z.object({
-  system: z
-    .object({
-      name: z.string().default("My System"),
-      description: z.string().default(""),
-    })
-    .default({}),
+const roleEnum = z.enum(["system", "container", "component", "code-only", "skip"]);
 
-  scan: z
-    .object({
-      include: z.array(z.string()).default(["**"]),
-      exclude: z
-        .array(z.string())
-        .default([
-          "**/test/**",
-          "**/tests/**",
-          "**/node_modules/**",
-          "**/build/**",
-          "**/dist/**",
-          "**/target/**",
-        ]),
-    })
-    .default({}),
+export const configSchema = z
+  .object({
+    system: z
+      .object({
+        name: z.string().default("My System"),
+        description: z.string().default(""),
+      })
+      .default({}),
 
-  levels: z
-    .object({
-      context: z.boolean().default(true),
-      container: z.boolean().default(true),
-      component: z.boolean().default(false),
-    })
-    .default({}),
+    scan: z
+      .object({
+        include: z.array(z.string()).default(["**"]),
+        exclude: z
+          .array(z.string())
+          .default([
+            "**/test/**",
+            "**/tests/**",
+            "**/node_modules/**",
+            "**/build/**",
+            "**/dist/**",
+            "**/target/**",
+          ]),
+      })
+      .default({}),
 
-  abstraction: z
-    .object({
-      granularity: z
-        .enum(["detailed", "balanced", "overview"])
-        .default("balanced"),
-      excludePatterns: z
-        .array(z.string())
-        .default(["logging", "metrics", "middleware", "config", "utils"]),
-    })
-    .default({}),
+    agent: z
+      .object({
+        enabled: z.boolean().default(true),
+        provider: z.string().default("anthropic"),
+        model: z.string().default("claude-sonnet-4-20250514"),
+      })
+      .default({}),
 
-  output: z
-    .object({
-      dir: z.string().default("docs/architecture"),
-      theme: z.number().default(0),
-      layout: z.string().default("elk"),
-      format: z.enum(["svg", "png"]).default("svg"),
-    })
-    .default({}),
+    abstraction: z
+      .object({
+        granularity: z
+          .enum(["detailed", "balanced", "overview"])
+          .default("balanced"),
+        excludePatterns: z
+          .array(z.string())
+          .default(["logging", "metrics", "middleware", "config", "utils"]),
+        codeLevel: z
+          .object({
+            minSymbols: z.number().default(2),
+          })
+          .default({}),
+      })
+      .default({}),
 
-  submodules: z
-    .object({
-      enabled: z.boolean().default(true),
-      docsDir: z.string().default("docs"),
-      overrides: z
-        .record(
-          z.string(),
-          z.object({
-            docsDir: z.string().optional(),
-            exclude: z.boolean().optional(),
-          }),
-        )
-        .default({}),
-    })
-    .default({}),
-});
+    output: z
+      .object({
+        docsDir: z.string().default("docs"),
+        theme: z.number().default(0),
+        layout: z.string().default("elk"),
+        format: z.enum(["svg", "png"]).default("svg"),
+      })
+      .default({}),
+
+    overrides: z
+      .record(
+        z.string(),
+        z.object({
+          role: roleEnum.optional(),
+          name: z.string().optional(),
+          description: z.string().optional(),
+        }),
+      )
+      .default({}),
+  })
+  .strip();
 
 export type Config = z.infer<typeof configSchema>;
+export type FolderRole = z.infer<typeof roleEnum>;

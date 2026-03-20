@@ -20,61 +20,55 @@ export function scaffoldUserFiles(
     fs.writeFileSync(stylesPath, stylesContent, "utf-8");
   }
 
-  // Context diagram
-  if (config.levels.context) {
-    scaffoldFile(
-      path.join(outputDir, "context.d2"),
-      [
-        "# C4 Context Diagram",
-        `# System: ${model.system.name}`,
-        "",
-        `...@_generated/context.d2`,
-        `...@styles.d2`,
-        "",
-        "# Add your customizations below this line",
-        "",
-      ].join("\n"),
-    );
-  }
+  // Context diagram — always scaffolded
+  scaffoldFile(
+    path.join(outputDir, "context.d2"),
+    [
+      "# C4 Context Diagram",
+      `# System: ${model.system.name}`,
+      "",
+      `...@_generated/context.d2`,
+      `...@styles.d2`,
+      "",
+      "# Add your customizations below this line",
+      "",
+    ].join("\n"),
+  );
 
-  // Container diagram
-  if (config.levels.container) {
-    scaffoldFile(
-      path.join(outputDir, "container.d2"),
-      [
-        "# C4 Container Diagram",
-        `# System: ${model.system.name}`,
-        "",
-        `...@_generated/container.d2`,
-        `...@styles.d2`,
-        "",
-        "# Add your customizations below this line",
-        "",
-      ].join("\n"),
-    );
-  }
+  // Container diagram — always scaffolded
+  scaffoldFile(
+    path.join(outputDir, "container.d2"),
+    [
+      "# C4 Container Diagram",
+      `# System: ${model.system.name}`,
+      "",
+      `...@_generated/container.d2`,
+      `...@styles.d2`,
+      "",
+      "# Add your customizations below this line",
+      "",
+    ].join("\n"),
+  );
 
-  // Component diagrams
-  if (config.levels.component) {
-    for (const container of model.containers) {
-      const containerDir = path.join(outputDir, "containers", container.id);
-      if (!fs.existsSync(containerDir)) {
-        fs.mkdirSync(containerDir, { recursive: true });
-      }
-
-      scaffoldFile(
-        path.join(containerDir, "component.d2"),
-        [
-          `# C4 Component Diagram — ${container.name}`,
-          "",
-          `...@_generated/component.d2`,
-          `...@../../styles.d2`,
-          "",
-          "# Add your customizations below this line",
-          "",
-        ].join("\n"),
-      );
+  // Component diagrams — always scaffolded
+  for (const container of model.containers) {
+    const containerDir = path.join(outputDir, "containers", container.id);
+    if (!fs.existsSync(containerDir)) {
+      fs.mkdirSync(containerDir, { recursive: true });
     }
+
+    scaffoldFile(
+      path.join(containerDir, "component.d2"),
+      [
+        `# C4 Component Diagram — ${container.name}`,
+        "",
+        `...@_generated/component.d2`,
+        `...@../../styles.d2`,
+        "",
+        "# Add your customizations below this line",
+        "",
+      ].join("\n"),
+    );
   }
 }
 

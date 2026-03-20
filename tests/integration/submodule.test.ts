@@ -59,7 +59,6 @@ describe("Integration: Submodule per-folder docs", () => {
     // 2. Build model
     const config = configSchema.parse({
       ...baseConfig,
-      submodules: { enabled: true },
     });
     const model = buildModel({ config, rawStructure });
 
@@ -139,11 +138,8 @@ describe("Integration: Submodule per-folder docs", () => {
     trackDir(tmpRoot);
 
     const config = configSchema.parse({
-      submodules: {
-        enabled: true,
-        overrides: {
-          "services-order-service": { exclude: true },
-        },
+      overrides: {
+        "services-order-service": { role: "skip" },
       },
     });
 
