@@ -1,12 +1,14 @@
 import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { execFileSync } from "node:child_process";
 import { loadConfig } from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
+import type { Config } from "../../config/schema.js";
 
 export const generateCommand = new Command("generate")
   .description("Generate D2 diagrams from an architecture model")
@@ -65,4 +67,52 @@ export const generateCommand = new Command("generate")
     scaffoldUserFiles(outputDir, model, config);
 
     console.error(`Done. ${filesWritten} generated file(s) written to ${config.output.dir}/`);
+
+    // Render user-facing D2 files to PNG
+    const d2Files: string[] = [];
+    if (config.levels.context) {
+      d2Files.push(path.join(outputDir, "context.d2"));
+    }
+    if (config.levels.container) {
+      d2Files.push(path.join(outputDir, "container.d2"));
+    }
+    if (config.levels.component) {
+      for (const container of model.containers) {
+        d2Files.push(path.join(outputDir, "components", `${container.id}.d2`));
+      }
+    }
+
+    renderD2Files(d2Files, config);
   });
+
+function renderD2Files(d2Files: string[], config: Config): void {
+  if (d2Files.length === 0) return;
+
+  let rendered = 0;
+  for (const d2Path of d2Files) {
+    if (!fs.existsSync(d2Path)) continue;
+
+    const pngPath = d2Path.replace(/\.d2$/, ".png");
+    const relPath = path.relative(process.cwd(), pngPath);
+    try {
+      execFileSync("d2", [
+        `--theme=${config.output.theme}`,
+        `--layout=${config.output.layout}`,
+        d2Path,
+        pngPath,
+      ], { stdio: "pipe" });
+      rendered++;
+      console.error(`Rendered: ${relPath}`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("ENOENT")) {
+        console.error("Warning: d2 CLI not found. Install it to render PNG files: https://d2lang.com/releases/install");
+        return;
+      }
+      console.error(`Warning: failed to render ${relPath}: ${msg}`);
+    }
+  }
+  if (rendered > 0) {
+    console.error(`Rendered ${rendered} PNG file(s).`);
+  }
+}
