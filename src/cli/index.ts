@@ -5,6 +5,7 @@ import { initCommand } from "./commands/init.js";
 import { scanCommand } from "./commands/scan.js";
 import { generateCommand } from "./commands/generate.js";
 import { modelCommand } from "./commands/model.js";
+import { runCommand } from "./commands/run.js";
 
 const program = new Command();
 
@@ -19,5 +20,6 @@ program.addCommand(initCommand);
 program.addCommand(scanCommand);
 program.addCommand(modelCommand);
 program.addCommand(generateCommand);
+program.addCommand(runCommand);
 
 program.parse();
