@@ -50,11 +50,11 @@ export function generateSubmoduleDocs(
 
     // Generate component diagram
     const d2 = generateComponentDiagram(model, container.id);
-    fs.writeFileSync(path.join(generatedDir, "component.d2"), d2, "utf-8");
+    writeIfChanged(path.join(generatedDir, "component.d2"), d2);
 
     // Styles
     const styles = generateStyles(config.output.theme, config.output.layout);
-    fs.writeFileSync(path.join(outputDir, "styles.d2"), styles, "utf-8");
+    writeIfChanged(path.join(outputDir, "styles.d2"), styles);
 
     // Scaffold user-facing component.d2 (create once, never overwrite)
     const userD2Path = path.join(outputDir, "component.d2");
@@ -83,14 +83,11 @@ export function generateSubmoduleDocs(
     d2Files.push(userD2Path);
 
     // Write model fragment as YAML for reference
-    const fragment = extractFragment(model, container.id);
-    fs.writeFileSync(
-      path.join(outputDir, "architecture-model.yaml"),
+    const fragmentContent =
       "# Architecture Model Fragment — auto-generated, do not edit\n" +
-        "# This is a subset of the root model scoped to this application.\n\n" +
-        stringifyYaml(fragment, { lineWidth: 120 }),
-      "utf-8",
-    );
+      "# This is a subset of the root model scoped to this application.\n\n" +
+      stringifyYaml(fragment(model, container.id), { lineWidth: 120 });
+    writeIfChanged(path.join(outputDir, "architecture-model.yaml"), fragmentContent);
 
     results.push({
       containerId: container.id,
@@ -105,4 +102,16 @@ export function generateSubmoduleDocs(
   }
 
   return results;
+}
+
+function fragment(model: ArchitectureModel, containerId: string) {
+  return extractFragment(model, containerId);
+}
+
+function writeIfChanged(filePath: string, content: string): void {
+  if (fs.existsSync(filePath)) {
+    const existing = fs.readFileSync(filePath, "utf-8");
+    if (existing === content) return;
+  }
+  fs.writeFileSync(filePath, content, "utf-8");
 }
