@@ -13,10 +13,12 @@ export function scaffoldUserFiles(
   model: ArchitectureModel,
   config: Config,
 ): void {
-  // Styles file — always overwritten (it's generated config, not user content)
+  // Styles file — overwrite only if content changed (preserves mtime)
   const stylesPath = path.join(outputDir, "styles.d2");
   const stylesContent = generateStyles(config.output.theme, config.output.layout);
-  fs.writeFileSync(stylesPath, stylesContent, "utf-8");
+  if (!fs.existsSync(stylesPath) || fs.readFileSync(stylesPath, "utf-8") !== stylesContent) {
+    fs.writeFileSync(stylesPath, stylesContent, "utf-8");
+  }
 
   // Context diagram
   if (config.levels.context) {

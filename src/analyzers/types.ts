@@ -65,6 +65,7 @@ export interface ArchitectureModel {
     name: string;
     description: string;
     technology: string;
+    path?: string;
   }>;
   components: Array<{
     id: string;

@@ -4,6 +4,7 @@ import { Command } from "commander";
 import { initCommand } from "./commands/init.js";
 import { scanCommand } from "./commands/scan.js";
 import { generateCommand } from "./commands/generate.js";
+import { modelCommand } from "./commands/model.js";
 
 const program = new Command();
 
@@ -16,6 +17,7 @@ program
 
 program.addCommand(initCommand);
 program.addCommand(scanCommand);
+program.addCommand(modelCommand);
 program.addCommand(generateCommand);
 
 program.parse();

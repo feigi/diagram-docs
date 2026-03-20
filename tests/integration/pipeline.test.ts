@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { loadConfig } from "../../src/config/loader.js";
 import { discoverApplications } from "../../src/core/discovery.js";
 import { getAnalyzer } from "../../src/analyzers/registry.js";
+import { slugify } from "../../src/core/slugify.js";
 import { loadModel } from "../../src/core/model.js";
 import { generateContextDiagram } from "../../src/generator/d2/context.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
@@ -50,7 +51,17 @@ describe("Integration: Scan → Generate pipeline", () => {
           abstraction: config.abstraction,
         },
       );
+      // Normalize IDs the same way the scan command does
+      const relativeId = slugify(app.path);
+      const absolutePrefix = slugify(path.resolve(MONOREPO, app.path));
       result.path = app.path;
+      result.id = relativeId;
+      for (const mod of result.modules) {
+        if (mod.id.startsWith(absolutePrefix)) {
+          mod.id = relativeId + mod.id.slice(absolutePrefix.length);
+        }
+      }
+
       applications.push(result);
     }
 
@@ -110,6 +121,9 @@ describe("Integration: Scan → Generate pipeline", () => {
     expect(rawStructure.version).toBe(1);
     expect(typeof rawStructure.scannedAt).toBe("string");
 
+    // IDs must be relative, not contain the absolute fixture path
+    const absoluteSlug = slugify(MONOREPO);
+
     for (const app of rawStructure.applications) {
       expect(typeof app.id).toBe("string");
       expect(typeof app.path).toBe("string");
@@ -118,11 +132,17 @@ describe("Integration: Scan → Generate pipeline", () => {
       expect(Array.isArray(app.externalDependencies)).toBe(true);
       expect(Array.isArray(app.internalImports)).toBe(true);
 
+      // Regression: app IDs must not contain the absolute path
+      expect(app.id).not.toContain(absoluteSlug);
+
       for (const mod of app.modules) {
         expect(typeof mod.id).toBe("string");
         expect(Array.isArray(mod.files)).toBe(true);
         expect(Array.isArray(mod.exports)).toBe(true);
         expect(Array.isArray(mod.imports)).toBe(true);
+
+        // Regression: module IDs must not contain the absolute path
+        expect(mod.id).not.toContain(absoluteSlug);
       }
     }
   });

@@ -4,20 +4,24 @@ import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import { loadConfig } from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
+import { buildModel } from "../../core/model-builder.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
+import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
 import type { Config } from "../../config/schema.js";
+import type { RawStructure } from "../../analyzers/types.js";
 
 export const generateCommand = new Command("generate")
   .description("Generate D2 diagrams from an architecture model")
-  .requiredOption("-m, --model <path>", "Path to architecture-model.yaml")
+  .option("-m, --model <path>", "Path to architecture-model.yaml")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
+  .option("--submodules", "Generate per-folder docs for each application")
   .action((options) => {
     const { config, configDir } = loadConfig(options.config);
-    const model = loadModel(options.model);
+    const model = resolveModel(options.model, configDir, config);
 
     const outputDir = path.resolve(configDir, config.output.dir);
     const generatedDir = path.join(outputDir, "_generated");
@@ -28,24 +32,34 @@ export const generateCommand = new Command("generate")
     }
 
     let filesWritten = 0;
+    let filesUnchanged = 0;
 
     // L1: Context diagram
     if (config.levels.context) {
       const d2 = generateContextDiagram(model);
-      fs.writeFileSync(path.join(generatedDir, "context.d2"), d2, "utf-8");
-      filesWritten++;
-      console.error("Generated: _generated/context.d2");
+      if (writeIfChanged(path.join(generatedDir, "context.d2"), d2)) {
+        filesWritten++;
+      } else {
+        filesUnchanged++;
+      }
     }
 
     // L2: Container diagram
     if (config.levels.container) {
+      const useSubmoduleLinks =
+        options.submodules || config.submodules.enabled;
       const d2 = generateContainerDiagram(model, {
         componentLinks: config.levels.component,
         format: config.output.format,
+        submoduleLinkResolver: useSubmoduleLinks
+          ? (containerId) => resolveSubmoduleLink(containerId, model, config, outputDir)
+          : undefined,
       });
-      fs.writeFileSync(path.join(generatedDir, "container.d2"), d2, "utf-8");
-      filesWritten++;
-      console.error("Generated: _generated/container.d2");
+      if (writeIfChanged(path.join(generatedDir, "container.d2"), d2)) {
+        filesWritten++;
+      } else {
+        filesUnchanged++;
+      }
     }
 
     // L3: Component diagrams (one per container)
@@ -62,22 +76,27 @@ export const generateCommand = new Command("generate")
         }
 
         const d2 = generateComponentDiagram(model, container.id);
-        fs.writeFileSync(
-          path.join(containerGenDir, "component.d2"),
-          d2,
-          "utf-8",
-        );
-        filesWritten++;
-        console.error(
-          `Generated: containers/${container.id}/_generated/component.d2`,
-        );
+        if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
+          filesWritten++;
+        } else {
+          filesUnchanged++;
+        }
       }
     }
 
     // Scaffold user-facing files (only creates, never overwrites)
     scaffoldUserFiles(outputDir, model, config);
 
-    console.error(`Done. ${filesWritten} generated file(s) written to ${config.output.dir}/`);
+    if (filesWritten > 0) {
+      console.error(
+        `Done. ${filesWritten} generated file(s) written to ${config.output.dir}/`,
+      );
+    }
+    if (filesUnchanged > 0) {
+      console.error(
+        `${filesUnchanged} generated file(s) unchanged.`,
+      );
+    }
 
     // Check for stale references in user customizations
     const driftWarnings = checkDrift(outputDir, model);
@@ -85,7 +104,7 @@ export const generateCommand = new Command("generate")
       console.error(`Warning: ${w.file}:${w.line}: ${w.message}`);
     }
 
-    // Render user-facing D2 files
+    // Collect all D2 files to render
     const d2Files: string[] = [];
     if (config.levels.context) {
       d2Files.push(path.join(outputDir, "context.d2"));
@@ -101,38 +120,182 @@ export const generateCommand = new Command("generate")
       }
     }
 
+    // Per-folder submodule docs
+    if (options.submodules || config.submodules.enabled) {
+      const subResults = generateSubmoduleDocs(
+        configDir,
+        outputDir,
+        model,
+        config,
+      );
+      for (const sub of subResults) {
+        d2Files.push(...sub.d2Files);
+      }
+    }
+
     renderD2Files(d2Files, config);
   });
+
+/**
+ * Resolve model: explicit path > auto-locate > auto-generate from raw scan.
+ */
+function resolveModel(
+  modelPath: string | undefined,
+  configDir: string,
+  config: Config,
+) {
+  // 1. Explicit path provided
+  if (modelPath) {
+    return loadModel(path.resolve(modelPath));
+  }
+
+  // 2. Look for architecture-model.yaml near config
+  const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
+  if (fs.existsSync(autoModelPath)) {
+    console.error(`Using model: ${path.relative(process.cwd(), autoModelPath)}`);
+    return loadModel(autoModelPath);
+  }
+
+  // 3. Auto-generate from raw-structure.json
+  const rawPath = path.resolve(configDir, ".diagram-docs/raw-structure.json");
+  if (fs.existsSync(rawPath)) {
+    console.error(
+      "No architecture-model.yaml found. Auto-generating from raw-structure.json...",
+    );
+    const rawStructure: RawStructure = JSON.parse(
+      fs.readFileSync(rawPath, "utf-8"),
+    );
+    return buildModel({ config, rawStructure });
+  }
+
+  console.error(
+    "Error: No model found. Provide --model, place architecture-model.yaml in the project root,\n" +
+      "or run 'diagram-docs scan' first so the model can be auto-generated.",
+  );
+  process.exit(1);
+}
+
+/**
+ * Resolve a container drill-down link for submodule mode.
+ * Returns relative path from root output dir to the per-folder component diagram.
+ */
+function resolveSubmoduleLink(
+  containerId: string,
+  model: import("../../analyzers/types.js").ArchitectureModel,
+  config: Config,
+  rootOutputDir: string,
+): string | null {
+  const container = model.containers.find((c) => c.id === containerId);
+  if (!container) return null;
+
+  const appPath = container.path ?? container.applicationId.replace(/-/g, "/");
+  const override = config.submodules.overrides[container.applicationId];
+  if (override?.exclude) return null;
+
+  const docsDir = override?.docsDir ?? config.submodules.docsDir;
+  const targetDir = path.resolve(
+    path.dirname(rootOutputDir),
+    "..",
+    appPath,
+    docsDir,
+    "architecture",
+  );
+  const ext = config.output.format;
+  const targetFile = path.join(targetDir, `component.${ext}`);
+
+  return path.relative(rootOutputDir, targetFile);
+}
 
 function renderD2Files(d2Files: string[], config: Config): void {
   if (d2Files.length === 0) return;
 
   let rendered = 0;
+  let skipped = 0;
   for (const d2Path of d2Files) {
     if (!fs.existsSync(d2Path)) continue;
 
     const ext = config.output.format;
     const outPath = d2Path.replace(/\.d2$/, `.${ext}`);
     const relPath = path.relative(process.cwd(), outPath);
+
+    // Skip rendering if the output is already newer than all D2 inputs.
+    // The user-facing D2 file imports _generated/*.d2 and styles.d2,
+    // so check all three.
+    if (isUpToDate(d2Path, outPath)) {
+      skipped++;
+      continue;
+    }
+
     try {
-      execFileSync("d2", [
-        `--theme=${config.output.theme}`,
-        `--layout=${config.output.layout}`,
-        d2Path,
-        outPath,
-      ], { stdio: "pipe" });
+      execFileSync(
+        "d2",
+        [
+          `--theme=${config.output.theme}`,
+          `--layout=${config.output.layout}`,
+          d2Path,
+          outPath,
+        ],
+        { stdio: "pipe" },
+      );
       rendered++;
       console.error(`Rendered: ${relPath}`);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
       if (msg.includes("ENOENT")) {
-        console.error("Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install");
+        console.error(
+          "Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install",
+        );
         return;
       }
       console.error(`Warning: failed to render ${relPath}: ${msg}`);
     }
   }
   if (rendered > 0) {
-    console.error(`Rendered ${rendered} ${config.output.format.toUpperCase()} file(s).`);
+    console.error(
+      `Rendered ${rendered} ${config.output.format.toUpperCase()} file(s).`,
+    );
   }
+  if (skipped > 0) {
+    console.error(`Skipped ${skipped} unchanged file(s).`);
+  }
+}
+
+/**
+ * Check if the rendered output is up-to-date with all D2 source files
+ * that contribute to it (the user file, its _generated/ import, and styles.d2).
+ */
+function isUpToDate(d2Path: string, outPath: string): boolean {
+  if (!fs.existsSync(outPath)) return false;
+
+  const outMtime = fs.statSync(outPath).mtimeMs;
+  const dir = path.dirname(d2Path);
+  const base = path.basename(d2Path, ".d2");
+
+  // Collect all D2 files that feed into this output
+  const sources = [d2Path];
+
+  const generatedFile = path.join(dir, "_generated", `${base}.d2`);
+  if (fs.existsSync(generatedFile)) sources.push(generatedFile);
+
+  const stylesFile = path.join(dir, "styles.d2");
+  if (fs.existsSync(stylesFile)) sources.push(stylesFile);
+
+  // For component diagrams nested in containers/, styles.d2 is two levels up
+  const parentStyles = path.join(dir, "..", "..", "styles.d2");
+  if (fs.existsSync(parentStyles)) sources.push(parentStyles);
+
+  return sources.every((src) => fs.statSync(src).mtimeMs <= outMtime);
+}
+
+/**
+ * Write a file only if its content has changed.
+ * Returns true if the file was written, false if it was already up-to-date.
+ */
+function writeIfChanged(filePath: string, content: string): boolean {
+  if (fs.existsSync(filePath)) {
+    const existing = fs.readFileSync(filePath, "utf-8");
+    if (existing === content) return false;
+  }
+  fs.writeFileSync(filePath, content, "utf-8");
+  return true;
 }

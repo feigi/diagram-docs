@@ -5,6 +5,8 @@ import { toD2Id, sortById, sortRelationships } from "./stability.js";
 export interface ContainerDiagramOptions {
   componentLinks?: boolean;
   format?: string;
+  /** Resolve a container ID to a relative link path for submodule mode. */
+  submoduleLinkResolver?: (containerId: string) => string | null;
 }
 
 /**
@@ -40,10 +42,16 @@ export function generateContainerDiagram(
     for (const container of sortById(model.containers)) {
       const id = toD2Id(container.id);
       const props: Record<string, string> = { "class": "container" };
-      if (options?.componentLinks) {
+
+      // Link resolution: submodule resolver takes priority, then standard componentLinks
+      if (options?.submoduleLinkResolver) {
+        const link = options.submoduleLinkResolver(container.id);
+        if (link) props.link = link;
+      } else if (options?.componentLinks) {
         const ext = options.format ?? "svg";
         props.link = `./containers/${container.id}/component.${ext}`;
       }
+
       w.shape(
         id,
         `${container.name}\\n\\n[Container: ${container.technology}]\\n${container.description}`,

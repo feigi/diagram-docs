@@ -51,6 +51,22 @@ export const configSchema = z.object({
       format: z.enum(["svg", "png"]).default("svg"),
     })
     .default({}),
+
+  submodules: z
+    .object({
+      enabled: z.boolean().default(false),
+      docsDir: z.string().default("docs"),
+      overrides: z
+        .record(
+          z.string(),
+          z.object({
+            docsDir: z.string().optional(),
+            exclude: z.boolean().optional(),
+          }),
+        )
+        .default({}),
+    })
+    .default({}),
 });
 
 export type Config = z.infer<typeof configSchema>;

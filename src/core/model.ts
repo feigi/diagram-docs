@@ -36,6 +36,7 @@ const architectureModelSchema = z.object({
         name: z.string(),
         description: z.string(),
         technology: z.string(),
+        path: z.string().optional(),
       }),
     )
     .default([]),

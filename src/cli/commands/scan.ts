@@ -10,6 +10,7 @@ import {
   createDefaultManifest,
 } from "../../core/manifest.js";
 import { getAnalyzer } from "../../analyzers/registry.js";
+import { slugify } from "../../core/slugify.js";
 import type { RawStructure, ScannedApplication } from "../../analyzers/types.js";
 
 export const scanCommand = new Command("scan")
@@ -81,8 +82,29 @@ export const scanCommand = new Command("scan")
         path.resolve(rootDir, app.path),
         scanConfig,
       );
-      // Store relative path
+      // Normalize to relative path-based IDs (analyzers receive absolute paths
+      // but IDs should be stable and relative to the project root)
+      const relativeId = slugify(app.path);
+      const absolutePrefix = slugify(path.resolve(rootDir, app.path));
+
       result.path = app.path;
+      result.id = relativeId;
+
+      // Fix module IDs: replace the absolute-path prefix with the relative one
+      for (const mod of result.modules) {
+        if (mod.id.startsWith(absolutePrefix)) {
+          mod.id = relativeId + mod.id.slice(absolutePrefix.length);
+        }
+      }
+      // Fix import resolved references that use the absolute prefix
+      for (const mod of result.modules) {
+        for (const imp of mod.imports) {
+          if (imp.resolved?.startsWith(absolutePrefix)) {
+            imp.resolved = relativeId + imp.resolved.slice(absolutePrefix.length);
+          }
+        }
+      }
+
       applications.push(result);
     }
 
