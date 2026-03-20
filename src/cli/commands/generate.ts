@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { execFileSync } from "node:child_process";
 import { loadConfig } from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
 import { buildModel } from "../../core/model-builder.js";
@@ -11,6 +10,7 @@ import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
 import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
+import { renderD2Files } from "../../generator/d2/render.js";
 import type { Config } from "../../config/schema.js";
 import type { RawStructure } from "../../analyzers/types.js";
 
@@ -195,91 +195,6 @@ function resolveSubmoduleLink(
   const targetFile = path.join(targetDir, `component.${ext}`);
 
   return path.relative(rootOutputDir, targetFile);
-}
-
-function renderD2Files(d2Files: string[], config: Config): void {
-  if (d2Files.length === 0) return;
-
-  let rendered = 0;
-  let skipped = 0;
-  for (const d2Path of d2Files) {
-    if (!fs.existsSync(d2Path)) continue;
-
-    const ext = config.output.format;
-    const outPath = d2Path.replace(/\.d2$/, `.${ext}`);
-    const relPath = path.relative(process.cwd(), outPath);
-
-    // Skip rendering if the output is already newer than all D2 inputs.
-    // The user-facing D2 file imports _generated/*.d2 and styles.d2,
-    // so check all three.
-    if (isUpToDate(d2Path, outPath)) {
-      skipped++;
-      continue;
-    }
-
-    try {
-      execFileSync(
-        "d2",
-        [
-          `--theme=${config.output.theme}`,
-          `--layout=${config.output.layout}`,
-          d2Path,
-          outPath,
-        ],
-        { stdio: "pipe", timeout: 30_000 },
-      );
-      rendered++;
-      console.error(`Rendered: ${relPath}`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("ENOENT")) {
-        console.error(
-          "Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install",
-        );
-        return;
-      }
-      if (msg.includes("ETIMEDOUT") || msg.includes("killed")) {
-        console.error(`Warning: rendering timed out for ${relPath} (diagram may be too large)`);
-        continue;
-      }
-      console.error(`Warning: failed to render ${relPath}: ${msg}`);
-    }
-  }
-  if (rendered > 0) {
-    console.error(
-      `Rendered ${rendered} ${config.output.format.toUpperCase()} file(s).`,
-    );
-  }
-  if (skipped > 0) {
-    console.error(`Skipped ${skipped} unchanged file(s).`);
-  }
-}
-
-/**
- * Check if the rendered output is up-to-date with all D2 source files
- * that contribute to it (the user file, its _generated/ import, and styles.d2).
- */
-function isUpToDate(d2Path: string, outPath: string): boolean {
-  if (!fs.existsSync(outPath)) return false;
-
-  const outMtime = fs.statSync(outPath).mtimeMs;
-  const dir = path.dirname(d2Path);
-  const base = path.basename(d2Path, ".d2");
-
-  // Collect all D2 files that feed into this output
-  const sources = [d2Path];
-
-  const generatedFile = path.join(dir, "_generated", `${base}.d2`);
-  if (fs.existsSync(generatedFile)) sources.push(generatedFile);
-
-  const stylesFile = path.join(dir, "styles.d2");
-  if (fs.existsSync(stylesFile)) sources.push(stylesFile);
-
-  // For component diagrams nested in containers/, styles.d2 is two levels up
-  const parentStyles = path.join(dir, "..", "..", "styles.d2");
-  if (fs.existsSync(parentStyles)) sources.push(parentStyles);
-
-  return sources.every((src) => fs.statSync(src).mtimeMs <= outMtime);
 }
 
 /**
