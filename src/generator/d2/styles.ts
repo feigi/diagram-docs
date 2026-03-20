@@ -51,6 +51,13 @@ export function generateStyles(theme: number, layout: string): string {
   w.raw("    style.stroke: \"#78A8D8\"");
   w.raw("    style.border-radius: 8");
   w.raw("  }");
+  w.raw("  code: {");
+  w.raw("    shape: rectangle");
+  w.raw('    style.fill: "#C9DEF1"');
+  w.raw('    style.font-color: "#000000"');
+  w.raw('    style.stroke: "#A8C8E0"');
+  w.raw("    style.border-radius: 4");
+  w.raw("  }");
   w.raw("  system-boundary: {");
   w.raw("    shape: rectangle");
   w.raw("    style.fill: \"#ffffff\"");
