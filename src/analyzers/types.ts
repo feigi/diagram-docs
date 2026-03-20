@@ -95,4 +95,33 @@ export interface LanguageAnalyzer {
   name: string;
   buildFilePatterns: string[];
   analyze(appPath: string, config: ScanConfig): Promise<ScannedApplication>;
+  analyzeModule?(modulePath: string, config: ScanConfig): Promise<ModuleSymbols>;
+}
+
+/** Code-level symbol types for L4 diagrams */
+
+export interface CodeSymbol {
+  id: string;
+  name: string;
+  kind: "class" | "interface" | "function" | "struct" | "enum";
+  visibility?: "public" | "private";
+}
+
+export interface SymbolRelationship {
+  sourceId: string;
+  targetId: string;
+  kind:
+    | "extends"
+    | "implements"
+    | "uses"
+    | "calls"
+    | "field-type"
+    | "param-type"
+    | "return-type";
+  label?: string;
+}
+
+export interface ModuleSymbols {
+  symbols: CodeSymbol[];
+  relationships: SymbolRelationship[];
 }
