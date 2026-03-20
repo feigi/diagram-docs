@@ -98,6 +98,9 @@ describe("collectSignals", () => {
 
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "classifier-test-"));
     fs.writeFileSync(path.join(tmpDir, "pom.xml"), "<project/>");
+    // Direct source file in folder
+    fs.writeFileSync(path.join(tmpDir, "Main.java"), "class Main {}");
+    // Source file in child directory (contributes to sourceLanguages but not hasSourceFiles)
     fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "src", "App.java"), "class App {}");
 

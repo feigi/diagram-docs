@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import { loadConfig } from "../../config/loader.js";
 import { processFolder } from "../../core/recursive-runner.js";
+import { renderD2Files } from "../../generator/d2/render.js";
 
 export const runCommand = new Command("run")
   .description(
@@ -25,10 +26,14 @@ export const runCommand = new Command("run")
     try {
       const d2Files = await processFolder(rootDir, rootDir, config);
       console.error(`Done. Generated ${d2Files.length} D2 file(s).`);
+      renderD2Files(d2Files, config);
     } catch (err: unknown) {
-      console.error(
-        `Error: recursive analysis failed: ${err instanceof Error ? err.message : err}`,
-      );
+      if (err instanceof Error) {
+        console.error(`Error: recursive analysis failed: ${err.message}`);
+        if (err.stack) console.error(err.stack);
+      } else {
+        console.error(`Error: recursive analysis failed: ${err}`);
+      }
       process.exitCode = 1;
     }
   });

@@ -14,7 +14,8 @@ export function extractPythonSymbols(
   // Match class declarations: `class Name` or `class Name(Parent, ...):` at zero indentation
   const classRe = /^class\s+(\w+)(?:\(([^)]*)\))?:/gm;
 
-  // Match top-level function declarations: `def name(...)` at zero indentation
+  // Match function declarations with no leading whitespace (assumes standard
+  // Python formatting where class methods are indented)
   const funcRe = /^def\s+(\w+)\s*\(/gm;
 
   for (const file of files) {

@@ -8,6 +8,7 @@ export function renderD2Files(d2Files: string[], config: Config): void {
 
   let rendered = 0;
   let skipped = 0;
+  let failed = 0;
   for (const d2Path of d2Files) {
     if (!fs.existsSync(d2Path)) continue;
 
@@ -35,18 +36,21 @@ export function renderD2Files(d2Files: string[], config: Config): void {
       rendered++;
       console.error(`Rendered: ${relPath}`);
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("ENOENT")) {
+      const errCode = (err as NodeJS.ErrnoException).code;
+      if (errCode === "ENOENT") {
         console.error(
-          "Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install",
+          "Error: d2 CLI not found. Install it to render diagrams: https://d2lang.com/releases/install",
         );
         return;
       }
-      if (msg.includes("ETIMEDOUT") || msg.includes("killed")) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (errCode === "ETIMEDOUT" || msg.includes("killed")) {
         console.error(`Warning: rendering timed out for ${relPath} (diagram may be too large)`);
+        failed++;
         continue;
       }
       console.error(`Warning: failed to render ${relPath}: ${msg}`);
+      failed++;
     }
   }
   if (rendered > 0) {
@@ -56,6 +60,9 @@ export function renderD2Files(d2Files: string[], config: Config): void {
   }
   if (skipped > 0) {
     console.error(`Skipped ${skipped} unchanged file(s).`);
+  }
+  if (failed > 0) {
+    console.error(`Failed to render ${failed} file(s). See warnings above.`);
   }
 }
 

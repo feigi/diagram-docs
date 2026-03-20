@@ -139,7 +139,10 @@ export const pythonAnalyzer: LanguageAnalyzer = {
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(modulePath, { withFileTypes: true });
-    } catch {
+    } catch (err: unknown) {
+      console.error(
+        `Warning: cannot read module directory ${modulePath}: ${err instanceof Error ? err.message : err}`,
+      );
       return { symbols: [], relationships: [] };
     }
     for (const entry of entries) {

@@ -143,14 +143,18 @@ export function collectSignals(
             "utf-8",
           );
           readmeSnippet = content.slice(0, 200);
-        } catch {
-          // README is non-critical — skip silently
+        } catch (err: unknown) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code === "EMFILE" || code === "ENFILE") throw err;
+          // README content is non-critical for classification
         }
       }
     } else if (entry.isDirectory() && !EXCLUDED_DIRS.has(name)) {
       childFolderNames.push(name);
 
-      // Check children for build files and source files (one level deep)
+      // Check children for build files and source languages (one level deep).
+      // Child source files contribute to sourceLanguages but NOT to sourceFileCount
+      // or hasSourceFiles — those reflect only the folder's own direct contents.
       let childEntries: fs.Dirent[];
       try {
         childEntries = fs.readdirSync(path.join(folderPath, name), {
@@ -158,7 +162,7 @@ export function collectSignals(
         });
       } catch (err: unknown) {
         console.error(
-          `Warning: cannot read child directory ${name}: ${err instanceof Error ? err.message : err}`,
+          `Warning: cannot read child directory ${path.join(folderPath, name)}: ${err instanceof Error ? err.message : err}`,
         );
         continue;
       }
@@ -173,7 +177,6 @@ export function collectSignals(
           const ext = path.extname(childEntry.name);
           const lang = SOURCE_EXTENSIONS[ext];
           if (lang) {
-            sourceFileCount++;
             languageSet.add(lang);
           }
         }

@@ -60,8 +60,9 @@ export function loadAgentCache(rootDir: string): Map<string, CacheEntry> {
     }
   } catch (err: unknown) {
     console.error(
-      `Warning: agent cache at ${filePath} is corrupted, starting fresh: ${err instanceof Error ? err.message : err}`,
+      `Warning: agent cache at ${filePath} is corrupted, deleting and starting fresh: ${err instanceof Error ? err.message : err}`,
     );
+    try { fs.unlinkSync(filePath); } catch { /* best-effort cleanup */ }
   }
   return map;
 }
@@ -86,7 +87,7 @@ export function saveAgentCache(
     fs.writeFileSync(filePath, YAML.stringify(obj), "utf-8");
   } catch (err: unknown) {
     console.error(
-      `Warning: failed to save agent cache: ${err instanceof Error ? err.message : err}`,
+      `Warning: failed to save agent cache (LLM results will not be cached, incurring additional API costs): ${err instanceof Error ? err.message : err}`,
     );
   }
 }
@@ -107,8 +108,9 @@ const FALLBACK: AgentClassification = {
 /**
  * Extract a JSON classification from the LLM response text.
  * Handles responses wrapped in markdown code blocks.
+ * Returns null when the response cannot be parsed, so the caller can decide the fallback.
  */
-export function parseAgentResponse(text: string): AgentClassification {
+export function parseAgentResponse(text: string): AgentClassification | null {
   try {
     // Strip optional markdown code fences
     let cleaned = text.trim();
@@ -120,7 +122,7 @@ export function parseAgentResponse(text: string): AgentClassification {
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
     const role = parsed.role as FolderRole;
-    if (!VALID_ROLES.has(role)) return { ...FALLBACK };
+    if (!VALID_ROLES.has(role)) return null;
 
     const name = typeof parsed.name === "string" ? parsed.name : "";
     const description =
@@ -131,11 +133,11 @@ export function parseAgentResponse(text: string): AgentClassification {
         : 0;
 
     return { role, name, description, confidence };
-  } catch (err: unknown) {
+  } catch {
     console.error(
       `Warning: could not parse LLM classification response: ${text.slice(0, 200)}${text.length > 200 ? "..." : ""}`,
     );
-    return { ...FALLBACK };
+    return null;
   }
 }
 
@@ -198,7 +200,7 @@ async function callAnthropic(
 ): Promise<string> {
   // Dynamic import — SDK may not be installed
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
-  const client = new Anthropic();
+  const client = new Anthropic({ timeout: 15_000 });
   const response = await client.messages.create({
     model,
     max_tokens: 256,
@@ -206,6 +208,9 @@ async function callAnthropic(
   });
   const block = response.content[0];
   if (block?.type === "text") return block.text;
+  console.error(
+    `Warning: Anthropic returned no text content (stop_reason: ${response.stop_reason ?? "unknown"})`,
+  );
   return "";
 }
 
@@ -215,13 +220,21 @@ async function callOpenAI(
 ): Promise<string> {
   // Dynamic import — SDK may not be installed
   const { default: OpenAI } = await import("openai");
-  const client = new OpenAI();
+  const client = new OpenAI({ timeout: 15_000 });
   const response = await client.chat.completions.create({
     model,
     max_tokens: 256,
     messages: [{ role: "user", content: prompt }],
   });
-  return response.choices[0]?.message?.content ?? "";
+  const content = response.choices[0]?.message?.content;
+  if (!content) {
+    const finishReason = response.choices[0]?.finish_reason ?? "unknown";
+    console.error(
+      `Warning: OpenAI returned empty content (finish_reason: ${finishReason})`,
+    );
+    return "";
+  }
+  return content;
 }
 
 /* ------------------------------------------------------------------ */
@@ -234,8 +247,12 @@ async function callOpenAI(
  * 1. Compute signal hash
  * 2. Check cache — return cached result if hash matches
  * 3. Build prompt and call LLM
- * 4. Parse response
+ * 4. Parse response (fall back to heuristic on parse failure)
  * 5. Cache and return
+ *
+ * @param cache - Shared cache map. Pass in a single map loaded once at the
+ *   start of the run to avoid re-reading the YAML file on every call.
+ *   The caller is responsible for saving the cache after the full traversal.
  */
 export async function agentClassify(
   folderPath: string,
@@ -244,12 +261,14 @@ export async function agentClassify(
   config: Config,
   rootDir: string,
   parentContext?: string,
+  cache?: Map<string, CacheEntry>,
 ): Promise<AgentClassification> {
   const hash = computeSignalHash(signals);
+  const cacheKey = path.relative(rootDir, folderPath) || ".";
 
   // Check cache
-  const cache = loadAgentCache(rootDir);
-  const cached = cache.get(folderPath);
+  const effectiveCache = cache ?? loadAgentCache(rootDir);
+  const cached = effectiveCache.get(cacheKey);
   if (cached && cached.signalHash === hash) {
     return {
       role: cached.role,
@@ -265,26 +284,33 @@ export async function agentClassify(
 
   let responseText: string;
   try {
-    if (provider === "anthropic") {
-      responseText = await callAnthropic(prompt, model);
-    } else {
-      responseText = await callOpenAI(prompt, model);
+    switch (provider) {
+      case "anthropic":
+        responseText = await callAnthropic(prompt, model);
+        break;
+      case "openai":
+        responseText = await callOpenAI(prompt, model);
+        break;
+      default: {
+        const _exhaustive: never = provider;
+        throw new Error(`Unsupported LLM provider: ${_exhaustive}`);
+      }
     }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes("MODULE_NOT_FOUND") || msg.includes("Cannot find module")) {
-      console.error(
-        `Warning: ${provider} SDK not installed. Run: npm install ${provider === "anthropic" ? "@anthropic-ai/sdk" : "openai"}`,
-      );
-    } else if (msg.includes("401") || msg.includes("auth") || msg.includes("API key")) {
-      console.error(
-        `Warning: ${provider} authentication failed. Check your API key.`,
-      );
-    } else {
-      console.error(
-        `Warning: LLM classification failed for ${path.relative(rootDir, folderPath) || "."}, falling back to heuristic: ${msg}`,
+      throw new Error(
+        `${provider} SDK not installed. Run: npm install ${provider === "anthropic" ? "@anthropic-ai/sdk" : "openai"}`,
       );
     }
+    if (msg.includes("401") || msg.includes("auth") || msg.includes("API key")) {
+      throw new Error(
+        `${provider} authentication failed. Check your API key environment variable.`,
+      );
+    }
+    console.error(
+      `Warning: LLM classification failed for ${cacheKey}, falling back to heuristic: ${msg}`,
+    );
     return {
       role: heuristicRole,
       name: "",
@@ -293,12 +319,19 @@ export async function agentClassify(
     };
   }
 
-  // Parse response
-  const classification = parseAgentResponse(responseText);
+  // Parse response — fall back to heuristic role on parse failure
+  const classification = parseAgentResponse(responseText) ?? {
+    role: heuristicRole,
+    name: "",
+    description: "",
+    confidence: 0,
+  };
 
   // Cache result
-  cache.set(folderPath, { ...classification, signalHash: hash });
-  saveAgentCache(rootDir, cache);
+  effectiveCache.set(cacheKey, { ...classification, signalHash: hash });
+  if (!cache) {
+    saveAgentCache(rootDir, effectiveCache);
+  }
 
   return classification;
 }

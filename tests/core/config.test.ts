@@ -1,5 +1,8 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { configSchema } from "../../src/config/schema.js";
+import * as fs from "node:fs";
+import * as path from "node:path";
+import * as os from "node:os";
 
 describe("configSchema", () => {
   it("parses empty config with defaults", () => {
@@ -8,14 +11,21 @@ describe("configSchema", () => {
     expect(config.output.docsDir).toBe("docs");
     expect(config.abstraction.codeLevel.minSymbols).toBe(2);
     expect(config.overrides).toEqual({});
+    expect(config.levels.component).toBe(false);
   });
 
-  it("rejects levels and submodules (removed fields)", () => {
+  it("preserves levels from existing config", () => {
     const config = configSchema.parse({
-      levels: { context: true },
+      levels: { context: true, component: true },
+    });
+    expect(config.levels.context).toBe(true);
+    expect(config.levels.component).toBe(true);
+  });
+
+  it("strips unknown fields like submodules", () => {
+    const config = configSchema.parse({
       submodules: { enabled: true },
     });
-    expect((config as Record<string, unknown>).levels).toBeUndefined();
     expect((config as Record<string, unknown>).submodules).toBeUndefined();
   });
 
@@ -57,5 +67,59 @@ describe("configSchema", () => {
         agent: { provider: "google" },
       }),
     ).toThrow();
+  });
+});
+
+describe("config migration", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "diagram-docs-config-"));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("migrates output.dir to output.docsDir stripping /architecture suffix", async () => {
+    const configPath = path.join(tmpDir, "diagram-docs.yaml");
+    fs.writeFileSync(configPath, 'output:\n  dir: "my-docs/architecture"\n');
+
+    const warnSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { loadConfig } = await import("../../src/config/loader.js");
+    const { config } = loadConfig(configPath);
+
+    expect(config.output.docsDir).toBe("my-docs");
+    expect(warnSpy).toHaveBeenCalledWith(
+      expect.stringContaining("output.dir"),
+    );
+  });
+
+  it("migrates output.dir without /architecture suffix as-is", async () => {
+    const configPath = path.join(tmpDir, "diagram-docs.yaml");
+    fs.writeFileSync(configPath, 'output:\n  dir: "custom-output"\n');
+
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const { loadConfig } = await import("../../src/config/loader.js");
+    const { config } = loadConfig(configPath);
+
+    expect(config.output.docsDir).toBe("custom-output");
+  });
+
+  it("does not migrate when docsDir is already set", async () => {
+    const configPath = path.join(tmpDir, "diagram-docs.yaml");
+    fs.writeFileSync(
+      configPath,
+      'output:\n  dir: "old-path"\n  docsDir: "new-path"\n',
+    );
+
+    const warnSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { loadConfig } = await import("../../src/config/loader.js");
+    const { config } = loadConfig(configPath);
+
+    expect(config.output.docsDir).toBe("new-path");
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      expect.stringContaining("output.dir"),
+    );
   });
 });

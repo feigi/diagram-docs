@@ -13,10 +13,16 @@ export function extractCSymbols(
 
   // Match typedef struct declarations: `typedef struct { ... } Name;`
   // Also handles `typedef struct Name { ... } Name;`
+  // Note: does not handle nested structs or braces within the body due to
+  // the [^}]* pattern.
   const structRe = /typedef\s+struct\s*(?:\w+\s*)?\{[^}]*\}\s*(\w+)\s*;/g;
 
-  // Match function declarations: `return_type [*] function_name(params);`
-  // Handles pointer returns, const qualifiers, etc.
+  // Match function declarations (prototypes ending in ';') with a single-word
+  // return type.  Supports common qualifiers (const, static, extern, inline,
+  // unsigned, signed, long, short).  Pointer returns only match when '*' is
+  // adjacent to the type name (e.g. `int* foo`), not the function name
+  // (e.g. `int *foo`).  Does not handle multi-word return types like
+  // `struct Foo*` or `unsigned int`.
   const funcDeclRe =
     /^[ \t]*(?:(?:const|static|extern|inline|unsigned|signed|long|short)\s+)*(\w+)\s*\*?\s+(\w+)\s*\(([^)]*)\)\s*;/gm;
 

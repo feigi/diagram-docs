@@ -43,85 +43,93 @@ describe("parseAgentResponse", () => {
     const result = parseAgentResponse(
       '{"role": "container", "name": "User API", "description": "Handles users", "confidence": 0.9}',
     );
-    expect(result.role).toBe("container");
-    expect(result.name).toBe("User API");
-    expect(result.description).toBe("Handles users");
-    expect(result.confidence).toBe(0.9);
+    expect(result).not.toBeNull();
+    expect(result!.role).toBe("container");
+    expect(result!.name).toBe("User API");
+    expect(result!.description).toBe("Handles users");
+    expect(result!.confidence).toBe(0.9);
   });
 
   it("parses JSON wrapped in markdown code fences", () => {
     const result = parseAgentResponse(
       '```json\n{"role": "system", "name": "Root", "description": "Top-level", "confidence": 0.8}\n```',
     );
-    expect(result.role).toBe("system");
-    expect(result.name).toBe("Root");
+    expect(result).not.toBeNull();
+    expect(result!.role).toBe("system");
+    expect(result!.name).toBe("Root");
   });
 
   it("parses JSON wrapped in plain code fences", () => {
     const result = parseAgentResponse(
       '```\n{"role": "component", "name": "Auth", "description": "", "confidence": 0.7}\n```',
     );
-    expect(result.role).toBe("component");
+    expect(result).not.toBeNull();
+    expect(result!.role).toBe("component");
   });
 
-  it("returns fallback for invalid JSON", () => {
+  it("returns null for invalid JSON", () => {
     const result = parseAgentResponse("not json at all");
-    expect(result.role).toBe("skip");
-    expect(result.confidence).toBe(0);
+    expect(result).toBeNull();
   });
 
-  it("returns fallback for unrecognized role", () => {
+  it("returns null for unrecognized role", () => {
     const result = parseAgentResponse(
       '{"role": "database", "name": "DB", "description": "", "confidence": 0.9}',
     );
-    expect(result.role).toBe("skip");
+    expect(result).toBeNull();
   });
 
   it("clamps confidence above 1 to 1", () => {
     const result = parseAgentResponse(
       '{"role": "container", "name": "", "description": "", "confidence": 5.0}',
     );
-    expect(result.confidence).toBe(1);
+    expect(result).not.toBeNull();
+    expect(result!.confidence).toBe(1);
   });
 
   it("clamps negative confidence to 0", () => {
     const result = parseAgentResponse(
       '{"role": "container", "name": "", "description": "", "confidence": -0.5}',
     );
-    expect(result.confidence).toBe(0);
+    expect(result).not.toBeNull();
+    expect(result!.confidence).toBe(0);
   });
 
   it("defaults missing name/description to empty string", () => {
     const result = parseAgentResponse(
       '{"role": "container", "confidence": 0.8}',
     );
-    expect(result.name).toBe("");
-    expect(result.description).toBe("");
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("");
+    expect(result!.description).toBe("");
   });
 
   it("defaults non-string name to empty string", () => {
     const result = parseAgentResponse(
       '{"role": "container", "name": 42, "description": "", "confidence": 0.8}',
     );
-    expect(result.name).toBe("");
+    expect(result).not.toBeNull();
+    expect(result!.name).toBe("");
   });
 
   it("defaults non-number confidence to 0", () => {
     const result = parseAgentResponse(
       '{"role": "container", "name": "", "description": "", "confidence": "high"}',
     );
-    expect(result.confidence).toBe(0);
+    expect(result).not.toBeNull();
+    expect(result!.confidence).toBe(0);
   });
 
-  it("returns fallback for empty string", () => {
+  it("returns null for empty string", () => {
     const result = parseAgentResponse("");
-    expect(result.role).toBe("skip");
+    expect(result).toBeNull();
   });
 
   it("handles code-only role", () => {
     const result = parseAgentResponse(
       '{"role": "code-only", "name": "Utils", "description": "Utility module", "confidence": 0.6}',
     );
-    expect(result.role).toBe("code-only");
+    expect(result).not.toBeNull();
+    expect(result!.role).toBe("code-only");
   });
 });

@@ -24,7 +24,7 @@ export function scaffoldForRole(
   }
 
   const breadcrumb = parentContext
-    ? `# Parent: ${path.relative(outputDir, parentContext.outputDir)}/\n`
+    ? `# Parent: ${path.relative(outputDir, parentContext.outputDir)}/`
     : "";
 
   switch (role) {
@@ -87,10 +87,18 @@ export function scaffoldForRole(
         ].join("\n"),
       );
       break;
+    case "skip":
+      // No scaffold files for skipped folders
+      break;
+    default: {
+      const _exhaustive: never = role;
+      throw new Error(`Unexpected role in scaffoldForRole: ${_exhaustive}`);
+    }
   }
 }
 
-// Keep the old scaffoldUserFiles for backward compatibility with the generate command
+// Delegates to scaffoldForRole for each model element. Used by the `generate`
+// command which operates on an ArchitectureModel rather than per-folder classification.
 export function scaffoldUserFiles(
   outputDir: string,
   model: import("../../analyzers/types.js").ArchitectureModel,

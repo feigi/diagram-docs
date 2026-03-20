@@ -11,7 +11,7 @@ import * as path from "node:path";
 import type { Config, FolderRole } from "../config/schema.js";
 import type { ScanConfig } from "../analyzers/types.js";
 import { collectSignals, inferRole } from "./classifier.js";
-import { agentClassify } from "./agent-assist.js";
+import { agentClassify, loadAgentCache, saveAgentCache } from "./agent-assist.js";
 import { humanizeName } from "./humanize.js";
 import { buildModel } from "./model-builder.js";
 import { generateContextDiagram } from "../generator/d2/context.js";
@@ -27,6 +27,9 @@ import { scaffoldForRole } from "../generator/d2/scaffold.js";
 /* ------------------------------------------------------------------ */
 
 function getExcludeDirs(config: Config): Set<string> {
+  // Use the first path segment of docsDir so that multi-segment paths
+  // like "internal/docs" correctly exclude the "internal" directory.
+  const docsDirFirstSegment = config.output.docsDir.split(path.sep)[0] || config.output.docsDir;
   return new Set([
     "node_modules",
     ".git",
@@ -37,13 +40,14 @@ function getExcludeDirs(config: Config): Set<string> {
     "__pycache__",
     ".venv",
     "venv",
-    config.output.docsDir,
+    docsDirFirstSegment,
   ]);
 }
 
 /**
- * Write a file only if its content has changed (preserves mtime for
- * downstream rendering caches — see `isUpToDate` in `render.ts`).
+ * Write a file only if its content has changed. By skipping writes for
+ * unchanged content, the file's mtime is preserved for downstream
+ * rendering caches (see `isUpToDate` in `render.ts`).
  */
 function writeIfChanged(filePath: string, content: string): boolean {
   if (fs.existsSync(filePath)) {
@@ -57,6 +61,7 @@ function writeIfChanged(filePath: string, content: string): boolean {
 /**
  * Map of file extensions to analyzer language IDs.
  * Only includes languages with `analyzeModule` support (used for L4 code diagrams).
+ * Keep in sync with analyzers that implement `analyzeModule`.
  */
 const EXT_TO_LANGUAGE: Record<string, string> = {
   ".java": "java",
@@ -177,7 +182,7 @@ async function generateSystemDiagrams(
         config.output.docsDir,
         "architecture",
       );
-      const relPath = path.relative(outputDir, path.join(folderPath, childDocsDir));
+      const relPath = path.relative(generatedDir, path.join(folderPath, childDocsDir));
       return `${relPath}/component.${config.output.format}`;
     },
   });
@@ -241,13 +246,13 @@ async function generateContainerDiagrams(
   const generatedDir = path.join(outputDir, "_generated");
   fs.mkdirSync(generatedDir, { recursive: true });
 
-  for (const container of model.containers) {
-    const componentD2 = generateComponentDiagram(model, container.id);
-    const suffix = model.containers.length === 1 ? "" : `-${container.id}`;
-    const componentPath = path.join(generatedDir, `component${suffix}.d2`);
-    writeIfChanged(componentPath, componentD2);
-    d2Files.push(componentPath);
-  }
+  const componentParts = model.containers.map((container) =>
+    generateComponentDiagram(model, container.id),
+  );
+  const componentD2 = componentParts.join("\n\n");
+  const componentPath = path.join(generatedDir, "component.d2");
+  writeIfChanged(componentPath, componentD2);
+  d2Files.push(componentPath);
 
   return d2Files;
 }
@@ -303,8 +308,10 @@ async function generateCodeDiagrams(
  * @param folderPath - Absolute path to the folder to process
  * @param rootPath   - Absolute path to the project root
  * @param config     - Resolved configuration
- * @param parentContext - Optional context string from the parent folder
+ * @param parentContext - Human-readable context string from the parent folder,
+ *   formatted as "Name (role)". Passed to the LLM agent for classification context.
  * @param parentFolderPath - Absolute path to the parent folder (for scaffold breadcrumbs)
+ * @param agentCache - Shared agent cache map, loaded once at the root call
  * @returns List of generated D2 file paths
  */
 export async function processFolder(
@@ -313,7 +320,11 @@ export async function processFolder(
   config: Config,
   parentContext?: string,
   parentFolderPath?: string,
+  agentCache?: Map<string, { role: FolderRole; name: string; description: string; confidence: number; signalHash: string }>,
 ): Promise<string[]> {
+  // Load agent cache once at the root call, reuse for all recursive calls
+  const cache = agentCache ?? (config.agent.enabled ? loadAgentCache(rootPath) : undefined);
+  const isRootCall = agentCache === undefined;
   const d2Files: string[] = [];
 
   // 1. Compute relative path for override lookup
@@ -336,8 +347,13 @@ export async function processFolder(
       override.name ?? humanizeName(path.basename(folderPath) || "Root");
     folderDesc = override.description ?? "";
   } else if (config.agent.enabled) {
-    // Agent classification
-    const heuristic = inferRole(signals);
+    // Agent classification — apply heuristic refinement before sending to LLM
+    // so the prompt reflects the corrected role (e.g. skip → container for
+    // folders with build files + package structure like src/main/java).
+    let heuristic = inferRole(signals);
+    if (heuristic === "skip" && signals.buildFiles.length > 0 && signals.hasPackageStructure) {
+      heuristic = "container";
+    }
     const classification = await agentClassify(
       folderPath,
       signals,
@@ -345,6 +361,7 @@ export async function processFolder(
       config,
       rootPath,
       parentContext,
+      cache,
     );
     role = classification.role;
     folderName = classification.name || humanizeName(path.basename(folderPath) || "Root");
@@ -364,12 +381,40 @@ export async function processFolder(
     folderDesc = "";
   }
 
-  // 4. Skip
+  // 4. Skip diagram generation but still recurse into children
   if (role === "skip") {
+    const excludeDirs = getExcludeDirs(config);
+    let skipEntries: fs.Dirent[];
+    try {
+      skipEntries = fs.readdirSync(folderPath, { withFileTypes: true });
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EMFILE" || code === "ENFILE") {
+        throw err;
+      }
+      console.error(
+        `Warning: cannot read directory ${relPath || "."}: ${err instanceof Error ? err.message : err}. Skipping subtree.`,
+      );
+      return d2Files;
+    }
+    for (const entry of skipEntries) {
+      if (!entry.isDirectory() || excludeDirs.has(entry.name) || entry.name.startsWith(".")) continue;
+      const childFiles = await processFolder(
+        path.join(folderPath, entry.name),
+        rootPath,
+        config,
+        parentContext,
+        folderPath,
+        cache,
+      );
+      d2Files.push(...childFiles);
+    }
+    if (isRootCall && cache) saveAgentCache(rootPath, cache);
     return d2Files;
   }
 
   // 5. Generate diagrams based on role
+  let generationSucceeded = false;
   try {
     switch (role) {
       case "system": {
@@ -399,24 +444,35 @@ export async function processFolder(
         d2Files.push(...codeFiles);
         break;
       }
+      default: {
+        const _exhaustive: never = role;
+        throw new Error(`Unexpected role: ${_exhaustive}`);
+      }
     }
+    generationSucceeded = true;
   } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOSPC" || code === "ENOMEM" || err instanceof RangeError) {
+      throw err;
+    }
     console.error(
       `Warning: diagram generation failed for ${relPath || "."} (${role}): ${err instanceof Error ? err.message : err}`,
     );
   }
 
-  // 6. Scaffold user-facing D2 files for this role
-  const outputDir = path.join(folderPath, config.output.docsDir, "architecture");
-  scaffoldForRole(
-    outputDir,
-    role,
-    folderName,
-    config,
-    parentFolderPath
-      ? { outputDir: path.join(parentFolderPath, config.output.docsDir, "architecture") }
-      : undefined,
-  );
+  // 6. Scaffold user-facing D2 files only if generation succeeded
+  if (generationSucceeded) {
+    const outputDir = path.join(folderPath, config.output.docsDir, "architecture");
+    scaffoldForRole(
+      outputDir,
+      role,
+      folderName,
+      config,
+      parentFolderPath
+        ? { outputDir: path.join(parentFolderPath, config.output.docsDir, "architecture") }
+        : undefined,
+    );
+  }
 
   // 7. Recurse into child directories
   const excludeDirs = getExcludeDirs(config);
@@ -449,9 +505,13 @@ export async function processFolder(
       config,
       childContext,
       folderPath,
+      cache,
     );
     d2Files.push(...childFiles);
   }
+
+  // Save agent cache once at the root call after full traversal
+  if (isRootCall && cache) saveAgentCache(rootPath, cache);
 
   return d2Files;
 }

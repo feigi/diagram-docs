@@ -57,23 +57,31 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    // L3: Component diagrams (one per container) — always generated
-    for (const container of model.containers) {
-      const containerGenDir = path.join(
-        outputDir,
-        "containers",
-        container.id,
-        "_generated",
-      );
-      if (!fs.existsSync(containerGenDir)) {
-        fs.mkdirSync(containerGenDir, { recursive: true });
-      }
+    // L3: Component diagrams (one per container) — gated by levels.component
+    if (config.levels.component) {
+      for (const container of model.containers) {
+        try {
+          const containerGenDir = path.join(
+            outputDir,
+            "containers",
+            container.id,
+            "_generated",
+          );
+          if (!fs.existsSync(containerGenDir)) {
+            fs.mkdirSync(containerGenDir, { recursive: true });
+          }
 
-      const d2 = generateComponentDiagram(model, container.id);
-      if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
-        filesWritten++;
-      } else {
-        filesUnchanged++;
+          const d2 = generateComponentDiagram(model, container.id);
+          if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
+            filesWritten++;
+          } else {
+            filesUnchanged++;
+          }
+        } catch (err: unknown) {
+          console.error(
+            `Warning: component diagram failed for ${container.id}: ${err instanceof Error ? err.message : err}`,
+          );
+        }
       }
     }
 
@@ -102,10 +110,12 @@ export const generateCommand = new Command("generate")
     const d2Files: string[] = [];
     d2Files.push(path.join(outputDir, "context.d2"));
     d2Files.push(path.join(outputDir, "container.d2"));
-    for (const container of model.containers) {
-      d2Files.push(
-        path.join(outputDir, "containers", container.id, "component.d2"),
-      );
+    if (config.levels.component) {
+      for (const container of model.containers) {
+        d2Files.push(
+          path.join(outputDir, "containers", container.id, "component.d2"),
+        );
+      }
     }
 
     renderD2Files(d2Files, config);
@@ -151,7 +161,7 @@ function resolveModel(
 }
 
 /**
- * Resolve a container drill-down link for submodule mode.
+ * Resolve a container drill-down link.
  * Returns relative path from root output dir to the per-folder component diagram.
  */
 function resolveSubmoduleLink(
@@ -165,11 +175,11 @@ function resolveSubmoduleLink(
 
   const appPath = container.path ?? container.applicationId.replace(/-/g, "/");
 
-  // Check overrides for skip role
-  const override = config.overrides[container.applicationId];
+  // Check overrides for skip role — use path-based key to match recursive runner convention
+  const override = config.overrides[appPath] ?? config.overrides[container.applicationId];
   if (override?.role === "skip") return null;
 
-  const docsDir = config.output.docsDir;
+  const docsDir = override?.docsDir ?? config.output.docsDir;
   const targetDir = path.resolve(
     path.dirname(rootOutputDir),
     "..",

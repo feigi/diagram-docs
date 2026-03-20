@@ -11,8 +11,9 @@ export function extractJavaSymbols(
   const symbols: CodeSymbol[] = [];
   const relationships: SymbolRelationship[] = [];
 
-  // Regex matches: optional "public" modifier, then class/interface/enum/record keyword, then name,
-  // optional extends/implements clauses.
+  // Regex matches: optional 'public' access modifier, optional 'abstract'/'final' modifiers,
+  // then class/interface/enum/record keyword, then name, optional extends/implements clauses.
+  // Does not match private, protected, or static declarations (inner/nested classes are excluded).
   const declarationRe =
     /(?:^|\n)\s*(public\s+)?(?:abstract\s+)?(?:final\s+)?(class|interface|enum|record)\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?/g;
 

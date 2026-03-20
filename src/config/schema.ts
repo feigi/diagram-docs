@@ -45,7 +45,7 @@ export const configSchema = z
           .default(["logging", "metrics", "middleware", "config", "utils"]),
         codeLevel: z
           .object({
-            minSymbols: z.number().default(2),
+            minSymbols: z.number().int().min(0).default(2),
           })
           .default({}),
       })
@@ -60,6 +60,14 @@ export const configSchema = z
       })
       .default({}),
 
+    levels: z
+      .object({
+        context: z.boolean().default(true),
+        container: z.boolean().default(true),
+        component: z.boolean().default(false),
+      })
+      .default({}),
+
     overrides: z
       .record(
         z.string(),
@@ -67,6 +75,7 @@ export const configSchema = z
           role: roleEnum.optional(),
           name: z.string().optional(),
           description: z.string().optional(),
+          docsDir: z.string().optional(),
         }),
       )
       .default({}),
