@@ -7,10 +7,12 @@ import type {
   ScannedModule,
   ExternalDep,
   ModuleImport,
+  ModuleSymbols,
 } from "../types.js";
 import { slugify } from "../../core/slugify.js";
 import { parsePythonImports } from "./imports.js";
 import { extractPythonModules, detectPythonFramework } from "./modules.js";
+import { extractPythonSymbols } from "./symbols.js";
 
 function parseRequirements(appPath: string): ExternalDep[] {
   const reqPath = path.join(appPath, "requirements.txt");
@@ -130,6 +132,18 @@ export const pythonAnalyzer: LanguageAnalyzer = {
       externalDependencies,
       internalImports: [],
     };
+  },
+
+  async analyzeModule(modulePath: string, _config: ScanConfig): Promise<ModuleSymbols> {
+    const files: Array<{ path: string; content: string }> = [];
+    const entries = fs.readdirSync(modulePath, { withFileTypes: true });
+    for (const entry of entries) {
+      if (entry.isFile() && entry.name.endsWith(".py")) {
+        const content = fs.readFileSync(path.join(modulePath, entry.name), "utf-8");
+        files.push({ path: entry.name, content });
+      }
+    }
+    return extractPythonSymbols(files);
   },
 };
 
