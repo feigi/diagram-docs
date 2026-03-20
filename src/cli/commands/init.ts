@@ -9,7 +9,7 @@ const DEFAULT_CONFIG = {
     description: "Description for context diagram",
   },
   scan: {
-    include: ["services/**", "libs/**"],
+    include: ["**"],
     exclude: [
       "**/test/**",
       "**/tests/**",
