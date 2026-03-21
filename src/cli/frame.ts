@@ -141,6 +141,12 @@ export function createFrame(title: string): Frame {
     process.on("SIGTERM", emergencyDisableMouse);
     stdinListener = (data: Buffer) => {
       const str = data.toString();
+      // Ctrl+C in raw mode arrives as \x03 — restore terminal and exit
+      if (str.includes("\x03")) {
+        emergencyDisableMouse();
+        process.exit(130);
+        return;
+      }
       // SGR mouse: \x1b[<btn;col;rowM  (64=wheel up, 65=wheel down)
       const match = str.match(/\x1b\[<(\d+);\d+;\d+[Mm]/);
       if (!match) return;
@@ -226,7 +232,7 @@ export function createFrame(title: string): Frame {
 
     // Pad with empty rows if fewer entries than minimum
     while (visibleLogRows.length < visibleRowCount) {
-      visibleLogRows.unshift(emptyRow());
+      visibleLogRows.push(emptyRow());
     }
     const totalRows = 1 + STATUS_ROWS + visibleRowCount + 1; // top + status + logs + bottom
 
