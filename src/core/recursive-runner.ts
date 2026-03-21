@@ -533,7 +533,11 @@ export async function processFolder(
     generationSucceeded = true;
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === "ENOSPC" || code === "ENOMEM" || err instanceof RangeError) {
+    if (
+      code === "ENOSPC" || code === "ENOMEM" ||
+      code === "EMFILE" || code === "ENFILE" ||
+      err instanceof RangeError
+    ) {
       throw err;
     }
     // Re-throw programming errors — they indicate bugs, not recoverable failures
@@ -564,7 +568,7 @@ export async function processFolder(
       );
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOSPC" || code === "ENOMEM") throw err;
+      if (code === "ENOSPC" || code === "ENOMEM" || code === "EMFILE" || code === "ENFILE") throw err;
       console.error(
         `Warning: scaffolding failed for ${relPath || "."}: ${err instanceof Error ? err.message : err}`,
       );
