@@ -13,6 +13,43 @@ import { getAnalyzer } from "../../analyzers/registry.js";
 import { slugify } from "../../core/slugify.js";
 import type { RawStructure, ScannedApplication } from "../../analyzers/types.js";
 
+/**
+ * Post-scan pass: match externalDependencies against other apps'
+ * publishedAs coordinates. Matches are promoted to internalImports.
+ */
+export function matchCrossAppCoordinates(
+  applications: ScannedApplication[],
+): void {
+  // Build lookup: "group:artifact" → app ID
+  const coordToAppId = new Map<string, string>();
+  for (const app of applications) {
+    if (app.publishedAs) {
+      coordToAppId.set(app.publishedAs, app.id);
+    }
+  }
+
+  for (const app of applications) {
+    const remaining: typeof app.externalDependencies = [];
+
+    for (const dep of app.externalDependencies) {
+      const coord = dep.name;
+      const targetAppId = coordToAppId.get(coord);
+
+      if (targetAppId && targetAppId !== app.id) {
+        app.internalImports.push({
+          sourceModuleId: app.id,
+          targetApplicationId: targetAppId,
+          targetPath: applications.find((a) => a.id === targetAppId)?.path ?? targetAppId,
+        });
+      } else {
+        remaining.push(dep);
+      }
+    }
+
+    app.externalDependencies = remaining;
+  }
+}
+
 export const scanCommand = new Command("scan")
   .description("Scan source code and produce raw-structure.json")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
@@ -105,8 +142,25 @@ export const scanCommand = new Command("scan")
         }
       }
 
+      // Fix internalImports targetApplicationId: replace absolute-path prefix
+      for (const imp of result.internalImports) {
+        if (imp.targetApplicationId.startsWith(absolutePrefix)) {
+          imp.targetApplicationId =
+            relativeId + imp.targetApplicationId.slice(absolutePrefix.length);
+        }
+        // Also normalize targets that use absolute paths of other apps
+        const rootPrefix = slugify(rootDir);
+        if (imp.targetApplicationId.startsWith(rootPrefix)) {
+          imp.targetApplicationId =
+            imp.targetApplicationId.slice(rootPrefix.length + 1); // +1 for the separator
+        }
+      }
+
       applications.push(result);
     }
+
+    // Cross-app coordinate matching
+    matchCrossAppCoordinates(applications);
 
     const rawStructure: RawStructure = {
       version: 1,

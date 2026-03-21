@@ -147,3 +147,47 @@ describe("Integration: Scan → Generate pipeline", () => {
     }
   });
 });
+
+describe("Integration: Post-scan cross-app coordinate matching", () => {
+  it("promotes matching external deps to internalImports", async () => {
+    const apps: ScannedApplication[] = [
+      {
+        id: "producer",
+        path: "producer",
+        name: "producer",
+        language: "java",
+        buildFile: "build.gradle",
+        modules: [],
+        externalDependencies: [],
+        internalImports: [],
+        publishedAs: "com.example:producer",
+      },
+      {
+        id: "consumer",
+        path: "consumer",
+        name: "consumer",
+        language: "java",
+        buildFile: "build.gradle",
+        modules: [],
+        externalDependencies: [
+          { name: "com.example:producer", version: "1.0.0" },
+          { name: "org.springframework:spring-web" },
+        ],
+        internalImports: [],
+      },
+    ];
+
+    const { matchCrossAppCoordinates } = await import("../../src/cli/commands/scan.js");
+    matchCrossAppCoordinates(apps);
+
+    // The matching dep should be promoted
+    expect(apps[1].internalImports).toHaveLength(1);
+    expect(apps[1].internalImports[0].targetApplicationId).toBe("producer");
+
+    // The matched dep should be removed from externalDependencies
+    expect(apps[1].externalDependencies).toHaveLength(1);
+    expect(apps[1].externalDependencies[0].name).toBe(
+      "org.springframework:spring-web",
+    );
+  });
+});
