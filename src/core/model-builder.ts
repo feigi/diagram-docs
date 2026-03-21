@@ -47,18 +47,38 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
   const granularity = config.abstraction.granularity;
   const excludePatterns = config.abstraction.excludePatterns;
 
-  // Containers: 1:1 with scanned applications
-  const containers = apps.map((app) => ({
-    id: app.id,
-    applicationId: app.id,
-    name: humanizeName(app.name),
-    description: `${humanizeName(app.name)} application`,
-    technology: inferTechnology(
-      app.language,
-      app.externalDependencies.map((d) => d.name),
-    ),
-    path: app.path,
-  }));
+  // Skip shell parent apps: apps with 0 modules whose path is a prefix of another app's path.
+  // These are build-system root projects (e.g., Gradle multi-module roots) that contain
+  // no code of their own — their subprojects are scanned as separate apps.
+  const appPaths = new Set(apps.map((a) => a.path));
+  const shellParents = new Set(
+    apps
+      .filter(
+        (app) =>
+          app.modules.length === 0 &&
+          apps.some(
+            (other) =>
+              other.path !== app.path &&
+              other.path.startsWith(app.path + "/"),
+          ),
+      )
+      .map((a) => a.id),
+  );
+
+  // Containers: 1:1 with scanned applications, excluding shell parents
+  const containers = apps
+    .filter((app) => !shellParents.has(app.id))
+    .map((app) => ({
+      id: app.id,
+      applicationId: app.id,
+      name: humanizeName(app.name),
+      description: `${humanizeName(app.name)} application`,
+      technology: inferTechnology(
+        app.language,
+        app.externalDependencies.map((d) => d.name),
+      ),
+      path: app.path,
+    }));
 
   // Components: 1:1 per module (filtered by granularity)
   const components = apps.flatMap((app) => {
