@@ -85,16 +85,24 @@ function getMaxLogLines(): number {
 
 export function createFrame(title: string): Frame {
   const isTTY = process.stderr.isTTY;
+  const stdinTTY = process.stdin.isTTY;
   const frameWidth = getFrameWidth();
   const inner = frameWidth - 2;
   const startTime = Date.now();
   const STATUS_ROWS = 2;
+  const SCROLL_STEP = 3;
 
   let spinnerIdx = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
   let firstRender = true;
   let stopped = false;
   let prevTotalRows = 0;
+
+  // Scroll state: 0 = pinned to bottom, >0 = rows scrolled up from bottom
+  let scrollOffset = 0;
+  let prevLogRowCount = 0;
+  let stdinListener: ((data: Buffer) => void) | null = null;
+  let wasRawMode = false;
 
   let statusLines: FrameLine[] = [];
   const logBuffer: { text: string; kind: LogKind }[] = [];
@@ -114,14 +122,49 @@ export function createFrame(title: string): Frame {
     return chalk.dim("│") + " ".repeat(inner) + chalk.dim("│");
   }
 
+  function enableMouse() {
+    if (!stdinTTY || stdinListener) return;
+    wasRawMode = process.stdin.isRaw;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    process.stderr.write("\x1b[?1000h\x1b[?1006h"); // enable SGR mouse mode
+    stdinListener = (data: Buffer) => {
+      const str = data.toString();
+      // SGR mouse: \x1b[<btn;col;rowM  (64=wheel up, 65=wheel down)
+      const match = str.match(/\x1b\[<(\d+);\d+;\d+[Mm]/);
+      if (!match) return;
+      const btn = parseInt(match[1], 10);
+      if (btn === 64) {
+        scrollOffset += SCROLL_STEP;
+        render();
+      } else if (btn === 65) {
+        scrollOffset = Math.max(0, scrollOffset - SCROLL_STEP);
+        render();
+      }
+    };
+    process.stdin.on("data", stdinListener);
+  }
+
+  function disableMouse() {
+    if (stdinListener) {
+      process.stdin.removeListener("data", stdinListener);
+      stdinListener = null;
+    }
+    if (stdinTTY) {
+      process.stderr.write("\x1b[?1000l\x1b[?1006l"); // disable mouse mode
+      process.stdin.setRawMode(wasRawMode);
+      process.stdin.unref();
+    }
+  }
+
   function render() {
     const elapsed = Date.now() - startTime;
     const elapsedStr = formatElapsed(elapsed);
     const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
 
     const maxLogLines = getMaxLogLines();
-    const THINKING_INDENT = 8; // one tab
-    const OUTPUT_INDENT = 4;
+    const OUTPUT_INDENT = 2;   // align with "Model:..." status line
+    const THINKING_INDENT = 6; // one tab relative to output
     const thinkingWidth = inner - 2 - THINKING_INDENT; // 2 for row padding
     const outputWidth = inner - 2 - OUTPUT_INDENT;
 
@@ -138,9 +181,33 @@ export function createFrame(title: string): Frame {
       }
     }
 
-    // Take the tail, grow frame height with content up to terminal max
-    const visibleRowCount = Math.max(MIN_LOG_LINES, Math.min(allLogRows.length, maxLogLines));
-    const visibleLogRows = allLogRows.slice(-visibleRowCount);
+    // Keep viewport stable when new content arrives while scrolled up
+    const currentLogRowCount = allLogRows.length;
+    if (scrollOffset > 0 && currentLogRowCount > prevLogRowCount) {
+      scrollOffset += currentLogRowCount - prevLogRowCount;
+    }
+    prevLogRowCount = currentLogRowCount;
+
+    // Clamp scroll offset
+    const maxScroll = Math.max(0, allLogRows.length - MIN_LOG_LINES);
+    scrollOffset = Math.min(scrollOffset, maxScroll);
+
+    // Compute viewport slice
+    const bottomIdx = allLogRows.length - scrollOffset;
+    const visibleRowCount = Math.max(MIN_LOG_LINES, Math.min(bottomIdx, maxLogLines));
+    const topIdx = Math.max(0, bottomIdx - visibleRowCount);
+    const visibleLogRows = allLogRows.slice(topIdx, bottomIdx);
+
+    // Add scroll indicators when content is clipped
+    const hasAbove = topIdx > 0;
+    const hasBelow = scrollOffset > 0;
+    if (hasAbove && visibleLogRows.length > 0) {
+      visibleLogRows[0] = row(chalk.dim(`  ↑ ${topIdx} more`));
+    }
+    if (hasBelow && visibleLogRows.length > 1) {
+      visibleLogRows[visibleLogRows.length - 1] = row(chalk.dim(`  ↓ ${scrollOffset} more`));
+    }
+
     // Pad with empty rows if fewer entries than minimum
     while (visibleLogRows.length < visibleRowCount) {
       visibleLogRows.unshift(emptyRow());
@@ -192,6 +259,7 @@ export function createFrame(title: string): Frame {
 
   function startTimer() {
     if (timer || !isTTY) return;
+    enableMouse();
     timer = setInterval(() => {
       spinnerIdx++;
       render();
@@ -247,15 +315,18 @@ export function createFrame(title: string): Frame {
       if (stopped) return;
       stopped = true;
       stopTimer();
+      disableMouse();
+
+      const elapsed = formatElapsed(Date.now() - startTime);
 
       if (!isTTY) {
         for (const line of lines) {
           process.stderr.write(`  ${line.text}\n`);
         }
+        process.stderr.write(`  ${chalk.dim(`Done in ${elapsed}`)}\n`);
         return;
       }
 
-      const elapsed = formatElapsed(Date.now() - startTime);
       const safeText = sanitize(lines[0]?.text ?? "Done");
       const stopRow = row(
         `${chalk.green("✓")} ${truncate(safeText, inner - 8)}  ${chalk.dim(elapsed)}`,
