@@ -109,19 +109,19 @@ describe("Integration: Submodule per-folder docs", () => {
     for (const sub of subResults) {
       expect(fs.existsSync(sub.outputDir)).toBe(true);
 
-      // Check generated component.d2 exists
+      // Check generated c3-component.d2 exists
       const genDir = path.join(sub.outputDir, "_generated");
-      expect(fs.existsSync(path.join(genDir, "component.d2"))).toBe(true);
+      expect(fs.existsSync(path.join(genDir, "c3-component.d2"))).toBe(true);
 
       // Check styles.d2 exists
       expect(fs.existsSync(path.join(sub.outputDir, "styles.d2"))).toBe(true);
 
-      // Check user-facing component.d2 with breadcrumb
-      const userD2Path = path.join(sub.outputDir, "component.d2");
+      // Check user-facing c3-component.d2 with breadcrumb
+      const userD2Path = path.join(sub.outputDir, "c3-component.d2");
       expect(fs.existsSync(userD2Path)).toBe(true);
       const userD2 = fs.readFileSync(userD2Path, "utf-8");
       expect(userD2).toContain("System diagrams:");
-      expect(userD2).toContain("...@_generated/component.d2");
+      expect(userD2).toContain("...@_generated/c3-component.d2");
       expect(userD2).toContain("...@styles.d2");
 
       // Check model fragment

@@ -49,7 +49,7 @@ export function generateContainerDiagram(
         if (link) props.link = link;
       } else if (options?.componentLinks) {
         const ext = options.format ?? "svg";
-        props.link = `./containers/${container.id}/component.${ext}`;
+        props.link = `./containers/${container.id}/c3-component.${ext}`;
       }
 
       w.shape(

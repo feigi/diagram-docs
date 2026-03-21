@@ -22,15 +22,15 @@ export function checkDrift(
   const warnings: DriftWarning[] = [];
 
   const userFiles = [
-    path.join(outputDir, "context.d2"),
-    path.join(outputDir, "container.d2"),
+    path.join(outputDir, "c1-context.d2"),
+    path.join(outputDir, "c2-container.d2"),
   ];
 
   // Component diagram files
   const containersDir = path.join(outputDir, "containers");
   if (fs.existsSync(containersDir)) {
     for (const entry of fs.readdirSync(containersDir)) {
-      const componentFile = path.join(containersDir, entry, "component.d2");
+      const componentFile = path.join(containersDir, entry, "c3-component.d2");
       if (fs.existsSync(componentFile)) {
         userFiles.push(componentFile);
       }

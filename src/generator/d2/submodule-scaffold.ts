@@ -50,19 +50,19 @@ export function generateSubmoduleDocs(
 
     // Generate component diagram
     const d2 = generateComponentDiagram(model, container.id);
-    writeIfChanged(path.join(generatedDir, "component.d2"), d2);
+    writeIfChanged(path.join(generatedDir, "c3-component.d2"), d2);
 
     // Styles
     const styles = generateStyles(config.output.theme, config.output.layout);
     writeIfChanged(path.join(outputDir, "styles.d2"), styles);
 
-    // Scaffold user-facing component.d2 (create once, never overwrite)
-    const userD2Path = path.join(outputDir, "component.d2");
+    // Scaffold user-facing c3-component.d2 (create once, never overwrite)
+    const userD2Path = path.join(outputDir, "c3-component.d2");
     if (!fs.existsSync(userD2Path)) {
       // Breadcrumb link back to root
       const relToRoot = path.relative(
         outputDir,
-        path.join(rootOutputDir, "container.svg"),
+        path.join(rootOutputDir, "c2-container.svg"),
       );
 
       fs.writeFileSync(
@@ -71,7 +71,7 @@ export function generateSubmoduleDocs(
           `# C4 Component Diagram — ${container.name}`,
           `# System diagrams: ${relToRoot}`,
           "",
-          "...@_generated/component.d2",
+          "...@_generated/c3-component.d2",
           "...@styles.d2",
           "",
           "# Add your customizations below this line",

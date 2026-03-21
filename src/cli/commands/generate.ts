@@ -38,7 +38,7 @@ export const generateCommand = new Command("generate")
     // L1: Context diagram
     if (config.levels.context) {
       const d2 = generateContextDiagram(model);
-      if (writeIfChanged(path.join(generatedDir, "context.d2"), d2)) {
+      if (writeIfChanged(path.join(generatedDir, "c1-context.d2"), d2)) {
         filesWritten++;
       } else {
         filesUnchanged++;
@@ -56,7 +56,7 @@ export const generateCommand = new Command("generate")
           ? (containerId) => resolveSubmoduleLink(containerId, model, config, outputDir)
           : undefined,
       });
-      if (writeIfChanged(path.join(generatedDir, "container.d2"), d2)) {
+      if (writeIfChanged(path.join(generatedDir, "c2-container.d2"), d2)) {
         filesWritten++;
       } else {
         filesUnchanged++;
@@ -77,7 +77,7 @@ export const generateCommand = new Command("generate")
         }
 
         const d2 = generateComponentDiagram(model, container.id);
-        if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
+        if (writeIfChanged(path.join(containerGenDir, "c3-component.d2"), d2)) {
           filesWritten++;
         } else {
           filesUnchanged++;
@@ -108,15 +108,15 @@ export const generateCommand = new Command("generate")
     // Collect all D2 files to render
     const d2Files: string[] = [];
     if (config.levels.context) {
-      d2Files.push(path.join(outputDir, "context.d2"));
+      d2Files.push(path.join(outputDir, "c1-context.d2"));
     }
     if (config.levels.container) {
-      d2Files.push(path.join(outputDir, "container.d2"));
+      d2Files.push(path.join(outputDir, "c2-container.d2"));
     }
     if (config.levels.component) {
       for (const container of model.containers) {
         d2Files.push(
-          path.join(outputDir, "containers", container.id, "component.d2"),
+          path.join(outputDir, "containers", container.id, "c3-component.d2"),
         );
       }
     }
@@ -211,7 +211,7 @@ function resolveSubmoduleLink(
     "architecture",
   );
   const ext = config.output.format;
-  const targetFile = path.join(targetDir, `component.${ext}`);
+  const targetFile = path.join(targetDir, `c3-component.${ext}`);
 
   return path.relative(rootOutputDir, targetFile);
 }

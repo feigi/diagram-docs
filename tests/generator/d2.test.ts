@@ -83,7 +83,7 @@ describe("D2 Container Diagram", () => {
     // Each container should have a link to its component diagram
     for (const container of model.containers) {
       expect(d2).toContain(
-        `link: ./containers/${container.id}/component.svg`,
+        `link: ./containers/${container.id}/c3-component.svg`,
       );
     }
   });

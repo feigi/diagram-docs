@@ -109,11 +109,11 @@ describe("Integration: Scan → Generate pipeline", () => {
     if (!fs.existsSync(OUTPUT_DIR)) {
       fs.mkdirSync(OUTPUT_DIR, { recursive: true });
     }
-    fs.writeFileSync(path.join(OUTPUT_DIR, "context.d2"), context);
-    fs.writeFileSync(path.join(OUTPUT_DIR, "container.d2"), container);
+    fs.writeFileSync(path.join(OUTPUT_DIR, "c1-context.d2"), context);
+    fs.writeFileSync(path.join(OUTPUT_DIR, "c2-container.d2"), container);
     const componentDir = path.join(OUTPUT_DIR, "containers", "user-api");
     fs.mkdirSync(componentDir, { recursive: true });
-    fs.writeFileSync(path.join(componentDir, "component.d2"), component);
+    fs.writeFileSync(path.join(componentDir, "c3-component.d2"), component);
   });
 
   it("scan output is valid JSON matching the schema", () => {

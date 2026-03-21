@@ -23,12 +23,12 @@ export function scaffoldUserFiles(
   // Context diagram
   if (config.levels.context) {
     scaffoldFile(
-      path.join(outputDir, "context.d2"),
+      path.join(outputDir, "c1-context.d2"),
       [
         "# C4 Context Diagram",
         `# System: ${model.system.name}`,
         "",
-        `...@_generated/context.d2`,
+        `...@_generated/c1-context.d2`,
         `...@styles.d2`,
         "",
         "# Add your customizations below this line",
@@ -40,12 +40,12 @@ export function scaffoldUserFiles(
   // Container diagram
   if (config.levels.container) {
     scaffoldFile(
-      path.join(outputDir, "container.d2"),
+      path.join(outputDir, "c2-container.d2"),
       [
         "# C4 Container Diagram",
         `# System: ${model.system.name}`,
         "",
-        `...@_generated/container.d2`,
+        `...@_generated/c2-container.d2`,
         `...@styles.d2`,
         "",
         "# Add your customizations below this line",
@@ -63,11 +63,11 @@ export function scaffoldUserFiles(
       }
 
       scaffoldFile(
-        path.join(containerDir, "component.d2"),
+        path.join(containerDir, "c3-component.d2"),
         [
           `# C4 Component Diagram — ${container.name}`,
           "",
-          `...@_generated/component.d2`,
+          `...@_generated/c3-component.d2`,
           `...@../../styles.d2`,
           "",
           "# Add your customizations below this line",
