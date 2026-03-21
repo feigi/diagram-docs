@@ -144,11 +144,11 @@ export const javaAnalyzer: LanguageAnalyzer = {
 
         // Check if this is a subproject by looking at parent's settings.gradle
         if (parentSettings) {
-          const isSubproject = parentSettings.subprojects.some(
+          const matchingSub = parentSettings.subprojects.find(
             (s) => s.dir === appName || s.name === appName,
           );
-          if (isSubproject) {
-            artifactName = appName;
+          if (matchingSub) {
+            artifactName = matchingSub.name;
           } else {
             // Root project — use rootProject.name from own settings
             artifactName = settings?.rootProjectName ?? appName;
