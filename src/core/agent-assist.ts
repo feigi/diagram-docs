@@ -126,13 +126,13 @@ export function parseAgentResponse(text: string): AgentClassification | null {
 
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
-    const role = parsed.role as FolderRole;
-    if (!VALID_ROLES.has(role)) {
+    if (!VALID_ROLES.has(parsed.role as FolderRole)) {
       console.error(
         `Warning: LLM returned unrecognized role "${parsed.role}", falling back to heuristic`,
       );
       return null;
     }
+    const role = parsed.role as FolderRole;
 
     const name = typeof parsed.name === "string" ? parsed.name : "";
     const description =
