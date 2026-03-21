@@ -234,6 +234,8 @@ function spawnStreamJson(
 
 interface LLMProvider {
   name: string;
+  /** Whether this provider can use tools (file read/write) to self-correct output. */
+  supportsTools: boolean;
   isAvailable(): boolean;
   generate(
     systemPrompt: string,
@@ -254,6 +256,7 @@ function commandExists(cmd: string): boolean {
 
 const claudeCodeProvider: LLMProvider = {
   name: "Claude Code CLI",
+  supportsTools: true,
 
   isAvailable() {
     return commandExists("claude");
@@ -274,6 +277,7 @@ const claudeCodeProvider: LLMProvider = {
           "--include-partial-messages",
           "--system-prompt-file", tmpFile,
           "--model", model,
+          "--allowedTools", "Write", "Read", "Edit",
         ],
         userMessage,
         600_000, // 10 minutes
@@ -287,6 +291,7 @@ const claudeCodeProvider: LLMProvider = {
 
 const copilotProvider: LLMProvider = {
   name: "GitHub Copilot CLI",
+  supportsTools: false,
 
   isAvailable() {
     if (!commandExists("gh")) return false;
@@ -311,10 +316,15 @@ const providers: LLMProvider[] = [claudeCodeProvider, copilotProvider];
 // Prompt construction
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(): string {
+function buildSystemPrompt(outputPath?: string): string {
+  const outputInstruction = outputPath
+    ? `Write the YAML to: ${outputPath}
+After writing, read the file back and verify the YAML parses correctly and conforms to the schema below. Fix any issues you find — do not stop until the file contains valid YAML.`
+    : "Output ONLY valid YAML — no markdown fences, no explanatory text.";
+
   return `You are an architecture modeling agent. Given a codebase scan (raw-structure.json), produce an architecture-model.yaml for C4 diagram generation.
 
-Output ONLY valid YAML — no markdown fences, no explanatory text.
+${outputInstruction}
 
 ## Output Schema
 
@@ -438,6 +448,7 @@ export function buildUserMessage(options: {
   rawStructure: RawStructure;
   configYaml?: string;
   existingModelYaml?: string;
+  outputPath?: string;
 }): string {
   const parts: string[] = [];
 
@@ -454,11 +465,91 @@ export function buildUserMessage(options: {
     parts.push(options.existingModelYaml);
   }
 
-  parts.push(
-    "\n\nProduce the architecture-model.yaml content. Output ONLY the YAML — no markdown fences, no explanatory text before or after.",
-  );
+  if (options.outputPath) {
+    parts.push(
+      `\n\nWrite the architecture-model.yaml to: ${options.outputPath}\n` +
+        "After writing, read it back and verify the YAML is valid and conforms to the schema. Fix any issues.",
+    );
+  } else {
+    parts.push(
+      "\n\nProduce the architecture-model.yaml content. Output ONLY the YAML — no markdown fences, no explanatory text before or after.",
+    );
+  }
 
   return parts.join("");
+}
+
+// ---------------------------------------------------------------------------
+// YAML repair for common LLM output issues
+// ---------------------------------------------------------------------------
+
+/**
+ * Attempt to repair malformed YAML from LLM output.
+ *
+ * Common issues:
+ * 1. Truncated output — the LLM hit a token limit mid-line, leaving an
+ *    unclosed quote or incomplete list item at the end.
+ * 2. Smashed list items — two YAML list items on a single line, e.g.
+ *    `      - "foo-      - "bar-baz"` (the LLM wrapped mid-token).
+ */
+export function repairLLMYaml(yaml: string): string {
+  const lines = yaml.split("\n");
+  const repaired: string[] = [];
+
+  for (const line of lines) {
+    // Detect smashed list items: multiple `- "value"` items on a single line.
+    // The LLM sometimes concatenates list items when wrapping long output.
+    // E.g.: `      - "mod-one"      - "mod-two"`
+    const indent = line.match(/^(\s*)/)?.[1] ?? "";
+    const items = [...line.matchAll(/-\s+"[^"]*"/g)];
+    if (items.length > 1) {
+      for (const m of items) {
+        repaired.push(indent + m[0]);
+      }
+      continue;
+    }
+
+    // Also handle the case where the first item's quote is unclosed because
+    // the LLM started a new list item mid-string:
+    // `      - "los-      - "los-charging-infrastructure-dynamodb"`
+    const smashedUnquoted = line.match(
+      /^(\s*)-\s+"[^"]*\s{2,}(-\s+"[^"]*")/,
+    );
+    if (smashedUnquoted) {
+      // Drop the broken first item, keep the second (which has a closing quote)
+      repaired.push(indent + smashedUnquoted[2]);
+      continue;
+    }
+
+    repaired.push(line);
+  }
+
+  // Handle truncated output: if the last non-empty line has an unclosed
+  // quote or is an incomplete list item, remove trailing broken lines
+  // until we reach a structurally complete line.
+  while (repaired.length > 0) {
+    const last = repaired[repaired.length - 1];
+    const trimmed = last.trim();
+    if (!trimmed) {
+      repaired.pop();
+      continue;
+    }
+    // Count quotes — odd number means unclosed string
+    const quoteCount = (trimmed.match(/"/g) || []).length;
+    if (quoteCount % 2 !== 0) {
+      repaired.pop();
+      continue;
+    }
+    // Incomplete list item (just a dash with no value, or trailing colon with no value
+    // that isn't a mapping key introducing a block)
+    if (/^-\s*$/.test(trimmed)) {
+      repaired.pop();
+      continue;
+    }
+    break;
+  }
+
+  return repaired.join("\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -510,26 +601,42 @@ export async function buildModelWithLLM(
 
   const emit = (status: string) => options.onStatus?.(status, provider!.name);
 
-  // 2. Build prompt
+  // 2. Build prompt — tool-using providers write to a temp file and self-validate
   emit("Building prompt...");
-  const systemPrompt = buildSystemPrompt();
+  const outputPath = provider.supportsTools
+    ? path.join(os.tmpdir(), `diagram-docs-model-${Date.now()}.yaml`)
+    : undefined;
+  const systemPrompt = buildSystemPrompt(outputPath);
   const userMessage = buildUserMessage({
     rawStructure: options.rawStructure,
     configYaml: options.configYaml,
     existingModelYaml: options.existingModelYaml,
+    outputPath,
   });
 
   // 3. Call LLM
   emit(`Waiting for ${provider.name} response...`);
-  let rawOutput = await provider.generate(
+  const textOutput = await provider.generate(
     systemPrompt,
     userMessage,
     options.config.llm.model,
     options.onProgress,
   );
 
-  // 4. Clean up output: strip markdown fences and preamble text
+  // 4. Read output — prefer the file written by the agent, fall back to text output
   emit("Validating output...");
+  let rawOutput: string;
+  if (outputPath && fs.existsSync(outputPath)) {
+    try {
+      rawOutput = fs.readFileSync(outputPath, "utf-8");
+    } finally {
+      try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
+    }
+  } else {
+    rawOutput = textOutput;
+  }
+
+  // 5. Clean up output: strip markdown fences, preamble, and YAML comments
   rawOutput = rawOutput
     .trim()
     .replace(/^```ya?ml\s*\n?/i, "")
@@ -544,7 +651,9 @@ export async function buildModelWithLLM(
     }
   }
 
-  // 5. Parse and validate
+  // 6. Repair common LLM YAML issues (safety net for text output path)
+  rawOutput = repairLLMYaml(rawOutput);
+
   let parsed: unknown;
   try {
     parsed = parseYaml(rawOutput);
