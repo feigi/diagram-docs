@@ -7,7 +7,7 @@ import * as path from "node:path";
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import type { Config } from "../../config/schema.js";
 import { generateComponentDiagram } from "./component.js";
-import { generateStyles } from "./styles.js";
+import { STYLES_D2 } from "./styles.js";
 import { extractFragment } from "../../core/model-fragment.js";
 import { stringify as stringifyYaml } from "yaml";
 
@@ -48,39 +48,40 @@ export function generateSubmoduleDocs(
 
     const d2Files: string[] = [];
 
-    // Generate component diagram
-    const d2 = generateComponentDiagram(model, container.id);
-    writeIfChanged(path.join(generatedDir, "c3-component.d2"), d2);
+    // Generate component diagram (only when enabled)
+    if (config.levels.component) {
+      const d2 = generateComponentDiagram(model, container.id);
+      writeIfChanged(path.join(generatedDir, "c3-component.d2"), d2);
 
-    // Styles
-    const styles = generateStyles(config.output.theme, config.output.layout);
-    writeIfChanged(path.join(outputDir, "styles.d2"), styles);
+      // Styles
+      writeIfChanged(path.join(outputDir, "styles.d2"), STYLES_D2);
 
-    // Scaffold user-facing c3-component.d2 (create once, never overwrite)
-    const userD2Path = path.join(outputDir, "c3-component.d2");
-    if (!fs.existsSync(userD2Path)) {
-      // Breadcrumb link back to root
-      const relToRoot = path.relative(
-        outputDir,
-        path.join(rootOutputDir, "c2-container.svg"),
-      );
+      // Scaffold user-facing c3-component.d2 (create once, never overwrite)
+      const userD2Path = path.join(outputDir, "c3-component.d2");
+      if (!fs.existsSync(userD2Path)) {
+        // Breadcrumb link back to root
+        const relToRoot = path.relative(
+          outputDir,
+          path.join(rootOutputDir, "c2-container.svg"),
+        );
 
-      fs.writeFileSync(
-        userD2Path,
-        [
-          `# C4 Component Diagram — ${container.name}`,
-          `# System diagrams: ${relToRoot}`,
-          "",
-          "...@_generated/c3-component.d2",
-          "...@styles.d2",
-          "",
-          "# Add your customizations below this line",
-          "",
-        ].join("\n"),
-        "utf-8",
-      );
+        fs.writeFileSync(
+          userD2Path,
+          [
+            `# C4 Component Diagram — ${container.name}`,
+            `# System diagrams: ${relToRoot}`,
+            "",
+            "...@_generated/c3-component.d2",
+            "...@styles.d2",
+            "",
+            "# Add your customizations below this line",
+            "",
+          ].join("\n"),
+          "utf-8",
+        );
+      }
+      d2Files.push(userD2Path);
     }
-    d2Files.push(userD2Path);
 
     // Write model fragment as YAML for reference
     const fragmentContent =

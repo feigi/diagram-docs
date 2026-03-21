@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import type { Config } from "../../config/schema.js";
-import { generateStyles } from "./styles.js";
+import { STYLES_D2 } from "./styles.js";
 
 /**
  * Scaffold user-facing D2 files that @import generated files.
@@ -15,9 +15,8 @@ export function scaffoldUserFiles(
 ): void {
   // Styles file — overwrite only if content changed (preserves mtime)
   const stylesPath = path.join(outputDir, "styles.d2");
-  const stylesContent = generateStyles(config.output.theme, config.output.layout);
-  if (!fs.existsSync(stylesPath) || fs.readFileSync(stylesPath, "utf-8") !== stylesContent) {
-    fs.writeFileSync(stylesPath, stylesContent, "utf-8");
+  if (!fs.existsSync(stylesPath) || fs.readFileSync(stylesPath, "utf-8") !== STYLES_D2) {
+    fs.writeFileSync(stylesPath, STYLES_D2, "utf-8");
   }
 
   // Context diagram
