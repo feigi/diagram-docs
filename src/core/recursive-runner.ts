@@ -7,6 +7,7 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
+import picomatch from "picomatch";
 
 import type { Config, FolderRole } from "../config/schema.js";
 import type { ScanConfig } from "../analyzers/types.js";
@@ -26,26 +27,45 @@ import { scaffoldForRole } from "../generator/d2/scaffold.js";
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function getExcludeDirs(config: Config): Set<string> {
-  // Use the first path segment of docsDir to avoid recursing into the docs
-  // output tree.  Note: for multi-segment paths like "internal/docs", this
-  // excludes the entire "internal/" directory, which may be overly broad.
-  const docsDirFirstSegment = config.output.docsDir.split(/[\\/]/)[0] || config.output.docsDir;
-  return new Set([
-    "node_modules",
-    ".git",
-    "build",
-    "dist",
-    "target",
-    ".diagram-docs",
-    "__pycache__",
-    ".venv",
-    "venv",
-    "test",
-    "tests",
-    "__tests__",
-    docsDirFirstSegment,
-  ]);
+/**
+ * Infrastructure directories that are ALWAYS excluded from traversal
+ * regardless of user config. These are never useful to scan.
+ */
+const INFRA_EXCLUDE_DIRS = new Set([
+  ".git",
+  ".diagram-docs",
+  "__pycache__",
+  ".venv",
+  "venv",
+  "_generated",
+  "architecture",
+]);
+
+/**
+ * Build a predicate that tests whether a relative path should be excluded
+ * from traversal, combining infrastructure dirs with user-configured
+ * scan.exclude glob patterns.
+ */
+function buildExcludeMatcher(config: Config): (relPath: string) => boolean {
+  const docsDir = config.output.docsDir;
+  const docsDirFirstSegment = docsDir === "." ? null : (docsDir.split(/[\\/]/)[0] || null);
+
+  const isMatch = picomatch(config.scan.exclude);
+
+  return (childRelPath: string) => {
+    const dirName = path.basename(childRelPath);
+
+    // Always exclude infrastructure dirs
+    if (INFRA_EXCLUDE_DIRS.has(dirName)) return true;
+
+    // Exclude the docs output directory's first segment
+    if (docsDirFirstSegment && dirName === docsDirFirstSegment) return true;
+
+    // Test against user-configured scan.exclude globs
+    if (isMatch(childRelPath)) return true;
+
+    return false;
+  };
 }
 
 /**
@@ -127,12 +147,13 @@ async function generateSystemDiagrams(
   config: Config,
   folderName: string,
   folderDesc: string,
+  docsDir: string,
 ): Promise<string[]> {
   const apps = await discoverApplications(folderPath, config);
   const scanConfig = toScanConfig(config);
   const d2Files: string[] = [];
 
-  // Analyze each discovered application
+  // Analyze each discovered application — individual failures do not block siblings
   const scannedApps = await Promise.all(
     apps.map(async (app) => {
       const analyzer = getAnalyzer(app.analyzerId);
@@ -143,7 +164,14 @@ async function generateSystemDiagrams(
         return null;
       }
       const absAppPath = path.resolve(folderPath, app.path);
-      return analyzer.analyze(absAppPath, scanConfig);
+      try {
+        return await analyzer.analyze(absAppPath, scanConfig);
+      } catch (err: unknown) {
+        console.error(
+          `Warning: analysis failed for application at ${app.path}: ${err instanceof Error ? err.message : err}`,
+        );
+        return null;
+      }
     }),
   );
 
@@ -167,11 +195,7 @@ async function generateSystemDiagrams(
   model.system.description = folderDesc;
 
   // Write diagrams
-  const outputDir = path.join(
-    folderPath,
-    config.output.docsDir,
-    "architecture",
-  );
+  const outputDir = path.join(folderPath, docsDir, "architecture");
   const generatedDir = path.join(outputDir, "_generated");
   fs.mkdirSync(generatedDir, { recursive: true });
 
@@ -179,7 +203,7 @@ async function generateSystemDiagrams(
   const contextD2 = generateContextDiagram(model);
   const contextPath = path.join(generatedDir, "context.d2");
   writeIfChanged(contextPath, contextD2);
-  d2Files.push(contextPath);
+  d2Files.push(path.join(outputDir, "context.d2"));
 
   // Container diagram — with submodule link resolver for drill-down
   const containerD2 = generateContainerDiagram(model, {
@@ -191,13 +215,14 @@ async function generateSystemDiagrams(
         config.output.docsDir,
         "architecture",
       );
-      const relPath = path.relative(generatedDir, path.join(folderPath, childDocsDir));
+      // Relative to outputDir because the rendered SVG lives there
+      const relPath = path.relative(outputDir, path.join(folderPath, childDocsDir));
       return `${relPath}/component.${config.output.format}`;
     },
   });
   const containerPath = path.join(generatedDir, "container.d2");
   writeIfChanged(containerPath, containerD2);
-  d2Files.push(containerPath);
+  d2Files.push(path.join(outputDir, "container.d2"));
 
   return d2Files;
 }
@@ -211,12 +236,13 @@ async function generateContainerDiagrams(
   config: Config,
   folderName: string,
   folderDesc: string,
+  docsDir: string,
 ): Promise<string[]> {
   const apps = await discoverApplications(folderPath, config);
   const scanConfig = toScanConfig(config);
   const d2Files: string[] = [];
 
-  // Analyze the application(s) at this folder
+  // Analyze the application(s) at this folder — individual failures do not block siblings
   const scannedApps = await Promise.all(
     apps.map(async (app) => {
       const analyzer = getAnalyzer(app.analyzerId);
@@ -227,7 +253,14 @@ async function generateContainerDiagrams(
         return null;
       }
       const absAppPath = path.resolve(folderPath, app.path);
-      return analyzer.analyze(absAppPath, scanConfig);
+      try {
+        return await analyzer.analyze(absAppPath, scanConfig);
+      } catch (err: unknown) {
+        console.error(
+          `Warning: analysis failed for application at ${app.path}: ${err instanceof Error ? err.message : err}`,
+        );
+        return null;
+      }
     }),
   );
 
@@ -252,11 +285,7 @@ async function generateContainerDiagrams(
   model.system.description = folderDesc;
 
   // Write component diagram for each container
-  const outputDir = path.join(
-    folderPath,
-    config.output.docsDir,
-    "architecture",
-  );
+  const outputDir = path.join(folderPath, docsDir, "architecture");
   const generatedDir = path.join(outputDir, "_generated");
   fs.mkdirSync(generatedDir, { recursive: true });
 
@@ -266,7 +295,7 @@ async function generateContainerDiagrams(
   const componentD2 = componentParts.join("\n\n");
   const componentPath = path.join(generatedDir, "component.d2");
   writeIfChanged(componentPath, componentD2);
-  d2Files.push(componentPath);
+  d2Files.push(path.join(outputDir, "component.d2"));
 
   return d2Files;
 }
@@ -278,6 +307,7 @@ async function generateContainerDiagrams(
 async function generateCodeDiagrams(
   folderPath: string,
   config: Config,
+  docsDir: string,
 ): Promise<string[]> {
   const d2Files: string[] = [];
 
@@ -307,17 +337,13 @@ async function generateCodeDiagrams(
   const moduleName = humanizeName(path.basename(folderPath));
   const codeD2 = generateCodeDiagram(symbols, moduleName);
 
-  const outputDir = path.join(
-    folderPath,
-    config.output.docsDir,
-    "architecture",
-  );
+  const outputDir = path.join(folderPath, docsDir, "architecture");
   const generatedDir = path.join(outputDir, "_generated");
   fs.mkdirSync(generatedDir, { recursive: true });
 
   const codePath = path.join(generatedDir, "code.d2");
   writeIfChanged(codePath, codeD2);
-  d2Files.push(codePath);
+  d2Files.push(path.join(outputDir, "code.d2"));
 
   return d2Files;
 }
@@ -336,6 +362,7 @@ async function generateCodeDiagrams(
  *   formatted as "Name (role)". Passed to the LLM agent for classification context.
  * @param parentFolderPath - Absolute path to the parent folder (for scaffold breadcrumbs)
  * @param agentCache - Shared agent cache map, loaded once at the root call
+ * @param depth - Current recursion depth (0 at root)
  * @returns List of generated D2 file paths
  */
 export async function processFolder(
@@ -345,11 +372,20 @@ export async function processFolder(
   parentContext?: string,
   parentFolderPath?: string,
   agentCache?: Map<string, CacheEntry>,
+  depth = 0,
 ): Promise<string[]> {
   // Load agent cache once at the root call, reuse for all recursive calls
   const cache = agentCache ?? (config.agent.enabled ? loadAgentCache(rootPath) : undefined);
   const isRootCall = agentCache === undefined;
   const d2Files: string[] = [];
+
+  // Guard against unbounded recursion
+  if (depth > config.scan.maxDepth) {
+    console.warn(
+      `Warning: max recursion depth (${config.scan.maxDepth}) reached at ${path.relative(rootPath, folderPath) || "."}. Skipping subtree.`,
+    );
+    return d2Files;
+  }
 
   // 1. Compute relative path for override lookup
   const relPath = path.relative(rootPath, folderPath);
@@ -407,7 +443,7 @@ export async function processFolder(
 
   // 4. Skip diagram generation but still recurse into children
   if (role === "skip") {
-    const excludeDirs = getExcludeDirs(config);
+    const shouldExclude = buildExcludeMatcher(config);
     let skipEntries: fs.Dirent[];
     try {
       skipEntries = fs.readdirSync(folderPath, { withFileTypes: true });
@@ -422,7 +458,9 @@ export async function processFolder(
       return d2Files;
     }
     for (const entry of skipEntries) {
-      if (!entry.isDirectory() || excludeDirs.has(entry.name) || entry.name.startsWith(".")) continue;
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const childRelPath = path.join(relPath, entry.name);
+      if (shouldExclude(childRelPath)) continue;
       const childFiles = await processFolder(
         path.join(folderPath, entry.name),
         rootPath,
@@ -430,12 +468,16 @@ export async function processFolder(
         parentContext,
         folderPath,
         cache,
+        depth + 1,
       );
       d2Files.push(...childFiles);
     }
     if (isRootCall && cache) saveAgentCache(rootPath, cache);
     return d2Files;
   }
+
+  // Resolve effective docsDir — per-folder override takes priority
+  const effectiveDocsDir = override?.docsDir ?? config.output.docsDir;
 
   // 5. Generate diagrams based on role
   let generationSucceeded = false;
@@ -448,6 +490,7 @@ export async function processFolder(
           config,
           folderName,
           folderDesc,
+          effectiveDocsDir,
         );
         d2Files.push(...systemFiles);
         break;
@@ -458,13 +501,14 @@ export async function processFolder(
           config,
           folderName,
           folderDesc,
+          effectiveDocsDir,
         );
         d2Files.push(...containerFiles);
         break;
       }
       case "component":
       case "code-only": {
-        const codeFiles = await generateCodeDiagrams(folderPath, config);
+        const codeFiles = await generateCodeDiagrams(folderPath, config, effectiveDocsDir);
         d2Files.push(...codeFiles);
         break;
       }
@@ -479,6 +523,14 @@ export async function processFolder(
     if (code === "ENOSPC" || code === "ENOMEM" || err instanceof RangeError) {
       throw err;
     }
+    // Re-throw programming errors — they indicate bugs, not recoverable failures
+    if (
+      err instanceof TypeError ||
+      err instanceof ReferenceError ||
+      err instanceof SyntaxError
+    ) {
+      throw err;
+    }
     console.error(
       `Warning: diagram generation failed for ${relPath || "."} (${role}): ${err instanceof Error ? err.message : err}`,
     );
@@ -486,7 +538,7 @@ export async function processFolder(
 
   // 6. Scaffold user-facing D2 files only if generation succeeded
   if (generationSucceeded) {
-    const outputDir = path.join(folderPath, config.output.docsDir, "architecture");
+    const outputDir = path.join(folderPath, effectiveDocsDir, "architecture");
     scaffoldForRole(
       outputDir,
       role,
@@ -499,7 +551,7 @@ export async function processFolder(
   }
 
   // 7. Recurse into child directories
-  const excludeDirs = getExcludeDirs(config);
+  const shouldExclude = buildExcludeMatcher(config);
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(folderPath, { withFileTypes: true });
@@ -518,9 +570,9 @@ export async function processFolder(
 
   for (const entry of entries) {
     if (!entry.isDirectory()) continue;
-    if (excludeDirs.has(entry.name)) continue;
-    // Skip hidden directories
     if (entry.name.startsWith(".")) continue;
+    const childRelPath = path.join(relPath, entry.name);
+    if (shouldExclude(childRelPath)) continue;
 
     const childPath = path.join(folderPath, entry.name);
     const childFiles = await processFolder(
@@ -530,6 +582,7 @@ export async function processFolder(
       childContext,
       folderPath,
       cache,
+      depth + 1,
     );
     d2Files.push(...childFiles);
   }

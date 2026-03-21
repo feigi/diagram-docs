@@ -24,6 +24,7 @@ export const configSchema = z
             "**/dist/**",
             "**/target/**",
           ]),
+        maxDepth: z.number().int().min(1).default(25),
       })
       .default({}),
 

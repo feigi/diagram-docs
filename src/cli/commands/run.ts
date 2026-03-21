@@ -26,7 +26,10 @@ export const runCommand = new Command("run")
     try {
       const d2Files = await processFolder(rootDir, rootDir, config);
       console.error(`Done. Generated ${d2Files.length} D2 file(s).`);
-      renderD2Files(d2Files, config);
+      const result = renderD2Files(d2Files, config);
+      if (result.failed > 0) {
+        process.exitCode = 1;
+      }
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(`Error: recursive analysis failed: ${err.message}`);

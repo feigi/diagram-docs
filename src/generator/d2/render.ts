@@ -3,8 +3,8 @@ import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import type { Config } from "../../config/schema.js";
 
-export function renderD2Files(d2Files: string[], config: Config): void {
-  if (d2Files.length === 0) return;
+export function renderD2Files(d2Files: string[], config: Config): { rendered: number; skipped: number; failed: number } {
+  if (d2Files.length === 0) return { rendered: 0, skipped: 0, failed: 0 };
 
   let rendered = 0;
   let skipped = 0;
@@ -45,7 +45,7 @@ export function renderD2Files(d2Files: string[], config: Config): void {
         console.error(
           "Error: d2 CLI not found. Install it to render diagrams: https://d2lang.com/releases/install",
         );
-        return;
+        return { rendered, skipped, failed: failed + d2Files.length - rendered - skipped - failed };
       }
       const msg = err instanceof Error ? err.message : String(err);
       if (errCode === "ETIMEDOUT" || msg.includes("killed")) {
@@ -68,6 +68,7 @@ export function renderD2Files(d2Files: string[], config: Config): void {
   if (failed > 0) {
     console.error(`Failed to render ${failed} file(s). See warnings above.`);
   }
+  return { rendered, skipped, failed };
 }
 
 /**

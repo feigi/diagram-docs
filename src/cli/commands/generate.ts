@@ -122,7 +122,10 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    renderD2Files(d2Files, config);
+    const result = renderD2Files(d2Files, config);
+    if (result.failed > 0) {
+      process.exitCode = 1;
+    }
   });
 
 /**

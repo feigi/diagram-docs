@@ -59,6 +59,10 @@ export function loadAgentCache(rootDir: string): Map<string, CacheEntry> {
       }
     }
   } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EMFILE" || code === "ENFILE" || code === "ENOMEM") {
+      throw err;
+    }
     console.error(
       `Warning: agent cache at ${filePath} is corrupted, deleting and starting fresh: ${err instanceof Error ? err.message : err}`,
     );
@@ -119,7 +123,12 @@ export function parseAgentResponse(text: string): AgentClassification | null {
     const parsed = JSON.parse(cleaned) as Record<string, unknown>;
 
     const role = parsed.role as FolderRole;
-    if (!VALID_ROLES.has(role)) return null;
+    if (!VALID_ROLES.has(role)) {
+      console.error(
+        `Warning: LLM returned unrecognized role "${parsed.role}", falling back to heuristic`,
+      );
+      return null;
+    }
 
     const name = typeof parsed.name === "string" ? parsed.name : "";
     const description =
@@ -333,8 +342,10 @@ export async function agentClassify(
     confidence: 0,
   };
 
-  // Cache result
-  effectiveCache.set(cacheKey, { ...classification, signalHash: hash });
+  // Cache result — skip fallback results (confidence 0) so the LLM is retried
+  if (classification.confidence > 0) {
+    effectiveCache.set(cacheKey, { ...classification, signalHash: hash });
+  }
   if (!cache) {
     saveAgentCache(rootDir, effectiveCache);
   }

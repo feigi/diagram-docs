@@ -46,7 +46,12 @@ export function loadConfig(configPath?: string): {
 function migrateConfig(raw: Record<string, unknown>): void {
   const output = raw.output as Record<string, unknown> | undefined;
   if (output && "dir" in output && !("docsDir" in output)) {
-    if (typeof output.dir !== "string") return;
+    if (typeof output.dir !== "string") {
+      console.error(
+        `Warning: config field "output.dir" has unexpected type ${typeof output.dir}, ignoring.`,
+      );
+      return;
+    }
     const dir = output.dir;
     // Old default was "docs/architecture"; new schema splits into
     // docsDir ("docs") + hard-coded "/architecture" suffix.
