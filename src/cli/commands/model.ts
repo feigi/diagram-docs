@@ -74,8 +74,8 @@ export const modelCommand = new Command("model")
               { text: `Model: ${config.llm.model}` },
             ]);
           },
-          onProgress(line) {
-            frame.log(line);
+          onProgress({ line, final: done }) {
+            frame.log(line, done);
           },
         });
         frame.stop([

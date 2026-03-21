@@ -119,16 +119,25 @@ function spawnWithStdin(
  * Spawn a process using stream-json output format.
  * Parses streaming JSON events from stdout to extract text and report progress.
  */
+export interface ProgressEvent {
+  line: string;
+  /** true when this line is complete (a newline was seen); false while still being built */
+  final: boolean;
+}
+
 function spawnStreamJson(
   cmd: string,
   args: string[],
   stdinData: string,
   timeoutMs: number,
-  onProgress?: (line: string) => void,
+  onProgress?: (event: ProgressEvent) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
     let resultText = "";
+    let thinkingText = "";
+    let lastTextLineCount = 1;
+    let lastThinkLineCount = 1;
     let stdoutBuf = "";
     const errChunks: Buffer[] = [];
     let timedOut = false;
@@ -151,17 +160,35 @@ function spawnStreamJson(
           if (delta?.type === "text_delta" && delta.text) {
             resultText += delta.text;
             if (onProgress) {
-              const lastLine = resultText.trimEnd().split("\n").pop()?.trim();
-              if (lastLine) onProgress(lastLine);
+              const lines = resultText.trimEnd().split("\n");
+              const lastLine = lines[lines.length - 1]?.trim();
+              // New line started → push previous as finished
+              if (lines.length > lastTextLineCount) {
+                const prev = lines[lines.length - 2]?.trim();
+                if (prev) onProgress({ line: prev, final: true });
+                lastTextLineCount = lines.length;
+              }
+              if (lastLine) onProgress({ line: lastLine, final: false });
             }
           }
-          // Thinking delta — show reasoning in frame
-          if (delta?.type === "thinking_delta" && delta.thinking && onProgress) {
-            const thought = delta.thinking.trim();
-            if (thought) onProgress(thought);
+          // Thinking delta — accumulate and show last line
+          if (delta?.type === "thinking_delta" && delta.thinking) {
+            thinkingText += delta.thinking;
+            if (onProgress) {
+              const lines = thinkingText.trimEnd().split("\n");
+              const lastLine = lines[lines.length - 1]?.trim();
+              if (lines.length > lastThinkLineCount) {
+                const prev = lines[lines.length - 2]?.trim();
+                if (prev) onProgress({ line: prev, final: true });
+                lastThinkLineCount = lines.length;
+              }
+              if (lastLine) onProgress({ line: lastLine, final: false });
+            }
           }
-          // Result event — final text (fallback)
-          if (event.type === "result" && typeof event.result === "string") {
+          // Result event — use as fallback only if no deltas were accumulated.
+          // The result field may be truncated for large outputs, while the
+          // accumulated text_delta stream is the ground truth.
+          if (event.type === "result" && typeof event.result === "string" && !resultText) {
             resultText = event.result;
           }
         } catch { /* skip unparseable lines */ }
@@ -210,7 +237,7 @@ interface LLMProvider {
     systemPrompt: string,
     userMessage: string,
     model: string,
-    onProgress?: (line: string) => void,
+    onProgress?: (event: ProgressEvent) => void,
   ): Promise<string>;
 }
 
@@ -269,10 +296,10 @@ const copilotProvider: LLMProvider = {
     }
   },
 
-  async generate(systemPrompt, userMessage, _model, onProgress) {
-    // Copilot CLI doesn't support --system-prompt, so combine into one prompt via stdin
+  async generate(systemPrompt, userMessage, _model, _onProgress) {
+    // Copilot CLI doesn't support --system-prompt or streaming, so combine into one prompt via stdin
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
-    return spawnWithStdin("gh", ["copilot", "-p", combinedPrompt], "", 600_000, onProgress);
+    return spawnWithStdin("gh", ["copilot", "-p", combinedPrompt], "", 600_000);
   },
 };
 
@@ -442,7 +469,7 @@ export interface BuildModelWithLLMOptions {
   configYaml?: string;
   existingModelYaml?: string;
   onStatus?: (status: string, providerName: string) => void;
-  onProgress?: (line: string) => void;
+  onProgress?: (event: ProgressEvent) => void;
 }
 
 export async function buildModelWithLLM(
@@ -499,12 +526,21 @@ export async function buildModelWithLLM(
     options.onProgress,
   );
 
-  // 4. Strip markdown fences if present
+  // 4. Clean up output: strip markdown fences and preamble text
   emit("Validating output...");
   rawOutput = rawOutput
     .trim()
     .replace(/^```ya?ml\s*\n?/i, "")
     .replace(/\n?```\s*$/i, "");
+
+  // If the output doesn't start with valid YAML, try to find where it begins.
+  // The LLM sometimes produces explanatory text before the YAML.
+  if (!rawOutput.startsWith("version:") && !rawOutput.startsWith("---")) {
+    const yamlStart = rawOutput.indexOf("\nversion:");
+    if (yamlStart !== -1) {
+      rawOutput = rawOutput.slice(yamlStart + 1);
+    }
+  }
 
   // 5. Parse and validate
   let parsed: unknown;
