@@ -8,7 +8,7 @@ import chalk from "chalk";
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_INTERVAL = 80;
 const MIN_LOG_LINES = 3;
-const FRAME_OVERHEAD = 5; // top + 2 status rows + separator + bottom
+const FRAME_OVERHEAD = 4; // top + 2 status rows + bottom
 
 function getFrameWidth(): number {
   if (process.stderr.isTTY && process.stderr.columns) {
@@ -212,7 +212,7 @@ export function createFrame(title: string): Frame {
     while (visibleLogRows.length < visibleRowCount) {
       visibleLogRows.unshift(emptyRow());
     }
-    const totalRows = 1 + STATUS_ROWS + 1 + visibleRowCount + 1; // top + status + blank + logs + bottom
+    const totalRows = 1 + STATUS_ROWS + visibleRowCount + 1; // top + status + logs + bottom
 
     // Build status rows
     const rows: string[] = [];
@@ -231,9 +231,6 @@ export function createFrame(title: string): Frame {
         rows.push(row(`  ${truncate(safeText, inner - 6)}`));
       }
     }
-
-    // Blank separator
-    rows.push(emptyRow());
 
     // Log rows
     rows.push(...visibleLogRows);
