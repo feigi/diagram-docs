@@ -2,7 +2,11 @@
  * Wrap text at word boundaries, inserting D2 newline escapes.
  * Keeps each line under `maxWidth` characters.
  */
-export function wrapText(text: string, maxWidth = 35): string {
+export function wrapText(
+  text: string,
+  maxWidth = 50,
+  maxLines = 2,
+): string {
   const words = text.split(/\s+/);
   const lines: string[] = [];
   let current = "";
@@ -15,6 +19,17 @@ export function wrapText(text: string, maxWidth = 35): string {
     }
   }
   if (current) lines.push(current);
+
+  if (lines.length > maxLines) {
+    const truncated = lines.slice(0, maxLines);
+    const last = truncated[maxLines - 1];
+    truncated[maxLines - 1] =
+      last.length > maxWidth - 3
+        ? last.slice(0, maxWidth - 3) + "..."
+        : last + "...";
+    return truncated.join("\\n");
+  }
+
   return lines.join("\\n");
 }
 
