@@ -1,0 +1,3 @@
+rootProject.name = 'my-db'
+include('my-db-model')
+project(':my-db-model').projectDir = file('model')
