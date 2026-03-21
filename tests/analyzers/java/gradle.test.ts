@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as path from "node:path";
-import { parseSettingsGradle } from "../../../src/analyzers/java/gradle.js";
+import { parseSettingsGradle, parseGradleDependencies } from "../../../src/analyzers/java/gradle.js";
 
 const FIXTURES = path.resolve(__dirname, "../../fixtures/gradle-multimodule");
 
@@ -29,5 +29,42 @@ describe("parseSettingsGradle", () => {
   it("returns null when no settings file exists", () => {
     const result = parseSettingsGradle("/tmp/nonexistent-dir");
     expect(result).toBeNull();
+  });
+});
+
+describe("parseGradleDependencies", () => {
+  it("extracts group, project deps, and maven deps", () => {
+    const buildFile = path.join(FIXTURES, "app", "build.gradle");
+    const result = parseGradleDependencies(buildFile);
+
+    expect(result.group).toBe("com.example.myapp");
+    expect(result.projectDeps).toEqual(["lib"]);
+    expect(result.mavenDeps).toContainEqual({
+      group: "org.springframework.boot",
+      artifact: "spring-boot-starter-web",
+    });
+    expect(result.mavenDeps).toContainEqual({
+      group: "com.bmw.losnext",
+      artifact: "los-chargingdb-model",
+      version: "4.1.4",
+    });
+  });
+
+  it("returns empty results for shell build files", () => {
+    const buildFile = path.join(FIXTURES, "build.gradle");
+    const result = parseGradleDependencies(buildFile);
+
+    expect(result.group).toBeNull();
+    expect(result.projectDeps).toEqual([]);
+    expect(result.mavenDeps).toEqual([]);
+  });
+
+  it("excludes test dependencies", () => {
+    const buildFile = path.join(FIXTURES, "app", "build.gradle");
+    const result = parseGradleDependencies(buildFile);
+
+    expect(
+      result.mavenDeps.some((d) => d.artifact === "spring-boot-starter-test"),
+    ).toBe(false);
   });
 });

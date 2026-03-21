@@ -1,0 +1,13 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '3.5.7'
+}
+
+group = 'com.example.myapp'
+
+dependencies {
+    implementation project(':lib')
+    implementation 'org.springframework.boot:spring-boot-starter-web'
+    implementation 'com.bmw.losnext:los-chargingdb-model:4.1.4'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test'
+}

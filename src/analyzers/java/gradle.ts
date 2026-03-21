@@ -71,6 +71,63 @@ function addSubproject(
   subprojects.push({ name: clean, dir: clean });
 }
 
+export interface GradleDependencies {
+  group: string | null;
+  projectDeps: string[];
+  mavenDeps: Array<{ group: string; artifact: string; version?: string }>;
+}
+
+export function parseGradleDependencies(buildFilePath: string): GradleDependencies {
+  if (!fs.existsSync(buildFilePath)) {
+    return { group: null, projectDeps: [], mavenDeps: [] };
+  }
+
+  const content = fs.readFileSync(buildFilePath, "utf-8");
+
+  // Extract group
+  const groupMatch = content.match(/^group\s*=\s*['"]([^'"]+)['"]/m);
+  const group = groupMatch?.[1] ?? null;
+
+  const projectDeps: string[] = [];
+  const mavenDeps: GradleDependencies["mavenDeps"] = [];
+
+  // Match dependency lines: implementation/api/compileOnly project(':name')
+  // Word-boundary prefix prevents matching testImplementation as implementation
+  const implConfigs = "(?:^|\\s)(?:implementation|api|compileOnly|runtimeOnly)";
+  const testConfigs = "(?:testImplementation|testCompileOnly|testRuntimeOnly|testAnnotationProcessor)";
+
+  for (const match of content.matchAll(
+    new RegExp(`${implConfigs}\\s+project\\s*\\(\\s*['\"][:.]?([^'\"]+)['\"]\\s*\\)`, "gm"),
+  )) {
+    projectDeps.push(match[1].replace(/^:/, ""));
+  }
+
+  // Match Maven coordinate deps: implementation 'group:artifact:version'
+  // and implementation 'group:artifact' (version managed by BOM)
+  for (const match of content.matchAll(
+    new RegExp(`${implConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "gm"),
+  )) {
+    mavenDeps.push({
+      group: match[1],
+      artifact: match[2],
+      version: match[3] || undefined,
+    });
+  }
+
+  // Exclude deps from test configurations — scan for those and remove matches
+  const testDeps = new Set<string>();
+  for (const match of content.matchAll(
+    new RegExp(`${testConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "g"),
+  )) {
+    testDeps.add(`${match[1]}:${match[2]}`);
+  }
+  const filteredMaven = mavenDeps.filter(
+    (d) => !testDeps.has(`${d.group}:${d.artifact}`),
+  );
+
+  return { group, projectDeps, mavenDeps: filteredMaven };
+}
+
 export function findFile(dir: string, names: string[]): string | null {
   for (const name of names) {
     const p = path.join(dir, name);
