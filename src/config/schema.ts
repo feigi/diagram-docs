@@ -52,6 +52,17 @@ export const configSchema = z.object({
     })
     .default({}),
 
+  externalSystems: z
+    .array(
+      z.object({
+        name: z.string(),
+        technology: z.string().optional(),
+        /** Which container IDs use this system (creates relationships) */
+        usedBy: z.array(z.string()).optional(),
+      }),
+    )
+    .default([]),
+
   submodules: z
     .object({
       enabled: z.boolean().default(true),

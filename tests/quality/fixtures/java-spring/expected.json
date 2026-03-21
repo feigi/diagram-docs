@@ -39,10 +39,10 @@
   ],
   "metadata": {
     "com.example.user": {
-      "spring.stereotypes": "@RestController"
+      "annotations": "RestController"
     },
     "com.example.repo": {
-      "spring.stereotypes": "@Repository"
+      "annotations": "Repository"
     }
   }
 }

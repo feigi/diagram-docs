@@ -12,31 +12,6 @@ import type { Config } from "../config/schema.js";
 import { slugify } from "./slugify.js";
 import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
 
-/** Well-known infrastructure dependencies promoted to external systems. */
-const KNOWN_EXTERNAL_SYSTEMS: Record<
-  string,
-  { name: string; technology: string }
-> = {
-  postgresql: { name: "PostgreSQL", technology: "Database" },
-  postgres: { name: "PostgreSQL", technology: "Database" },
-  pg: { name: "PostgreSQL", technology: "Database" },
-  mysql: { name: "MySQL", technology: "Database" },
-  mariadb: { name: "MariaDB", technology: "Database" },
-  mongodb: { name: "MongoDB", technology: "Database" },
-  redis: { name: "Redis", technology: "Cache" },
-  kafka: { name: "Kafka", technology: "Message Broker" },
-  rabbitmq: { name: "RabbitMQ", technology: "Message Broker" },
-  elasticsearch: { name: "Elasticsearch", technology: "Search Engine" },
-  "spring-boot-starter-data-jpa": {
-    name: "PostgreSQL",
-    technology: "Database",
-  },
-  sqlite: { name: "SQLite", technology: "Database" },
-  dynamodb: { name: "DynamoDB", technology: "Database" },
-  "aws-sdk": { name: "AWS", technology: "Cloud Platform" },
-  s3: { name: "AWS S3", technology: "Object Storage" },
-};
-
 export interface BuildModelOptions {
   config: Config;
   rawStructure: RawStructure;
@@ -50,16 +25,17 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
   // Skip shell parent apps: apps with 0 modules whose path is a prefix of another app's path.
   // These are build-system root projects (e.g., Gradle multi-module roots) that contain
   // no code of their own — their subprojects are scanned as separate apps.
-  const appPaths = new Set(apps.map((a) => a.path));
+  const isChildPath = (parent: string, child: string): boolean => {
+    if (parent === ".") return child !== ".";
+    return child.startsWith(parent + "/");
+  };
   const shellParents = new Set(
     apps
       .filter(
         (app) =>
           app.modules.length === 0 &&
           apps.some(
-            (other) =>
-              other.path !== app.path &&
-              other.path.startsWith(app.path + "/"),
+            (other) => other.path !== app.path && isChildPath(app.path, other.path),
           ),
       )
       .map((a) => a.id),
@@ -101,6 +77,21 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
           ]
         : [];
     }
+
+    if (granularity === "balanced") {
+      // Group modules into components, preserving all module IDs for relationships
+      const groups = groupModulesBalanced(modules);
+      return groups.map((group) => ({
+        id: group.representative.id,
+        containerId: app.id,
+        name: group.displayName,
+        description: `${group.displayName} module`,
+        technology: inferComponentTechnology(group.representative, app.language),
+        moduleIds: group.moduleIds,
+      }));
+    }
+
+    // Detailed mode: 1:1 module-to-component
     // Detect duplicate last-segments to disambiguate names
     const segmentCount = new Map<string, number>();
     for (const mod of modules) {
@@ -127,11 +118,11 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
     });
   });
 
-  // External systems: promoted from known dependencies
-  const externalSystems = buildExternalSystems(apps);
+  // External systems: declared in config
+  const externalSystems = buildExternalSystems(config.externalSystems);
 
   // Relationships
-  const relationships = buildRelationships(apps, components, externalSystems);
+  const relationships = buildRelationships(apps, components, externalSystems, config.externalSystems);
 
   return {
     version: 1,
@@ -156,58 +147,107 @@ function filterModules(
 
   if (granularity === "overview") return modules; // We'll collapse in the caller
 
-  // "balanced" — filter by excludePatterns, then collapse to keep diagrams readable
-  const MAX_COMPONENTS = 20;
-
-  let filtered = modules.filter(
+  // "balanced" — filter by excludePatterns only; grouping handled by groupModulesBalanced
+  return modules.filter(
     (m) =>
       !excludePatterns.some((pat) => m.name.toLowerCase().includes(pat)),
   );
+}
 
-  if (filtered.length <= MAX_COMPONENTS) return filtered;
+interface ModuleGroup {
+  representative: ScannedModule;
+  moduleIds: string[];
+  displayName: string;
+}
 
-  // Group by parent path and collapse large sibling groups
-  const groups = new Map<string, ScannedModule[]>();
-  for (const mod of filtered) {
-    const parent = mod.name.includes(".")
-      ? mod.name.split(".").slice(0, -1).join(".")
-      : mod.name.includes("/")
-        ? mod.name.split("/").slice(0, -1).join("/")
-        : "";
-    const existing = groups.get(parent) ?? [];
-    existing.push(mod);
-    groups.set(parent, existing);
+const MAX_COMPONENTS = 20;
+
+/**
+ * Group modules into ≤ MAX_COMPONENTS groups for balanced component diagrams.
+ * Uses common-prefix-aware grouping so deeply-nested Java packages
+ * (e.g., com.bmw.los.next.charging.*) produce meaningful groups
+ * instead of collapsing to a single component.
+ */
+function groupModulesBalanced(modules: ScannedModule[]): ModuleGroup[] {
+  if (modules.length === 0) return [];
+
+  if (modules.length <= MAX_COMPONENTS) {
+    return modules.map((m) => {
+      const seg = lastSegment(m.name);
+      return {
+        representative: m,
+        moduleIds: [m.id],
+        displayName: humanizeName(seg),
+      };
+    });
   }
 
-  // Keep one representative per group when there are too many
-  filtered = [];
-  for (const [, mods] of groups) {
-    if (mods.length > 3) {
-      filtered.push(mods[0]); // representative
+  const getNameParts = (name: string): string[] =>
+    name.includes(".") ? name.split(".") : name.split("/");
+
+  const allParts = modules.map((m) => getNameParts(m.name));
+  const prefixLen = commonPrefixLength(allParts);
+  const maxDepth = Math.max(...allParts.map((p) => p.length));
+
+  // Find the deepest grouping depth that produces ≤ MAX_COMPONENTS groups
+  let bestDepth = prefixLen + 1;
+  for (let depth = prefixLen + 1; depth <= maxDepth; depth++) {
+    const keys = new Set<string>();
+    for (const mod of modules) {
+      const parts = getNameParts(mod.name);
+      keys.add(parts.slice(0, Math.min(parts.length, depth)).join("."));
+    }
+    if (keys.size <= MAX_COMPONENTS) {
+      bestDepth = depth;
     } else {
-      filtered.push(...mods);
+      break;
     }
   }
 
-  // If still too many, take top-level groups only (group at a higher level)
-  if (filtered.length > MAX_COMPONENTS) {
-    const topGroups = new Map<string, ScannedModule[]>();
-    for (const mod of filtered) {
-      const parts = mod.name.includes(".")
-        ? mod.name.split(".")
-        : mod.name.split("/");
-      const topKey = parts.slice(0, Math.min(parts.length - 1, 3)).join(".");
-      const existing = topGroups.get(topKey) ?? [];
-      existing.push(mod);
-      topGroups.set(topKey, existing);
-    }
-    filtered = [];
-    for (const [, mods] of topGroups) {
-      filtered.push(mods[0]);
-    }
+  // Build groups at the chosen depth
+  const grouped = new Map<string, ScannedModule[]>();
+  for (const mod of modules) {
+    const parts = getNameParts(mod.name);
+    const key = parts.slice(0, Math.min(parts.length, bestDepth)).join(".");
+    const existing = grouped.get(key) ?? [];
+    existing.push(mod);
+    grouped.set(key, existing);
   }
 
-  return filtered;
+  // Detect duplicate group display names for disambiguation
+  const groupEntries = [...grouped.entries()];
+  const nameCount = new Map<string, number>();
+  for (const [key] of groupEntries) {
+    const seg = lastSegment(key);
+    nameCount.set(seg, (nameCount.get(seg) ?? 0) + 1);
+  }
+
+  return groupEntries.map(([key, mods]) => {
+    const seg = lastSegment(key);
+    const needsDisambiguation = (nameCount.get(seg) ?? 0) > 1;
+    const displayName = needsDisambiguation
+      ? disambiguatedName(key)
+      : humanizeName(seg);
+    return {
+      representative: mods[0],
+      moduleIds: mods.map((m) => m.id),
+      displayName,
+    };
+  });
+}
+
+/** Find the number of leading segments shared by all part arrays. */
+function commonPrefixLength(partArrays: string[][]): number {
+  if (partArrays.length === 0) return 0;
+  const first = partArrays[0];
+  let len = 0;
+  for (let i = 0; i < first.length; i++) {
+    for (const parts of partArrays) {
+      if (i >= parts.length || parts[i] !== first[i]) return len;
+    }
+    len++;
+  }
+  return len;
 }
 
 /**
@@ -230,16 +270,15 @@ function inferComponentTechnology(
   language: string,
 ): string {
   const meta = mod.metadata;
-  // Spring stereotypes
-  if (meta["spring.stereotype"]) {
-    const stereo = meta["spring.stereotype"];
-    if (stereo === "Controller" || stereo === "RestController")
-      return "Spring MVC";
-    if (stereo === "Service") return "Spring Service";
-    if (stereo === "Repository") return "Spring Data JPA";
-    if (stereo === "Component") return "Spring Component";
-    if (stereo === "Configuration") return "Spring Configuration";
-    if (stereo === "Entity") return "JPA Entity";
+  // Check annotations for framework stereotypes
+  const annotations = meta["annotations"]?.split(",") ?? [];
+  for (const ann of annotations) {
+    if (ann === "Controller" || ann === "RestController") return "Spring MVC";
+    if (ann === "Service") return "Spring Service";
+    if (ann === "Repository") return "Spring Data JPA";
+    if (ann === "Component") return "Spring Component";
+    if (ann === "Configuration") return "Spring Configuration";
+    if (ann === "Entity") return "JPA Entity";
   }
 
   // Framework annotations from metadata
@@ -249,40 +288,23 @@ function inferComponentTechnology(
 }
 
 function buildExternalSystems(
-  apps: ScannedApplication[],
+  configEntries: Config["externalSystems"],
 ): ArchitectureModel["externalSystems"] {
-  const seen = new Map<string, { name: string; technology: string }>();
-
-  for (const app of apps) {
-    for (const dep of app.externalDependencies) {
-      const depLower = dep.name.toLowerCase();
-      // Check each known system pattern
-      for (const [pattern, info] of Object.entries(KNOWN_EXTERNAL_SYSTEMS)) {
-        if (depLower.includes(pattern)) {
-          // Deduplicate by name (e.g., postgresql and pg both → PostgreSQL)
-          if (!seen.has(info.name)) {
-            seen.set(info.name, info);
-          }
-          break;
-        }
-      }
-    }
-  }
-
-  return [...seen.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, info]) => ({
-      id: slugify(info.name),
-      name: info.name,
-      description: `External ${info.technology.toLowerCase()}`,
-      technology: info.technology,
-    }));
+  return configEntries
+    .map((entry) => ({
+      id: slugify(entry.name),
+      name: entry.name,
+      description: `External ${(entry.technology ?? "system").toLowerCase()}`,
+      technology: entry.technology ?? "External System",
+    }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function buildRelationships(
   apps: ScannedApplication[],
   components: ArchitectureModel["components"],
   externalSystems: ArchitectureModel["externalSystems"],
+  configEntries: Config["externalSystems"],
 ): ArchitectureModel["relationships"] {
   const relationships: ArchitectureModel["relationships"] = [];
   const seen = new Set<string>();
@@ -377,26 +399,23 @@ function buildRelationships(
       }
     }
 
-    // External dependency → container-to-external-system relationships
-    for (const dep of app.externalDependencies) {
-      const depLower = dep.name.toLowerCase();
-      for (const [pattern, info] of Object.entries(KNOWN_EXTERNAL_SYSTEMS)) {
-        if (depLower.includes(pattern)) {
-          const extId = slugify(info.name);
-          if (extIds.has(extId)) {
-            const key = `${app.id}->${extId}`;
-            if (!seen.has(key)) {
-              seen.add(key);
-              relationships.push({
-                sourceId: app.id,
-                targetId: extId,
-                label: `Uses ${info.name}`,
-                technology: info.technology,
-              });
-            }
-          }
-          break;
-        }
+  }
+
+  // Config-driven external system relationships (from usedBy)
+  for (const entry of configEntries) {
+    if (!entry.usedBy) continue;
+    const extId = slugify(entry.name);
+    if (!extIds.has(extId)) continue;
+    for (const containerId of entry.usedBy) {
+      const key = `${containerId}->${extId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        relationships.push({
+          sourceId: containerId,
+          targetId: extId,
+          label: `Uses ${entry.name}`,
+          technology: entry.technology,
+        });
       }
     }
   }

@@ -74,7 +74,7 @@ describe("buildModel", () => {
             files: ["UserController.java"],
             exports: ["UserController"],
             imports: [],
-            metadata: { "spring.stereotype": "Controller" },
+            metadata: { annotations: "Controller" },
           },
           {
             id: "services-user-api-com-example-repo",
@@ -83,7 +83,7 @@ describe("buildModel", () => {
             files: ["UserRepository.java"],
             exports: ["UserRepository"],
             imports: [],
-            metadata: { "spring.stereotype": "Repository" },
+            metadata: { annotations: "Repository" },
           },
         ],
         externalDependencies: [],
@@ -195,8 +195,132 @@ describe("buildModel", () => {
     expect(model.components[0].name).toBe("Api");
   });
 
-  it("promotes known external dependencies to external systems", () => {
-    const config = makeConfig();
+  it("groups deeply-nested Java packages into multiple components in balanced mode", () => {
+    const config = makeConfig({
+      abstraction: {
+        granularity: "balanced",
+        excludePatterns: [],
+      },
+    });
+
+    // Simulate a Java app with 25+ modules sharing a deep common prefix
+    const prefix = "com.example.app";
+    const packages = [
+      "api", "api.controller", "api.mapper", "api.model", "api.filter",
+      "api.config", "api.validator", "api.serializer",
+      "domain", "domain.model", "domain.service", "domain.exceptions",
+      "domain.events", "domain.context",
+      "infrastructure", "infrastructure.db", "infrastructure.db.mapper",
+      "infrastructure.db.model", "infrastructure.cache",
+      "infrastructure.search", "infrastructure.search.mapper",
+      "infrastructure.search.model",
+      "config", "metrics", "utils",
+    ];
+
+    const modules = packages.map((pkg) => ({
+      id: `app-${pkg.replace(/\./g, "-")}`,
+      path: `src/main/java/${prefix.replace(/\./g, "/")}/${pkg.replace(/\./g, "/")}`,
+      name: `${prefix}.${pkg}`,
+      files: ["Foo.java"],
+      exports: ["Foo"],
+      imports: [],
+      metadata: {},
+    }));
+
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "build.gradle",
+        modules,
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    // Should produce multiple components, not collapse to 1
+    expect(model.components.length).toBeGreaterThan(1);
+    expect(model.components.length).toBeLessThanOrEqual(20);
+
+    // Each component should carry all grouped module IDs
+    const totalModuleIds = model.components.flatMap((c) => c.moduleIds);
+    expect(totalModuleIds).toHaveLength(modules.length);
+  });
+
+  it("groups modules from sibling top-level packages correctly", () => {
+    const config = makeConfig({
+      abstraction: {
+        granularity: "balanced",
+        excludePatterns: [],
+      },
+    });
+
+    // Three sibling packages: charging, chargingcn, chargingrow
+    const modules = [
+      "com.bmw.los.next.charging.api",
+      "com.bmw.los.next.charging.api.controller",
+      "com.bmw.los.next.charging.api.mapper",
+      "com.bmw.los.next.charging.domain",
+      "com.bmw.los.next.charging.domain.model",
+      "com.bmw.los.next.charging.domain.service",
+      "com.bmw.los.next.charging.infrastructure",
+      "com.bmw.los.next.charging.infrastructure.db",
+      "com.bmw.los.next.charging.infrastructure.search",
+      "com.bmw.los.next.chargingcn.api",
+      "com.bmw.los.next.chargingcn.domain",
+      "com.bmw.los.next.chargingcn.infrastructure",
+      "com.bmw.los.next.chargingrow.api",
+      "com.bmw.los.next.chargingrow.domain",
+      "com.bmw.los.next.chargingrow.infrastructure",
+      "com.bmw.los.next.charging.api.filter",
+      "com.bmw.los.next.charging.api.model",
+      "com.bmw.los.next.charging.domain.exceptions",
+      "com.bmw.los.next.charging.domain.context",
+      "com.bmw.los.next.charging.infrastructure.cache",
+      "com.bmw.los.next.charging.infrastructure.search.mapper",
+    ].map((name) => ({
+      id: `app-${name.replace(/\./g, "-")}`,
+      path: `src/main/java/${name.replace(/\./g, "/")}`,
+      name,
+      files: ["Foo.java"],
+      exports: ["Foo"],
+      imports: [],
+      metadata: {},
+    }));
+
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "build.gradle",
+        modules,
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    // Should have separate groups for charging/chargingcn/chargingrow subpackages
+    expect(model.components.length).toBeGreaterThan(3);
+    expect(model.components.length).toBeLessThanOrEqual(20);
+
+    // Verify all module IDs are accounted for
+    const totalModuleIds = model.components.flatMap((c) => c.moduleIds);
+    expect(totalModuleIds).toHaveLength(modules.length);
+  });
+
+  it("creates external systems from config", () => {
+    const config = makeConfig({
+      externalSystems: [
+        { name: "Redis", technology: "Cache" },
+        { name: "OpenSearch", technology: "Search Engine" },
+      ],
+    });
     const raw = makeRawStructure([
       {
         id: "app",
@@ -205,21 +329,23 @@ describe("buildModel", () => {
         language: "python",
         buildFile: "pyproject.toml",
         modules: [],
-        externalDependencies: [
-          { name: "psycopg2" },
-          { name: "redis" },
-        ],
+        externalDependencies: [{ name: "redis" }],
         internalImports: [],
       },
     ]);
     const model = buildModel({ config, rawStructure: raw });
 
-    // psycopg2 doesn't match, but redis does
+    expect(model.externalSystems).toHaveLength(2);
     expect(model.externalSystems.some((e) => e.name === "Redis")).toBe(true);
+    expect(model.externalSystems.some((e) => e.name === "OpenSearch")).toBe(true);
   });
 
-  it("deduplicates external systems across apps", () => {
-    const config = makeConfig();
+  it("creates relationships from config usedBy", () => {
+    const config = makeConfig({
+      externalSystems: [
+        { name: "PostgreSQL", technology: "Database", usedBy: ["app-a", "app-b"] },
+      ],
+    });
     const raw = makeRawStructure([
       {
         id: "app-a",
@@ -228,7 +354,7 @@ describe("buildModel", () => {
         language: "java",
         buildFile: "pom.xml",
         modules: [],
-        externalDependencies: [{ name: "postgresql" }],
+        externalDependencies: [],
         internalImports: [],
       },
       {
@@ -238,16 +364,38 @@ describe("buildModel", () => {
         language: "python",
         buildFile: "pyproject.toml",
         modules: [],
-        externalDependencies: [{ name: "postgres" }],
+        externalDependencies: [],
         internalImports: [],
       },
     ]);
     const model = buildModel({ config, rawStructure: raw });
 
-    const pgSystems = model.externalSystems.filter((e) =>
-      e.name === "PostgreSQL",
-    );
-    expect(pgSystems).toHaveLength(1);
+    expect(model.externalSystems).toHaveLength(1);
+    expect(model.externalSystems[0].name).toBe("PostgreSQL");
+    // Both apps should have relationships to PostgreSQL
+    const pgRels = model.relationships.filter((r) => r.targetId === "postgresql");
+    expect(pgRels).toHaveLength(2);
+    expect(pgRels.map((r) => r.sourceId).sort()).toEqual(["app-a", "app-b"]);
+  });
+
+  it("produces no external systems without config", () => {
+    const config = makeConfig();
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [],
+        externalDependencies: [{ name: "org.postgresql:postgresql" }],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    // Without config, no external systems are created (deterministic path is config-only)
+    expect(model.externalSystems).toHaveLength(0);
   });
 
   it("creates cross-app relationships from internalImports", () => {
@@ -386,8 +534,51 @@ describe("buildModel", () => {
     expect(controllerToRepo).toHaveLength(1);
   });
 
-  it("is deterministic across runs", () => {
+  it("excludes root shell parent at '.' with child apps", () => {
     const config = makeConfig();
+    const raw = makeRawStructure([
+      {
+        id: "",
+        path: ".",
+        name: "los-cha",
+        language: "java",
+        buildFile: "build.gradle",
+        modules: [],
+        externalDependencies: [],
+        internalImports: [],
+      },
+      {
+        id: "services-api",
+        path: "services/api",
+        name: "api",
+        language: "java",
+        buildFile: "build.gradle",
+        modules: [
+          {
+            id: "services-api-com-example",
+            path: "src/main/java/com/example",
+            name: "com.example",
+            files: ["Main.java"],
+            exports: ["Main"],
+            imports: [],
+            metadata: {},
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    // Root shell parent should be excluded — only the child container remains
+    expect(model.containers).toHaveLength(1);
+    expect(model.containers[0].id).toBe("services-api");
+  });
+
+  it("is deterministic across runs", () => {
+    const config = makeConfig({
+      externalSystems: [{ name: "Redis", technology: "Cache", usedBy: ["app-a"] }],
+    });
     const raw = makeRawStructure([
       {
         id: "app-a",

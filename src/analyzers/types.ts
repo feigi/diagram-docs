@@ -19,6 +19,8 @@ export interface ScannedApplication {
   externalDependencies: ExternalDep[];
   internalImports: InternalImport[];
   publishedAs?: string;
+  /** Config/resource files included for LLM-based architecture analysis */
+  configFiles?: Array<{ path: string; content: string }>;
 }
 
 export interface ScannedModule {

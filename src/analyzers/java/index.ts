@@ -11,8 +11,9 @@ import type {
 } from "../types.js";
 import { slugify } from "../../core/slugify.js";
 import { parseJavaImports } from "./imports.js";
-import { extractPackages, detectSpringAnnotations } from "./packages.js";
+import { extractPackages, detectClassAnnotations } from "./packages.js";
 import { parseSettingsGradle, parseGradleDependencies, findFile } from "./gradle.js";
+import { collectConfigFiles } from "../config-files.js";
 
 function parsePomDependencies(pomPath: string): ExternalDep[] {
   if (!fs.existsSync(pomPath)) return [];
@@ -81,12 +82,12 @@ export const javaAnalyzer: LanguageAnalyzer = {
           });
         }
 
-        const annotations = detectSpringAnnotations(fullPath);
+        const annotations = detectClassAnnotations(fullPath);
         allAnnotations.push(...annotations);
       }
 
       if (allAnnotations.length > 0) {
-        metadata["spring.stereotypes"] = [...new Set(allAnnotations)].join(",");
+        metadata["annotations"] = [...new Set(allAnnotations)].join(",");
       }
 
       modules.push({
@@ -170,6 +171,15 @@ export const javaAnalyzer: LanguageAnalyzer = {
       buildFile = "build.gradle";
     }
 
+    // Collect config/resource files for LLM-based architecture analysis
+    const resourceDirs = [
+      path.join(appPath, "src", "main", "resources"),
+      path.join(appPath, "src", "main", "webapp", "WEB-INF"),
+    ];
+    const configFiles = resourceDirs.flatMap((dir) =>
+      collectConfigFiles(dir, appPath),
+    );
+
     return {
       id: appId,
       path: appPath,
@@ -180,6 +190,7 @@ export const javaAnalyzer: LanguageAnalyzer = {
       externalDependencies,
       internalImports,
       publishedAs,
+      configFiles: configFiles.length > 0 ? configFiles : undefined,
     };
   },
 };

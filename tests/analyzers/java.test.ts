@@ -41,14 +41,14 @@ describe("Java Analyzer", () => {
       m.name.includes("user"),
     );
     expect(controllerModule).toBeTruthy();
-    expect(controllerModule!.metadata["spring.stereotypes"]).toContain(
-      "@RestController",
+    expect(controllerModule!.metadata["annotations"]).toContain(
+      "RestController",
     );
 
     const repoModule = result.modules.find((m) => m.name.includes("repo"));
     expect(repoModule).toBeTruthy();
-    expect(repoModule!.metadata["spring.stereotypes"]).toContain(
-      "@Repository",
+    expect(repoModule!.metadata["annotations"]).toContain(
+      "Repository",
     );
   });
 });

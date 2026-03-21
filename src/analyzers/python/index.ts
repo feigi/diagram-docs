@@ -11,6 +11,7 @@ import type {
 import { slugify } from "../../core/slugify.js";
 import { parsePythonImports } from "./imports.js";
 import { extractPythonModules, detectPythonFramework } from "./modules.js";
+import { collectConfigFiles } from "../config-files.js";
 
 function parseRequirements(appPath: string): ExternalDep[] {
   const reqPath = path.join(appPath, "requirements.txt");
@@ -120,6 +121,9 @@ export const pythonAnalyzer: LanguageAnalyzer = {
     else if (fs.existsSync(path.join(appPath, "setup.py")))
       buildFile = "setup.py";
 
+    // Collect config files for LLM-based architecture analysis
+    const configFiles = collectConfigFiles(appPath, appPath);
+
     return {
       id: appId,
       path: appPath,
@@ -129,6 +133,7 @@ export const pythonAnalyzer: LanguageAnalyzer = {
       modules,
       externalDependencies,
       internalImports: [],
+      configFiles: configFiles.length > 0 ? configFiles : undefined,
     };
   },
 };

@@ -10,15 +10,9 @@ export interface JavaPackage {
   publicClasses: string[];
 }
 
-const SPRING_ANNOTATIONS = [
-  "@Controller",
-  "@RestController",
-  "@Service",
-  "@Repository",
-  "@Component",
-  "@Configuration",
-  "@Entity",
-];
+/** Regex to match class-level annotations (before class/interface/enum/record declarations) */
+const CLASS_ANNOTATION_RE =
+  /^[ \t]*(@\w+)(?:\([^)]*\))?[ \t]*$(?=[\s\S]*?(?:public\s+)?(?:abstract\s+)?(?:final\s+)?(?:class|interface|enum|record)\b)/gm;
 
 export async function extractPackages(
   appPath: string,
@@ -65,7 +59,20 @@ export async function extractPackages(
   return Array.from(packageMap.values());
 }
 
-export function detectSpringAnnotations(filePath: string): string[] {
+/**
+ * Detect all class-level annotations in a Java file (framework-agnostic).
+ * Returns annotation names without the '@' prefix.
+ */
+export function detectClassAnnotations(filePath: string): string[] {
   const content = fs.readFileSync(filePath, "utf-8");
-  return SPRING_ANNOTATIONS.filter((ann) => content.includes(ann));
+  const annotations: string[] = [];
+  for (const match of content.matchAll(CLASS_ANNOTATION_RE)) {
+    annotations.push(match[1].slice(1)); // Remove '@' prefix
+  }
+  return annotations;
+}
+
+/** @deprecated Use detectClassAnnotations instead */
+export function detectSpringAnnotations(filePath: string): string[] {
+  return detectClassAnnotations(filePath);
 }

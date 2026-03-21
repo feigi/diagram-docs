@@ -69,7 +69,18 @@
               }
             }
           },
-          "publishedAs": { "type": "string" }
+          "publishedAs": { "type": "string" },
+          "configFiles": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["path", "content"],
+              "properties": {
+                "path": { "type": "string" },
+                "content": { "type": "string" }
+              }
+            }
+          }
         }
       }
     }
