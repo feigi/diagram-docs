@@ -215,8 +215,9 @@ async function generateSystemDiagrams(
         config.output.docsDir,
         "architecture",
       );
-      // Relative to outputDir because the rendered SVG lives there
-      const relPath = path.relative(outputDir, path.join(folderPath, childDocsDir));
+      // Relative to outputDir because the rendered SVG lives there.
+      // Normalize to forward slashes for D2 link URLs.
+      const relPath = path.relative(outputDir, path.join(folderPath, childDocsDir)).split(path.sep).join("/");
       return `${relPath}/component.${config.output.format}`;
     },
   });
@@ -328,7 +329,15 @@ async function generateCodeDiagrams(
   }
 
   const scanConfig = toScanConfig(config);
-  const symbols = await analyzer.analyzeModule(folderPath, scanConfig);
+  let symbols;
+  try {
+    symbols = await analyzer.analyzeModule(folderPath, scanConfig);
+  } catch (err: unknown) {
+    console.error(
+      `Warning: code-level analysis failed for ${path.basename(folderPath)}: ${err instanceof Error ? err.message : err}`,
+    );
+    return d2Files;
+  }
 
   if (symbols.symbols.length < config.abstraction.codeLevel.minSymbols) {
     return d2Files;
@@ -441,6 +450,10 @@ export async function processFolder(
     folderDesc = "";
   }
 
+  // Apply override name/description even when role is not overridden
+  if (override?.name) folderName = override.name;
+  if (override?.description) folderDesc = override.description;
+
   // 4. Skip diagram generation but still recurse into children
   if (role === "skip") {
     const shouldExclude = buildExcludeMatcher(config);
@@ -538,16 +551,24 @@ export async function processFolder(
 
   // 6. Scaffold user-facing D2 files only if generation succeeded
   if (generationSucceeded) {
-    const outputDir = path.join(folderPath, effectiveDocsDir, "architecture");
-    scaffoldForRole(
-      outputDir,
-      role,
-      folderName,
-      config,
-      parentFolderPath
-        ? { outputDir: path.join(parentFolderPath, config.output.docsDir, "architecture") }
-        : undefined,
-    );
+    try {
+      const outputDir = path.join(folderPath, effectiveDocsDir, "architecture");
+      scaffoldForRole(
+        outputDir,
+        role,
+        folderName,
+        config,
+        parentFolderPath
+          ? { outputDir: path.join(parentFolderPath, config.output.docsDir, "architecture") }
+          : undefined,
+      );
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOSPC" || code === "ENOMEM") throw err;
+      console.error(
+        `Warning: scaffolding failed for ${relPath || "."}: ${err instanceof Error ? err.message : err}`,
+      );
+    }
   }
 
   // 7. Recurse into child directories

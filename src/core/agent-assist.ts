@@ -94,6 +94,10 @@ export function saveAgentCache(
     }
     fs.writeFileSync(filePath, YAML.stringify(obj), "utf-8");
   } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EMFILE" || code === "ENFILE" || code === "ENOMEM" || code === "ENOSPC") {
+      throw err;
+    }
     console.error(
       `Warning: failed to save agent cache (LLM results will not be cached, incurring additional API costs): ${err instanceof Error ? err.message : err}`,
     );

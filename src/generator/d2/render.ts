@@ -78,24 +78,30 @@ export function renderD2Files(d2Files: string[], config: Config): { rendered: nu
  * the parent-level styles.d2.
  */
 function isUpToDate(d2Path: string, outPath: string): boolean {
-  if (!fs.existsSync(outPath)) return false;
+  try {
+    if (!fs.existsSync(outPath)) return false;
 
-  const outMtime = fs.statSync(outPath).mtimeMs;
-  const dir = path.dirname(d2Path);
-  const base = path.basename(d2Path, ".d2");
+    const outMtime = fs.statSync(outPath).mtimeMs;
+    const dir = path.dirname(d2Path);
+    const base = path.basename(d2Path, ".d2");
 
-  // Collect all D2 files that feed into this output
-  const sources = [d2Path];
+    // Collect all D2 files that feed into this output
+    const sources = [d2Path];
 
-  const generatedFile = path.join(dir, "_generated", `${base}.d2`);
-  if (fs.existsSync(generatedFile)) sources.push(generatedFile);
+    const generatedFile = path.join(dir, "_generated", `${base}.d2`);
+    if (fs.existsSync(generatedFile)) sources.push(generatedFile);
 
-  const stylesFile = path.join(dir, "styles.d2");
-  if (fs.existsSync(stylesFile)) sources.push(stylesFile);
+    const stylesFile = path.join(dir, "styles.d2");
+    if (fs.existsSync(stylesFile)) sources.push(stylesFile);
 
-  // For component diagrams nested in containers/, styles.d2 is two levels up
-  const parentStyles = path.join(dir, "..", "..", "styles.d2");
-  if (fs.existsSync(parentStyles)) sources.push(parentStyles);
+    // For component diagrams nested in containers/, styles.d2 is two levels up
+    const parentStyles = path.join(dir, "..", "..", "styles.d2");
+    if (fs.existsSync(parentStyles)) sources.push(parentStyles);
 
-  return sources.every((src) => fs.statSync(src).mtimeMs <= outMtime);
+    return sources.every((src) => fs.statSync(src).mtimeMs <= outMtime);
+  } catch {
+    // If any stat fails (e.g., file deleted between exists check and stat),
+    // treat as out of date — a re-render is the safe fallback.
+    return false;
+  }
 }

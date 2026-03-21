@@ -161,6 +161,8 @@ export function collectSignals(
           withFileTypes: true,
         });
       } catch (err: unknown) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "EMFILE" || code === "ENFILE") throw err;
         console.error(
           `Warning: cannot read child directory ${path.join(folderPath, name)}: ${err instanceof Error ? err.message : err}`,
         );
@@ -188,12 +190,17 @@ export function collectSignals(
 
       // Detect src/main/java pattern for package structure
       if (name === "src") {
-        const mainJavaPath = path.join(folderPath, "src", "main", "java");
-        if (
-          fs.existsSync(mainJavaPath) &&
-          fs.statSync(mainJavaPath).isDirectory()
-        ) {
-          hasPackageStructure = true;
+        try {
+          const mainJavaPath = path.join(folderPath, "src", "main", "java");
+          if (
+            fs.existsSync(mainJavaPath) &&
+            fs.statSync(mainJavaPath).isDirectory()
+          ) {
+            hasPackageStructure = true;
+          }
+        } catch {
+          // Non-critical: if we can't check for Java package structure,
+          // the classifier will still work with other signals.
         }
       }
     }
