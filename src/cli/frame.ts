@@ -97,6 +97,7 @@ export function createFrame(title: string): Frame {
   let firstRender = true;
   let stopped = false;
   let prevTotalRows = 0;
+  let highWaterLogRows = MIN_LOG_LINES; // never shrink the frame
 
   // Scroll state: 0 = pinned to bottom, >0 = rows scrolled up from bottom
   let scrollOffset = 0;
@@ -122,12 +123,22 @@ export function createFrame(title: string): Frame {
     return chalk.dim("│") + " ".repeat(inner) + chalk.dim("│");
   }
 
+  function emergencyDisableMouse() {
+    process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h");
+    if (stdinTTY) {
+      try { process.stdin.setRawMode(false); } catch {}
+    }
+  }
+
   function enableMouse() {
     if (!stdinTTY || stdinListener) return;
     wasRawMode = process.stdin.isRaw;
     process.stdin.setRawMode(true);
     process.stdin.resume();
     process.stderr.write("\x1b[?1000h\x1b[?1006h"); // enable SGR mouse mode
+    process.on("exit", emergencyDisableMouse);
+    process.on("SIGINT", emergencyDisableMouse);
+    process.on("SIGTERM", emergencyDisableMouse);
     stdinListener = (data: Buffer) => {
       const str = data.toString();
       // SGR mouse: \x1b[<btn;col;rowM  (64=wheel up, 65=wheel down)
@@ -146,6 +157,9 @@ export function createFrame(title: string): Frame {
   }
 
   function disableMouse() {
+    process.removeListener("exit", emergencyDisableMouse);
+    process.removeListener("SIGINT", emergencyDisableMouse);
+    process.removeListener("SIGTERM", emergencyDisableMouse);
     if (stdinListener) {
       process.stdin.removeListener("data", stdinListener);
       stdinListener = null;
@@ -192,9 +206,11 @@ export function createFrame(title: string): Frame {
     const maxScroll = Math.max(0, allLogRows.length - MIN_LOG_LINES);
     scrollOffset = Math.min(scrollOffset, maxScroll);
 
-    // Compute viewport slice
+    // Compute viewport slice — never shrink below previous high-water mark
     const bottomIdx = allLogRows.length - scrollOffset;
-    const visibleRowCount = Math.max(MIN_LOG_LINES, Math.min(bottomIdx, maxLogLines));
+    const naturalRowCount = Math.max(MIN_LOG_LINES, Math.min(bottomIdx, maxLogLines));
+    highWaterLogRows = Math.max(highWaterLogRows, naturalRowCount);
+    const visibleRowCount = Math.min(highWaterLogRows, maxLogLines);
     const topIdx = Math.max(0, bottomIdx - visibleRowCount);
     const visibleLogRows = allLogRows.slice(topIdx, bottomIdx);
 
@@ -288,6 +304,27 @@ export function createFrame(title: string): Frame {
     log(text: string, final = true, kind: LogKind = "output") {
       const clean = sanitize(text);
       if (!clean) return;
+
+      // When transitioning from thinking to output, clear all thinking entries
+      // so they don't leave a blank gap in the frame.
+      if (kind === "output" && logBuffer.length > 0 && logBuffer[logBuffer.length - 1]?.kind === "thinking") {
+        // Remove all thinking entries
+        for (let i = logBuffer.length - 1; i >= 0; i--) {
+          if (logBuffer[i]?.kind === "thinking") {
+            logBuffer.splice(i, 1);
+            delete logFinalized[i];
+          }
+        }
+        // Re-index finalized map after splice
+        const newFinalized: Record<number, boolean> = {};
+        for (let i = 0; i < logBuffer.length; i++) {
+          newFinalized[i] = true;
+        }
+        Object.keys(logFinalized).forEach((k) => delete logFinalized[Number(k)]);
+        Object.assign(logFinalized, newFinalized);
+        highWaterLogRows = MIN_LOG_LINES;
+      }
+
       const lastIdx = logBuffer.length - 1;
       const lastIsPartial = lastIdx >= 0 && !logFinalized[lastIdx];
       const lastSameKind = lastIdx >= 0 && logBuffer[lastIdx]?.kind === kind;
