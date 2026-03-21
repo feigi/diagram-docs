@@ -18,6 +18,7 @@ export interface ScannedApplication {
   modules: ScannedModule[];
   externalDependencies: ExternalDep[];
   internalImports: InternalImport[];
+  publishedAs?: string;
 }
 
 export interface ScannedModule {

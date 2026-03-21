@@ -68,7 +68,8 @@
                 "targetPath": { "type": "string" }
               }
             }
-          }
+          },
+          "publishedAs": { "type": "string" }
         }
       }
     }
