@@ -7,7 +7,8 @@ import chalk from "chalk";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_INTERVAL = 80;
-const LOG_LINES = 8;
+const MIN_LOG_LINES = 3;
+const FRAME_OVERHEAD = 5; // top + 2 status rows + separator + bottom
 
 function getFrameWidth(): number {
   if (process.stderr.isTTY && process.stderr.columns) {
@@ -28,7 +29,7 @@ export interface FrameLine {
 
 export interface Frame {
   update(lines: FrameLine[]): void;
-  log(text: string): void;
+  log(text: string, final?: boolean): void;
   stop(lines: FrameLine[]): void;
 }
 
@@ -55,21 +56,27 @@ function padRight(text: string, width: number): string {
   return text + " ".repeat(padding);
 }
 
+function getMaxLogLines(): number {
+  const termRows = process.stderr.isTTY && process.stderr.rows ? process.stderr.rows : 24;
+  return Math.max(MIN_LOG_LINES, termRows - FRAME_OVERHEAD);
+}
+
 export function createFrame(title: string): Frame {
   const isTTY = process.stderr.isTTY;
   const frameWidth = getFrameWidth();
   const inner = frameWidth - 2;
   const startTime = Date.now();
   const STATUS_ROWS = 2;
-  const totalRows = 1 + STATUS_ROWS + 1 + LOG_LINES + 1; // top + status + blank + logs + bottom
 
   let spinnerIdx = 0;
   let timer: ReturnType<typeof setInterval> | null = null;
   let firstRender = true;
   let stopped = false;
+  let prevTotalRows = 0;
 
   let statusLines: FrameLine[] = [];
   const logBuffer: string[] = [];
+  const logFinalized: Record<number, boolean> = {};
 
   // Pre-build static parts
   const titleStr = ` ${title} `;
@@ -89,6 +96,11 @@ export function createFrame(title: string): Frame {
     const elapsed = Date.now() - startTime;
     const elapsedStr = formatElapsed(elapsed);
     const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+
+    // Compute log area height: grow with content, cap at terminal height
+    const maxLogLines = getMaxLogLines();
+    const logLines = Math.max(MIN_LOG_LINES, Math.min(logBuffer.length, maxLogLines));
+    const totalRows = 1 + STATUS_ROWS + 1 + logLines + 1; // top + status + blank + logs + bottom
 
     // Build status rows
     const rows: string[] = [];
@@ -111,14 +123,14 @@ export function createFrame(title: string): Frame {
     // Blank separator
     rows.push(emptyRow());
 
-    // Log rows (last LOG_LINES, dim, full width)
-    const visibleLogs = logBuffer.slice(-LOG_LINES);
-    for (let i = 0; i < LOG_LINES; i++) {
+    // Log rows — grows with content up to terminal height
+    const visibleLogs = logBuffer.slice(-logLines);
+    for (let i = 0; i < logLines; i++) {
       const entry = visibleLogs[i];
       if (!entry) {
         rows.push(emptyRow());
       } else {
-        rows.push(row(chalk.dim(truncate(entry, inner - 4))));
+        rows.push(row(chalk.dim(`    ${truncate(entry, inner - 8)}`)));
       }
     }
 
@@ -131,10 +143,12 @@ export function createFrame(title: string): Frame {
       output += "\n".repeat(totalRows) + `\x1b[${totalRows}A`;
       firstRender = false;
     } else {
-      output += `\x1b[${totalRows}A`;
+      // Move up by previous frame height
+      output += `\x1b[${prevTotalRows}A`;
     }
     output += "\x1b[?25l"; // hide cursor
     output += frame + "\n";
+    prevTotalRows = totalRows;
 
     process.stderr.write(output);
   }
@@ -169,14 +183,25 @@ export function createFrame(title: string): Frame {
       startTimer();
     },
 
-    log(text: string) {
+    log(text: string, final = true) {
       const clean = sanitize(text);
       if (!clean) return;
-      logBuffer.push(clean);
-      if (!isTTY) {
+      const lastIdx = logBuffer.length - 1;
+      const lastIsPartial = lastIdx >= 0 && !logFinalized[lastIdx];
+
+      if (lastIsPartial) {
+        // Update the existing partial entry
+        logBuffer[lastIdx] = clean;
+        if (final) logFinalized[lastIdx] = true;
+      } else {
+        // Append new entry
+        logBuffer.push(clean);
+        logFinalized[logBuffer.length - 1] = final;
+      }
+
+      if (final && !isTTY) {
         process.stderr.write(`  ${chalk.dim(clean)}\n`);
       }
-      // TTY: next timer tick will pick up the new log entry
     },
 
     stop(lines: FrameLine[]) {
@@ -198,10 +223,16 @@ export function createFrame(title: string): Frame {
       );
 
       let output = "";
-      if (!firstRender) {
-        output += `\x1b[${totalRows}A`;
+      if (!firstRender && prevTotalRows > 0) {
+        output += `\x1b[${prevTotalRows}A`;
       }
       output += [top, stopRow, bottom].join("\n") + "\n";
+      // Clear any leftover rows from the previous (taller) frame
+      const stopHeight = 3; // top + stopRow + bottom
+      const leftover = prevTotalRows - stopHeight;
+      for (let i = 0; i < leftover; i++) {
+        output += "\x1b[2K\n"; // clear line, move down
+      }
       output += "\x1b[?25h"; // show cursor
 
       process.stderr.write(output);
