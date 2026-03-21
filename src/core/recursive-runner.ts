@@ -333,6 +333,8 @@ async function generateCodeDiagrams(
   try {
     symbols = await analyzer.analyzeModule(folderPath, scanConfig);
   } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EMFILE" || code === "ENFILE") throw err;
     console.error(
       `Warning: code-level analysis failed for ${path.basename(folderPath)}: ${err instanceof Error ? err.message : err}`,
     );
@@ -563,7 +565,13 @@ export async function processFolder(
         folderName,
         config,
         parentFolderPath
-          ? { outputDir: path.join(parentFolderPath, config.output.docsDir, "architecture") }
+          ? {
+              outputDir: path.join(
+                parentFolderPath,
+                config.overrides[path.relative(rootPath, parentFolderPath) || "."]?.docsDir ?? config.output.docsDir,
+                "architecture",
+              ),
+            }
           : undefined,
       );
     } catch (err: unknown) {

@@ -140,6 +140,8 @@ export const pythonAnalyzer: LanguageAnalyzer = {
     try {
       entries = fs.readdirSync(modulePath, { withFileTypes: true });
     } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "EMFILE" || code === "ENFILE") throw err;
       console.error(
         `Warning: cannot read module directory ${modulePath}: ${err instanceof Error ? err.message : err}`,
       );
@@ -151,6 +153,8 @@ export const pythonAnalyzer: LanguageAnalyzer = {
           const content = fs.readFileSync(path.join(modulePath, entry.name), "utf-8");
           files.push({ path: entry.name, content });
         } catch (err: unknown) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code === "EMFILE" || code === "ENFILE") throw err;
           console.error(
             `Warning: cannot read ${path.join(modulePath, entry.name)}: ${err instanceof Error ? err.message : err}`,
           );

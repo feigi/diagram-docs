@@ -79,7 +79,7 @@ export const generateCommand = new Command("generate")
           }
         } catch (err: unknown) {
           const errCode = (err as NodeJS.ErrnoException).code;
-          if (errCode === "ENOSPC" || errCode === "ENOMEM" || errCode === "EROFS") {
+          if (errCode === "ENOSPC" || errCode === "ENOMEM" || errCode === "EMFILE" || errCode === "ENFILE" || errCode === "EROFS") {
             throw err;
           }
           console.error(

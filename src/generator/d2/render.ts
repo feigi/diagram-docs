@@ -41,6 +41,7 @@ export function renderD2Files(d2Files: string[], config: Config): { rendered: nu
       console.error(`Rendered: ${relPath}`);
     } catch (err: unknown) {
       const errCode = (err as NodeJS.ErrnoException).code;
+      if (errCode === "EMFILE" || errCode === "ENFILE") throw err;
       if (errCode === "ENOENT") {
         console.error(
           "Error: d2 CLI not found. Install it to render diagrams: https://d2lang.com/releases/install",
@@ -99,7 +100,9 @@ function isUpToDate(d2Path: string, outPath: string): boolean {
     if (fs.existsSync(parentStyles)) sources.push(parentStyles);
 
     return sources.every((src) => fs.statSync(src).mtimeMs <= outMtime);
-  } catch {
+  } catch (err: unknown) {
+    const errCode = (err as NodeJS.ErrnoException).code;
+    if (errCode === "EMFILE" || errCode === "ENFILE") throw err;
     // If any stat fails (e.g., file deleted between exists check and stat),
     // treat as out of date — a re-render is the safe fallback.
     return false;
