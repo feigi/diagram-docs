@@ -123,6 +123,8 @@ export interface ProgressEvent {
   line: string;
   /** true when this line is complete (a newline was seen); false while still being built */
   final: boolean;
+  /** "thinking" for internal reasoning, "output" for actual generated content */
+  kind: "thinking" | "output";
 }
 
 function spawnStreamJson(
@@ -165,10 +167,10 @@ function spawnStreamJson(
               // New line started → push previous as finished
               if (lines.length > lastTextLineCount) {
                 const prev = lines[lines.length - 2]?.trim();
-                if (prev) onProgress({ line: prev, final: true });
+                if (prev) onProgress({ line: prev, final: true, kind: "output" });
                 lastTextLineCount = lines.length;
               }
-              if (lastLine) onProgress({ line: lastLine, final: false });
+              if (lastLine) onProgress({ line: lastLine, final: false, kind: "output" });
             }
           }
           // Thinking delta — accumulate and show last line
@@ -179,10 +181,10 @@ function spawnStreamJson(
               const lastLine = lines[lines.length - 1]?.trim();
               if (lines.length > lastThinkLineCount) {
                 const prev = lines[lines.length - 2]?.trim();
-                if (prev) onProgress({ line: prev, final: true });
+                if (prev) onProgress({ line: prev, final: true, kind: "thinking" });
                 lastThinkLineCount = lines.length;
               }
-              if (lastLine) onProgress({ line: lastLine, final: false });
+              if (lastLine) onProgress({ line: lastLine, final: false, kind: "thinking" });
             }
           }
           // Result event — use as fallback only if no deltas were accumulated.

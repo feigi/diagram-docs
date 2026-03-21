@@ -222,8 +222,8 @@ async function resolveModel(
           { text: `Model: ${config.llm.model}` },
         ]);
       },
-      onProgress({ line, final: done }) {
-        frame.log(line, done);
+      onProgress({ line, final: done, kind }) {
+        frame.log(line, done, kind);
       },
     });
     frame.stop([

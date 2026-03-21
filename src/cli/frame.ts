@@ -27,9 +27,11 @@ export interface FrameLine {
   spinner?: boolean;
 }
 
+export type LogKind = "thinking" | "output";
+
 export interface Frame {
   update(lines: FrameLine[]): void;
-  log(text: string, final?: boolean): void;
+  log(text: string, final?: boolean, kind?: LogKind): void;
   stop(lines: FrameLine[]): void;
 }
 
@@ -48,6 +50,26 @@ function stripAnsi(str: string): string {
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen - 1) + "…";
+}
+
+/** Word-wrap text to fit within maxWidth, breaking on spaces. */
+function wordWrap(text: string, maxWidth: number): string[] {
+  if (text.length <= maxWidth) return [text];
+  const words = text.split(" ");
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (!current) {
+      current = word;
+    } else if (current.length + 1 + word.length <= maxWidth) {
+      current += " " + word;
+    } else {
+      lines.push(current);
+      current = word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.length ? lines : [""];
 }
 
 function padRight(text: string, width: number): string {
@@ -75,7 +97,7 @@ export function createFrame(title: string): Frame {
   let prevTotalRows = 0;
 
   let statusLines: FrameLine[] = [];
-  const logBuffer: string[] = [];
+  const logBuffer: { text: string; kind: LogKind }[] = [];
   const logFinalized: Record<number, boolean> = {};
 
   // Pre-build static parts
@@ -97,10 +119,33 @@ export function createFrame(title: string): Frame {
     const elapsedStr = formatElapsed(elapsed);
     const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
 
-    // Compute log area height: grow with content, cap at terminal height
     const maxLogLines = getMaxLogLines();
-    const logLines = Math.max(MIN_LOG_LINES, Math.min(logBuffer.length, maxLogLines));
-    const totalRows = 1 + STATUS_ROWS + 1 + logLines + 1; // top + status + blank + logs + bottom
+    const THINKING_INDENT = 8; // one tab
+    const OUTPUT_INDENT = 4;
+    const thinkingWidth = inner - 2 - THINKING_INDENT; // 2 for row padding
+    const outputWidth = inner - 2 - OUTPUT_INDENT;
+
+    // Expand log entries into rendered rows (thinking wraps, output truncates)
+    const allLogRows: string[] = [];
+    for (const entry of logBuffer) {
+      if (entry.kind === "thinking") {
+        const wrapped = wordWrap(entry.text, thinkingWidth);
+        for (const wl of wrapped) {
+          allLogRows.push(row(chalk.dim.italic(" ".repeat(THINKING_INDENT) + wl)));
+        }
+      } else {
+        allLogRows.push(row(chalk.white(" ".repeat(OUTPUT_INDENT) + truncate(entry.text, outputWidth))));
+      }
+    }
+
+    // Take the tail, grow frame height with content up to terminal max
+    const visibleRowCount = Math.max(MIN_LOG_LINES, Math.min(allLogRows.length, maxLogLines));
+    const visibleLogRows = allLogRows.slice(-visibleRowCount);
+    // Pad with empty rows if fewer entries than minimum
+    while (visibleLogRows.length < visibleRowCount) {
+      visibleLogRows.unshift(emptyRow());
+    }
+    const totalRows = 1 + STATUS_ROWS + 1 + visibleRowCount + 1; // top + status + blank + logs + bottom
 
     // Build status rows
     const rows: string[] = [];
@@ -123,16 +168,8 @@ export function createFrame(title: string): Frame {
     // Blank separator
     rows.push(emptyRow());
 
-    // Log rows — grows with content up to terminal height
-    const visibleLogs = logBuffer.slice(-logLines);
-    for (let i = 0; i < logLines; i++) {
-      const entry = visibleLogs[i];
-      if (!entry) {
-        rows.push(emptyRow());
-      } else {
-        rows.push(row(chalk.dim(`    ${truncate(entry, inner - 8)}`)));
-      }
-    }
+    // Log rows
+    rows.push(...visibleLogRows);
 
     const frame = [top, ...rows, bottom].join("\n");
 
@@ -183,24 +220,26 @@ export function createFrame(title: string): Frame {
       startTimer();
     },
 
-    log(text: string, final = true) {
+    log(text: string, final = true, kind: LogKind = "output") {
       const clean = sanitize(text);
       if (!clean) return;
       const lastIdx = logBuffer.length - 1;
       const lastIsPartial = lastIdx >= 0 && !logFinalized[lastIdx];
+      const lastSameKind = lastIdx >= 0 && logBuffer[lastIdx]?.kind === kind;
 
-      if (lastIsPartial) {
+      if (lastIsPartial && lastSameKind) {
         // Update the existing partial entry
-        logBuffer[lastIdx] = clean;
+        logBuffer[lastIdx] = { text: clean, kind };
         if (final) logFinalized[lastIdx] = true;
       } else {
         // Append new entry
-        logBuffer.push(clean);
+        logBuffer.push({ text: clean, kind });
         logFinalized[logBuffer.length - 1] = final;
       }
 
       if (final && !isTTY) {
-        process.stderr.write(`  ${chalk.dim(clean)}\n`);
+        const prefix = kind === "thinking" ? "  (thinking) " : "  ";
+        process.stderr.write(`${prefix}${chalk.dim(clean)}\n`);
       }
     },
 
