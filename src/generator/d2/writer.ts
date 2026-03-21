@@ -1,4 +1,24 @@
 /**
+ * Wrap text at word boundaries, inserting D2 newline escapes.
+ * Keeps each line under `maxWidth` characters.
+ */
+export function wrapText(text: string, maxWidth = 35): string {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+  for (const word of words) {
+    if (current && current.length + 1 + word.length > maxWidth) {
+      lines.push(current);
+      current = word;
+    } else {
+      current = current ? `${current} ${word}` : word;
+    }
+  }
+  if (current) lines.push(current);
+  return lines.join("\\n");
+}
+
+/**
  * Low-level D2 syntax writer.
  * Builds up D2 file content as a string.
  */

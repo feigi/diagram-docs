@@ -19,6 +19,8 @@ export function generateStyles(theme: number, layout: string): string {
   w.raw("classes: {");
   w.raw("  person: {");
   w.raw("    shape: person");
+  w.raw("    width: 180");
+  w.raw("    height: 230");
   w.raw("    style.fill: \"#08427B\"");
   w.raw("    style.font-color: \"#ffffff\"");
   w.raw("    style.stroke: \"#073B6F\"");

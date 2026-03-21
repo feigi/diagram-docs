@@ -1,5 +1,5 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
-import { D2Writer } from "./writer.js";
+import { D2Writer, wrapText } from "./writer.js";
 import { toD2Id, sortById, sortRelationships } from "./stability.js";
 
 /**
@@ -36,7 +36,7 @@ export function generateComponentDiagram(
       const id = toD2Id(comp.id);
       w.shape(
         id,
-        `${comp.name}\\n\\n[Component: ${comp.technology}]\\n${comp.description}`,
+        `${comp.name}\\n\\n[Component: ${comp.technology}]\\n${wrapText(comp.description)}`,
         { "class": "component" },
       );
     }

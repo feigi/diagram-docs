@@ -1,5 +1,5 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
-import { D2Writer } from "./writer.js";
+import { D2Writer, wrapText } from "./writer.js";
 import { toD2Id, sortById, sortRelationships } from "./stability.js";
 
 export interface ContainerDiagramOptions {
@@ -26,7 +26,7 @@ export function generateContainerDiagram(
   // Actors
   for (const actor of sortById(model.actors)) {
     const id = toD2Id(actor.id);
-    w.shape(id, `${actor.name}\\n\\n[Person]\\n${actor.description}`, {
+    w.shape(id, `${actor.name}\\n\\n[Person]\\n${wrapText(actor.description)}`, {
       "class": "person",
     });
   }
@@ -54,7 +54,7 @@ export function generateContainerDiagram(
 
       w.shape(
         id,
-        `${container.name}\\n\\n[Container: ${container.technology}]\\n${container.description}`,
+        `${container.name}\\n\\n[Container: ${container.technology}]\\n${wrapText(container.description)}`,
         props,
       );
     }
@@ -66,7 +66,7 @@ export function generateContainerDiagram(
   for (const ext of sortById(model.externalSystems)) {
     const id = toD2Id(ext.id);
     const tech = ext.technology ? `\\n[${ext.technology}]` : "";
-    w.shape(id, `${ext.name}\\n\\n[External System]${tech}\\n${ext.description}`, {
+    w.shape(id, `${ext.name}\\n\\n[External System]${tech}\\n${wrapText(ext.description)}`, {
       "class": "external-system",
     });
   }
