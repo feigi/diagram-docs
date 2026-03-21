@@ -10,6 +10,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { Config } from "../config/schema.js";
 import type { RawStructure, ArchitectureModel } from "../analyzers/types.js";
 import { architectureModelSchema } from "./model.js";
+import { buildModel } from "./model-builder.js";
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -409,7 +410,17 @@ relationships:
 - Components: what this grouping handles. Reference specific domain concerns.
 - Don't be generic. "handles user-related operations" is worthless. "manages user registration, authentication, and profile management" is useful.
 
-### Update Mode (when existing model is provided)
+### Seed Mode (when deterministic seed is provided)
+A machine-generated scaffold is provided. IDs and module mappings are already correct. Your job:
+- Rewrite all descriptions to be specific and meaningful (remove generic "X module" placeholders).
+- Regroup components by architectural role (Controller, Service, Repository, Entity, etc.) rather than the 1:1 module mapping. Aim for 5-15 components per container.
+- Infer actors from code evidence (REST controllers → User, message consumers → upstream system).
+- Detect external systems from externalDependencies and configFiles (databases, brokers, caches).
+- Replace all "Uses" relationship labels with specific verb phrases ("Reads user profiles from", "Publishes events to").
+- Add technology to relationships where known (JDBC, HTTP/REST, Kafka).
+- Keep all applicationId and moduleId references valid — every module must appear in exactly one component.
+
+### Update Mode (when existing human-edited model is provided)
 - Preserve manual edits that look hand-written.
 - Add new elements from scan not in the model.
 - Remove stale elements whose IDs no longer appear in the scan.
@@ -448,6 +459,7 @@ export function buildUserMessage(options: {
   rawStructure: RawStructure;
   configYaml?: string;
   existingModelYaml?: string;
+  isSeedMode?: boolean;
   outputPath?: string;
 }): string {
   const parts: string[] = [];
@@ -461,7 +473,10 @@ export function buildUserMessage(options: {
   }
 
   if (options.existingModelYaml) {
-    parts.push("\n\n## Existing architecture-model.yaml (update mode)\n");
+    const label = options.isSeedMode
+      ? "Deterministic seed (seed mode — reshape freely)"
+      : "Existing architecture-model.yaml (update mode — preserve manual edits)";
+    parts.push(`\n\n## ${label}\n`);
     parts.push(options.existingModelYaml);
   }
 
@@ -603,6 +618,16 @@ export async function buildModelWithLLM(
 
   // 2. Build prompt — tool-using providers write to a temp file and self-validate
   emit("Building prompt...");
+
+  // Generate a deterministic seed so the LLM refines rather than creates from scratch.
+  // Skip if the caller already provided an existing model (real update mode).
+  const isSeedMode = !options.existingModelYaml;
+  let existingModelYaml = options.existingModelYaml;
+  if (isSeedMode) {
+    const seed = buildModel({ config: options.config, rawStructure: options.rawStructure });
+    existingModelYaml = stringifyYaml(seed, { lineWidth: 120 });
+  }
+
   const outputPath = provider.supportsTools
     ? path.join(os.tmpdir(), `diagram-docs-model-${Date.now()}.yaml`)
     : undefined;
@@ -610,7 +635,8 @@ export async function buildModelWithLLM(
   const userMessage = buildUserMessage({
     rawStructure: options.rawStructure,
     configYaml: options.configYaml,
-    existingModelYaml: options.existingModelYaml,
+    existingModelYaml,
+    isSeedMode,
     outputPath,
   });
 
