@@ -89,7 +89,7 @@ export function generateComponentDiagram(
       : toD2Id(rel.targetId);
 
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(sourceId, targetId, `${rel.label}${tech}`);
+    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`));
   }
 
   return w.toString();

@@ -71,7 +71,7 @@ export function generateContextDiagram(model: ArchitectureModel): string {
     if (sourceId === targetId) continue; // Skip self-refs at context level
 
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(sourceId, targetId, `${rel.label}${tech}`);
+    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`));
   }
 
   return w.toString();
