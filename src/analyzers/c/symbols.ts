@@ -21,8 +21,9 @@ export function extractCSymbols(
   // return type.  Supports common qualifiers (const, static, extern, inline,
   // unsigned, signed, long, short).  Pointer returns only match when '*' is
   // adjacent to the type name (e.g. `int* foo`), not the function name
-  // (e.g. `int *foo`).  Does not handle multi-word return types like
-  // `struct Foo*` or `unsigned int`.
+  // (e.g. `int *foo`).  Qualifiers like `unsigned` are consumed separately,
+  // so `unsigned int foo(...)` matches with `int` captured as the return type.
+  // Does not handle multi-word return types like `struct Foo*`.
   const funcDeclRe =
     /^[ \t]*(?:(?:const|static|extern|inline|unsigned|signed|long|short)\s+)*(\w+)\s*\*?\s+(\w+)\s*\(([^)]*)\)\s*;/gm;
 
@@ -77,13 +78,21 @@ export function extractCSymbols(
         });
       }
 
-      // Check return-type relationship
+      // Check return-type relationship (deduplicate for .h/.c pairs)
       if (knownStructs.has(returnType)) {
-        relationships.push({
-          sourceId: funcId,
-          targetId: knownStructs.get(returnType)!,
-          kind: "return-type",
-        });
+        const alreadyExists = relationships.some(
+          (r) =>
+            r.kind === "return-type" &&
+            r.sourceId === funcId &&
+            r.targetId === knownStructs.get(returnType),
+        );
+        if (!alreadyExists) {
+          relationships.push({
+            sourceId: funcId,
+            targetId: knownStructs.get(returnType)!,
+            kind: "return-type",
+          });
+        }
       }
 
       // Check param-type relationships

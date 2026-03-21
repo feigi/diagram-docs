@@ -23,9 +23,9 @@ export function scaffoldForRole(
     fs.writeFileSync(stylesPath, stylesContent, "utf-8");
   }
 
-  const breadcrumb = parentContext
+  const breadcrumbLine = parentContext
     ? `# Parent: ${path.relative(outputDir, parentContext.outputDir)}/`
-    : "";
+    : null;
 
   switch (role) {
     case "system":
@@ -34,7 +34,7 @@ export function scaffoldForRole(
         [
           "# C4 Context Diagram",
           `# System: ${name}`,
-          breadcrumb,
+          ...(breadcrumbLine ? [breadcrumbLine] : []),
           "...@_generated/context.d2",
           "...@styles.d2",
           "",
@@ -47,7 +47,7 @@ export function scaffoldForRole(
         [
           "# C4 Container Diagram",
           `# System: ${name}`,
-          breadcrumb,
+          ...(breadcrumbLine ? [breadcrumbLine] : []),
           "...@_generated/container.d2",
           "...@styles.d2",
           "",
@@ -62,7 +62,7 @@ export function scaffoldForRole(
         path.join(outputDir, "component.d2"),
         [
           `# C4 Component Diagram — ${name}`,
-          breadcrumb,
+          ...(breadcrumbLine ? [breadcrumbLine] : []),
           "...@_generated/component.d2",
           "...@styles.d2",
           "",
@@ -78,7 +78,7 @@ export function scaffoldForRole(
         path.join(outputDir, "code.d2"),
         [
           `# C4 Code Diagram — ${name}`,
-          breadcrumb,
+          ...(breadcrumbLine ? [breadcrumbLine] : []),
           "...@_generated/code.d2",
           "...@styles.d2",
           "",

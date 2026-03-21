@@ -16,7 +16,7 @@ export interface AgentClassification {
   confidence: number;
 }
 
-interface CacheEntry extends AgentClassification {
+export interface CacheEntry extends AgentClassification {
   signalHash: string;
 }
 
@@ -62,7 +62,11 @@ export function loadAgentCache(rootDir: string): Map<string, CacheEntry> {
     console.error(
       `Warning: agent cache at ${filePath} is corrupted, deleting and starting fresh: ${err instanceof Error ? err.message : err}`,
     );
-    try { fs.unlinkSync(filePath); } catch { /* best-effort cleanup */ }
+    try { fs.unlinkSync(filePath); } catch (cleanupErr: unknown) {
+      console.error(
+        `Warning: failed to delete corrupted cache file ${filePath}. Please remove it manually: ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`,
+      );
+    }
   }
   return map;
 }
@@ -98,13 +102,6 @@ export function saveAgentCache(
 
 const VALID_ROLES = new Set<FolderRole>(roleEnum.options);
 
-const FALLBACK: AgentClassification = {
-  role: "skip",
-  name: "",
-  description: "",
-  confidence: 0,
-};
-
 /**
  * Extract a JSON classification from the LLM response text.
  * Handles responses wrapped in markdown code blocks.
@@ -133,9 +130,10 @@ export function parseAgentResponse(text: string): AgentClassification | null {
         : 0;
 
     return { role, name, description, confidence };
-  } catch {
+  } catch (err: unknown) {
+    if (!(err instanceof SyntaxError)) throw err;
     console.error(
-      `Warning: could not parse LLM classification response: ${text.slice(0, 200)}${text.length > 200 ? "..." : ""}`,
+      `Warning: could not parse LLM classification response (${err.message}): ${text.slice(0, 200)}${text.length > 200 ? "..." : ""}`,
     );
     return null;
   }
@@ -197,7 +195,7 @@ function buildPrompt(
 async function callAnthropic(
   prompt: string,
   model: string,
-): Promise<string> {
+): Promise<string | null> {
   // Dynamic import — SDK may not be installed
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = new Anthropic({ timeout: 15_000 });
@@ -211,13 +209,13 @@ async function callAnthropic(
   console.error(
     `Warning: Anthropic returned no text content (stop_reason: ${response.stop_reason ?? "unknown"})`,
   );
-  return "";
+  return null;
 }
 
 async function callOpenAI(
   prompt: string,
   model: string,
-): Promise<string> {
+): Promise<string | null> {
   // Dynamic import — SDK may not be installed
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ timeout: 15_000 });
@@ -232,7 +230,7 @@ async function callOpenAI(
     console.error(
       `Warning: OpenAI returned empty content (finish_reason: ${finishReason})`,
     );
-    return "";
+    return null;
   }
   return content;
 }
@@ -252,7 +250,9 @@ async function callOpenAI(
  *
  * @param cache - Shared cache map. Pass in a single map loaded once at the
  *   start of the run to avoid re-reading the YAML file on every call.
- *   The caller is responsible for saving the cache after the full traversal.
+ *   When provided, the caller is responsible for saving the cache after the
+ *   full traversal. When omitted, a fresh cache is loaded and saved
+ *   automatically after classification.
  */
 export async function agentClassify(
   folderPath: string,
@@ -282,7 +282,7 @@ export async function agentClassify(
   const prompt = buildPrompt(folderPath, rootDir, signals, heuristicRole, parentContext);
   const { provider, model } = config.agent;
 
-  let responseText: string;
+  let responseText: string | null;
   try {
     switch (provider) {
       case "anthropic":
@@ -303,14 +303,20 @@ export async function agentClassify(
         `${provider} SDK not installed. Run: npm install ${provider === "anthropic" ? "@anthropic-ai/sdk" : "openai"}`,
       );
     }
-    if (msg.includes("401") || msg.includes("auth") || msg.includes("API key")) {
+    if (msg.includes("401") || msg.includes("403") || msg.includes("auth") || msg.includes("API key")) {
       throw new Error(
         `${provider} authentication failed. Check your API key environment variable.`,
       );
     }
-    console.error(
-      `Warning: LLM classification failed for ${cacheKey}, falling back to heuristic: ${msg}`,
-    );
+    if (msg.includes("429") || msg.includes("rate limit") || msg.includes("too many requests")) {
+      console.error(
+        `Warning: LLM API rate limited for ${cacheKey}. Consider adding a delay or reducing concurrency. Falling back to heuristic.`,
+      );
+    } else {
+      console.error(
+        `Warning: LLM classification failed for ${cacheKey}, falling back to heuristic: ${msg}`,
+      );
+    }
     return {
       role: heuristicRole,
       name: "",
@@ -320,7 +326,7 @@ export async function agentClassify(
   }
 
   // Parse response — fall back to heuristic role on parse failure
-  const classification = parseAgentResponse(responseText) ?? {
+  const classification = (responseText ? parseAgentResponse(responseText) : null) ?? {
     role: heuristicRole,
     name: "",
     description: "",

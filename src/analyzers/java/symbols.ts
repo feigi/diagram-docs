@@ -13,7 +13,8 @@ export function extractJavaSymbols(
 
   // Regex matches: optional 'public' access modifier, optional 'abstract'/'final' modifiers,
   // then class/interface/enum/record keyword, then name, optional extends/implements clauses.
-  // Does not match private, protected, or static declarations (inner/nested classes are excluded).
+  // Does not match private, protected, or static declarations.  Note: package-private inner
+  // classes (without an explicit access modifier) WILL match since \s* consumes indentation.
   const declarationRe =
     /(?:^|\n)\s*(public\s+)?(?:abstract\s+)?(?:final\s+)?(class|interface|enum|record)\s+(\w+)(?:\s+extends\s+(\w+))?(?:\s+implements\s+([\w,\s]+))?/g;
 

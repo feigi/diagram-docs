@@ -10,7 +10,11 @@ export function renderD2Files(d2Files: string[], config: Config): void {
   let skipped = 0;
   let failed = 0;
   for (const d2Path of d2Files) {
-    if (!fs.existsSync(d2Path)) continue;
+    if (!fs.existsSync(d2Path)) {
+      console.error(`Warning: expected D2 file not found, skipping: ${path.relative(process.cwd(), d2Path)}`);
+      failed++;
+      continue;
+    }
 
     const ext = config.output.format;
     const outPath = d2Path.replace(/\.d2$/, `.${ext}`);

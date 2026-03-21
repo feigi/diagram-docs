@@ -46,7 +46,8 @@ export function loadConfig(configPath?: string): {
 function migrateConfig(raw: Record<string, unknown>): void {
   const output = raw.output as Record<string, unknown> | undefined;
   if (output && "dir" in output && !("docsDir" in output)) {
-    const dir = output.dir as string;
+    if (typeof output.dir !== "string") return;
+    const dir = output.dir;
     // Old default was "docs/architecture"; new schema splits into
     // docsDir ("docs") + hard-coded "/architecture" suffix.
     const suffix = "/architecture";

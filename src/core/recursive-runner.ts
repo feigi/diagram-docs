@@ -11,7 +11,7 @@ import * as path from "node:path";
 import type { Config, FolderRole } from "../config/schema.js";
 import type { ScanConfig } from "../analyzers/types.js";
 import { collectSignals, inferRole } from "./classifier.js";
-import { agentClassify, loadAgentCache, saveAgentCache } from "./agent-assist.js";
+import { agentClassify, loadAgentCache, saveAgentCache, type CacheEntry } from "./agent-assist.js";
 import { humanizeName } from "./humanize.js";
 import { buildModel } from "./model-builder.js";
 import { generateContextDiagram } from "../generator/d2/context.js";
@@ -27,9 +27,10 @@ import { scaffoldForRole } from "../generator/d2/scaffold.js";
 /* ------------------------------------------------------------------ */
 
 function getExcludeDirs(config: Config): Set<string> {
-  // Use the first path segment of docsDir so that multi-segment paths
-  // like "internal/docs" correctly exclude the "internal" directory.
-  const docsDirFirstSegment = config.output.docsDir.split(path.sep)[0] || config.output.docsDir;
+  // Use the first path segment of docsDir to avoid recursing into the docs
+  // output tree.  Note: for multi-segment paths like "internal/docs", this
+  // excludes the entire "internal/" directory, which may be overly broad.
+  const docsDirFirstSegment = config.output.docsDir.split(/[\\/]/)[0] || config.output.docsDir;
   return new Set([
     "node_modules",
     ".git",
@@ -40,6 +41,9 @@ function getExcludeDirs(config: Config): Set<string> {
     "__pycache__",
     ".venv",
     "venv",
+    "test",
+    "tests",
+    "__tests__",
     docsDirFirstSegment,
   ]);
 }
@@ -132,7 +136,12 @@ async function generateSystemDiagrams(
   const scannedApps = await Promise.all(
     apps.map(async (app) => {
       const analyzer = getAnalyzer(app.analyzerId);
-      if (!analyzer) return null;
+      if (!analyzer) {
+        console.error(
+          `Warning: no analyzer found for language "${app.analyzerId}" (application at ${app.path}). Skipping.`,
+        );
+        return null;
+      }
       const absAppPath = path.resolve(folderPath, app.path);
       return analyzer.analyze(absAppPath, scanConfig);
     }),
@@ -211,7 +220,12 @@ async function generateContainerDiagrams(
   const scannedApps = await Promise.all(
     apps.map(async (app) => {
       const analyzer = getAnalyzer(app.analyzerId);
-      if (!analyzer) return null;
+      if (!analyzer) {
+        console.error(
+          `Warning: no analyzer found for language "${app.analyzerId}" (application at ${app.path}). Skipping.`,
+        );
+        return null;
+      }
       const absAppPath = path.resolve(folderPath, app.path);
       return analyzer.analyze(absAppPath, scanConfig);
     }),
@@ -268,10 +282,20 @@ async function generateCodeDiagrams(
   const d2Files: string[] = [];
 
   const language = detectLanguage(folderPath);
-  if (!language) return d2Files;
+  if (!language) {
+    console.error(
+      `Warning: no supported language detected in ${path.basename(folderPath)}, skipping code diagram.`,
+    );
+    return d2Files;
+  }
 
   const analyzer = getAnalyzer(language);
-  if (!analyzer?.analyzeModule) return d2Files;
+  if (!analyzer?.analyzeModule) {
+    console.error(
+      `Warning: analyzer "${language}" does not support code-level analysis, skipping code diagram for ${path.basename(folderPath)}.`,
+    );
+    return d2Files;
+  }
 
   const scanConfig = toScanConfig(config);
   const symbols = await analyzer.analyzeModule(folderPath, scanConfig);
@@ -320,7 +344,7 @@ export async function processFolder(
   config: Config,
   parentContext?: string,
   parentFolderPath?: string,
-  agentCache?: Map<string, { role: FolderRole; name: string; description: string; confidence: number; signalHash: string }>,
+  agentCache?: Map<string, CacheEntry>,
 ): Promise<string[]> {
   // Load agent cache once at the root call, reuse for all recursive calls
   const cache = agentCache ?? (config.agent.enabled ? loadAgentCache(rootPath) : undefined);

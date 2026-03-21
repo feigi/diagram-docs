@@ -78,6 +78,10 @@ export const generateCommand = new Command("generate")
             filesUnchanged++;
           }
         } catch (err: unknown) {
+          const errCode = (err as NodeJS.ErrnoException).code;
+          if (errCode === "ENOSPC" || errCode === "ENOMEM" || errCode === "EROFS") {
+            throw err;
+          }
           console.error(
             `Warning: component diagram failed for ${container.id}: ${err instanceof Error ? err.message : err}`,
           );

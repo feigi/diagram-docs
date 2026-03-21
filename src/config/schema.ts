@@ -55,7 +55,7 @@ export const configSchema = z
       .object({
         docsDir: z.string().default("docs"),
         theme: z.number().default(0),
-        layout: z.string().default("elk"),
+        layout: z.enum(["dagre", "elk", "tala"]).default("elk"),
         format: z.enum(["svg", "png"]).default("svg"),
       })
       .default({}),
