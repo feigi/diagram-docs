@@ -51,10 +51,10 @@ Parsing approach: line-by-line regex. Does not need a full Groovy/Kotlin parser 
 In `javaAnalyzer.analyze()`:
 
 1. **Read settings.gradle** — call `parseSettingsGradle(appPath)`
-2. **Exclude subproject directories** — if subprojects are found, add their directories to the exclude list passed to `extractPackages()`. This prevents the root from scanning subproject files.
+2. **Exclude subproject directories** — if subprojects are found, convert their directories to glob patterns (e.g., `"app/**"`, `"model/**"`) and add them to the exclude list passed to `extractPackages()`. This prevents the root from scanning subproject files.
 3. **Parse build.gradle deps** — call `parseGradleDependencies()` to get both project deps and Maven deps.
 4. **Populate `externalDependencies`** — from parsed Maven deps (currently only pom.xml is parsed; this adds Gradle support).
-5. **Populate `internalImports`** — from `project(':...')` deps, resolving the project name to a relative path using settings.gradle subproject info.
+5. **Populate `internalImports`** — from `project(':...')` deps, resolving the project name to a relative path using settings.gradle subproject info. Since Gradle project deps are declared at the project level (not module level), use the app's own ID as `sourceModuleId`. The model-builder only uses `targetApplicationId` for container-level relationship creation, so `sourceModuleId` is effectively a placeholder here.
 6. **Set `publishedAs`** — computed from `group` (from build.gradle, or inherited from parent) and artifact name (from settings.gradle `rootProject.name` or subproject name).
 
 ### Post-Scan Cross-App Matching (`src/cli/commands/scan.ts`)
