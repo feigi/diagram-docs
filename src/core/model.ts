@@ -3,7 +3,7 @@ import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import type { ArchitectureModel } from "../analyzers/types.js";
 
-const architectureModelSchema = z.object({
+export const architectureModelSchema = z.object({
   version: z.literal(1),
   system: z.object({
     name: z.string(),

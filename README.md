@@ -6,11 +6,11 @@ Generate [C4 architecture diagrams](https://c4model.com) in [D2](https://d2lang.
 
 ```
 Source code  ──▶  diagram-docs scan   ──▶  raw-structure.json
-                                                  │
-                                            Agent reasons about
-                                            structure, writes model
-                                            (or use deterministic model command)
-                                                  │
+                                                │
+                                          Agent reasons about
+                                          structure, writes model
+                                          (or use deterministic model command)
+                                                │
 Model YAML   ──▶  diagram-docs generate ──▶  D2 diagrams + SVG/PNG
 ```
 
@@ -22,7 +22,21 @@ Alternatively, `model` produces a deterministic architecture model directly from
 
 ```bash
 npm install && npm run build
+```
 
+### Zero-config (simplest)
+
+Run `generate` in any project directory — it discovers source code, scans, builds a model, and generates diagrams automatically:
+
+```bash
+diagram-docs generate
+```
+
+### Step-by-step
+
+For more control over each stage:
+
+```bash
 # Scaffold config
 diagram-docs init
 
@@ -75,7 +89,7 @@ Generate `architecture-model.yaml` deterministically from scan output, without a
 | Flag | Description |
 |------|-------------|
 | `-i, --input <path>` | Path to `raw-structure.json` (default: `.diagram-docs/raw-structure.json`) |
-| `-o, --output <path>` | Output file path |
+| `-o, --output <path>` | Output file path (default: `architecture-model.yaml`) |
 | `-c, --config <path>` | Path to `diagram-docs.yaml` |
 
 The deterministic model builder:
@@ -94,13 +108,18 @@ Generate D2 diagrams from an architecture model.
 | `-c, --config <path>` | Path to `diagram-docs.yaml` |
 | `--submodules` | Generate per-application docs alongside root diagrams |
 
-Model resolution when `-m` is not provided: looks for `architecture-model.yaml` near the config file, then falls back to auto-generating one from `raw-structure.json`.
+Model resolution when `-m` is not provided:
+1. Look for `architecture-model.yaml` near the config file
+2. Auto-generate from `.diagram-docs/raw-structure.json` if it exists
+3. Auto-scan the source code, build a model, and generate diagrams
+
+This means `diagram-docs generate` works with zero setup — no config file, no prior scan needed.
 
 Renders SVG/PNG via the D2 CLI if available. Validates generated D2 before rendering. Checks user-facing D2 files for stale references and prints drift warnings.
 
 ## Configuration
 
-`diagram-docs.yaml`:
+A `diagram-docs.yaml` config file is optional. Without one, defaults are derived from the project directory name.
 
 ```yaml
 system:
@@ -120,7 +139,7 @@ scan:
 levels:
   context: true       # L1 — system + actors + external systems
   container: true      # L2 — containers within the system
-  component: false     # L3 — components within each container
+  component: true      # L3 — components within each container
 
 abstraction:
   granularity: balanced   # detailed | balanced | overview
@@ -130,6 +149,13 @@ abstraction:
     - middleware
     - config
     - utils
+
+externalSystems:              # declare known external systems
+  - name: PostgreSQL
+    technology: SQL
+    usedBy: [user-api]        # container IDs that use this system
+  - name: Redis
+    technology: Cache
 
 output:
   dir: docs/architecture
@@ -153,6 +179,10 @@ submodules:
 | `detailed` | 1:1 module-to-component mapping with disambiguation for duplicate names |
 | `balanced` | Groups modules into up to 20 components using common-prefix-aware grouping |
 | `overview` | One component per container |
+
+### External systems
+
+The `externalSystems` config lets you declare infrastructure dependencies that should appear on the context diagram. Each entry specifies a `name`, optional `technology`, and optional `usedBy` list of container IDs to create relationships automatically.
 
 ## Output structure
 

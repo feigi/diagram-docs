@@ -14,15 +14,25 @@ import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
 import type { Config } from "../../config/schema.js";
 import type { RawStructure } from "../../analyzers/types.js";
+import { runScan, ScanError } from "../../core/scan.js";
+import {
+  buildModelWithLLM,
+  serializeModel,
+  LLMUnavailableError,
+  LLMCallError,
+  LLMOutputError,
+} from "../../core/llm-model-builder.js";
+import { createFrame } from "../frame.js";
 
 export const generateCommand = new Command("generate")
   .description("Generate D2 diagrams from an architecture model")
   .option("-m, --model <path>", "Path to architecture-model.yaml")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
   .option("--submodules", "Generate per-folder docs for each application")
-  .action((options) => {
+  .option("--deterministic", "Use deterministic model builder (skip LLM)")
+  .action(async (options) => {
     const { config, configDir } = loadConfig(options.config);
-    const model = resolveModel(options.model, configDir, config);
+    const model = await resolveModel(options.model, configDir, config, options.deterministic);
 
     const outputDir = path.resolve(configDir, config.output.dir);
     const generatedDir = path.join(outputDir, "_generated");
@@ -147,12 +157,13 @@ export const generateCommand = new Command("generate")
   });
 
 /**
- * Resolve model: explicit path > auto-locate > auto-generate from raw scan.
+ * Resolve model: explicit path > auto-locate > LLM or deterministic from scan.
  */
-function resolveModel(
+async function resolveModel(
   modelPath: string | undefined,
   configDir: string,
   config: Config,
+  deterministic?: boolean,
 ) {
   // 1. Explicit path provided
   if (modelPath) {
@@ -166,23 +177,96 @@ function resolveModel(
     return loadModel(autoModelPath);
   }
 
-  // 3. Auto-generate from raw-structure.json
+  // 3. Get raw structure (from cache or auto-scan)
+  let rawStructure: RawStructure;
   const rawPath = path.resolve(configDir, ".diagram-docs/raw-structure.json");
   if (fs.existsSync(rawPath)) {
-    console.error(
-      "No architecture-model.yaml found. Auto-generating from raw-structure.json...",
-    );
-    const rawStructure: RawStructure = JSON.parse(
-      fs.readFileSync(rawPath, "utf-8"),
-    );
+    console.error("No architecture-model.yaml found.");
+    rawStructure = JSON.parse(fs.readFileSync(rawPath, "utf-8"));
+  } else {
+    console.error("No model or scan data found. Running scan...");
+    try {
+      const result = await runScan({ rootDir: configDir, config });
+      rawStructure = result.rawStructure;
+      console.error("Scan complete.");
+    } catch (err) {
+      if (err instanceof ScanError) {
+        console.error(`Error: ${err.message}`);
+        process.exit(1);
+      }
+      throw err;
+    }
+  }
+
+  // 4. Build model: LLM (default) or deterministic (--deterministic)
+  if (deterministic) {
+    console.error("Building model (deterministic)...");
     return buildModel({ config, rawStructure });
   }
 
-  console.error(
-    "Error: No model found. Provide --model, place architecture-model.yaml in the project root,\n" +
-      "or run 'diagram-docs scan' first so the model can be auto-generated.",
-  );
-  process.exit(1);
+  // Read config YAML for LLM context (if it exists)
+  const configPath = path.resolve(configDir, "diagram-docs.yaml");
+  const configYaml = fs.existsSync(configPath)
+    ? fs.readFileSync(configPath, "utf-8")
+    : undefined;
+
+  const frame = createFrame("LLM Agent");
+  try {
+    const model = await buildModelWithLLM({
+      rawStructure,
+      config,
+      configYaml,
+      onStatus(status, providerName) {
+        frame.update([
+          { text: status, spinner: true },
+          { text: `Provider: ${providerName}` },
+          { text: `Model: ${config.llm.model}` },
+        ]);
+      },
+    });
+    frame.stop([
+      {
+        text: `${model.containers.length} container(s), ` +
+          `${model.components.length} component(s), ` +
+          `${model.relationships.length} relationship(s)`,
+      },
+    ]);
+
+    // Persist to disk so subsequent runs skip LLM
+    fs.writeFileSync(autoModelPath, serializeModel(model), "utf-8");
+    console.error(
+      `Model written to ${path.relative(process.cwd(), autoModelPath)}`,
+    );
+
+    return model;
+  } catch (err) {
+    if (err instanceof LLMUnavailableError) {
+      console.error(`\n${err.message}`);
+      process.exit(1);
+    }
+    if (err instanceof LLMCallError) {
+      console.error(
+        `\nError: ${err.message}\n\n` +
+          "To retry, check your CLI installation and authentication.\n" +
+          "Or use the deterministic builder:\n" +
+          "  diagram-docs generate --deterministic",
+      );
+      process.exit(1);
+    }
+    if (err instanceof LLMOutputError) {
+      console.error(
+        `\nError: ${err.message}\n\n` +
+          "The LLM produced output that could not be parsed as a valid model.\n" +
+          "Try again, or use the deterministic builder:\n" +
+          "  diagram-docs generate --deterministic",
+      );
+      if (err.rawOutput) {
+        console.error(`\nRaw output (first 500 chars):\n${err.rawOutput}`);
+      }
+      process.exit(1);
+    }
+    throw err;
+  }
 }
 
 /**

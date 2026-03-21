@@ -63,6 +63,15 @@ export const configSchema = z.object({
     )
     .default([]),
 
+  llm: z
+    .object({
+      provider: z
+        .enum(["auto", "claude-code", "copilot"])
+        .default("auto"),
+      model: z.string().default("sonnet"),
+    })
+    .default({}),
+
   submodules: z
     .object({
       enabled: z.boolean().default(true),

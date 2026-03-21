@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
 import { configSchema, type Config } from "./schema.js";
+import { humanizeName } from "../core/humanize.js";
 
 const CONFIG_FILENAMES = ["diagram-docs.yaml", "diagram-docs.yml"];
 
@@ -22,8 +23,12 @@ export function loadConfig(configPath?: string): {
   const resolvedPath = configPath ?? findConfigFile(process.cwd());
 
   if (!resolvedPath) {
+    const dirName = path.basename(process.cwd());
+    const config = configSchema.parse({
+      system: { name: humanizeName(dirName) },
+    });
     return {
-      config: configSchema.parse({}),
+      config,
       configDir: process.cwd(),
     };
   }
