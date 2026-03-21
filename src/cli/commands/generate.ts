@@ -11,6 +11,7 @@ import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
 import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
+import { validateD2Files } from "../../generator/d2/validate.js";
 import type { Config } from "../../config/schema.js";
 import type { RawStructure } from "../../analyzers/types.js";
 
@@ -131,6 +132,15 @@ export const generateCommand = new Command("generate")
       for (const sub of subResults) {
         d2Files.push(...sub.d2Files);
       }
+    }
+
+    // Validate generated D2 files
+    const validation = validateD2Files(d2Files);
+    if (validation && validation.errors.length > 0) {
+      for (const err of validation.errors) {
+        console.error(`Validation error: ${err.file}: ${err.message}`);
+      }
+      process.exit(1);
     }
 
     renderD2Files(d2Files, config);
