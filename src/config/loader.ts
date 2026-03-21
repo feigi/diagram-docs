@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parse as parseYaml } from "yaml";
+import { z } from "zod";
 import { configSchema, type Config } from "./schema.js";
 
 const CONFIG_FILENAMES = ["diagram-docs.yaml", "diagram-docs.yml"];
@@ -28,10 +29,22 @@ export function loadConfig(configPath?: string): {
     };
   }
 
-  const raw = fs.readFileSync(resolvedPath, "utf-8");
-  const parsed = parseYaml(raw) ?? {};
-  migrateConfig(parsed);
-  const config = configSchema.parse(parsed);
+  let config: Config;
+  try {
+    const raw = fs.readFileSync(resolvedPath, "utf-8");
+    const parsed = parseYaml(raw) ?? {};
+    migrateConfig(parsed);
+    config = configSchema.parse(parsed);
+  } catch (err: unknown) {
+    if (err instanceof z.ZodError) {
+      const issues = err.issues.map((i) => `  - ${i.path.join(".")}: ${i.message}`).join("\n");
+      throw new Error(`Invalid config in ${resolvedPath}:\n${issues}`);
+    }
+    if (err instanceof Error && err.name === "YAMLParseError") {
+      throw new Error(`YAML syntax error in ${resolvedPath}: ${err.message}`);
+    }
+    throw err;
+  }
 
   return {
     config,

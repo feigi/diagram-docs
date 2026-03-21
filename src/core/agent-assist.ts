@@ -55,7 +55,15 @@ export function loadAgentCache(rootDir: string): Map<string, CacheEntry> {
     const parsed = YAML.parse(raw) as Record<string, CacheEntry> | null;
     if (parsed && typeof parsed === "object") {
       for (const [key, entry] of Object.entries(parsed)) {
-        map.set(key, entry);
+        // Validate cache entries to guard against corrupted YAML
+        if (
+          entry &&
+          typeof entry === "object" &&
+          VALID_ROLES.has((entry as CacheEntry).role) &&
+          typeof (entry as CacheEntry).signalHash === "string"
+        ) {
+          map.set(key, entry as CacheEntry);
+        }
       }
     }
   } catch (err: unknown) {
@@ -310,22 +318,27 @@ export async function agentClassify(
       }
     }
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err);
-    if (msg.includes("MODULE_NOT_FOUND") || msg.includes("Cannot find module")) {
+    // Check for missing SDK via error code (more reliable than string matching)
+    const errCode = (err as NodeJS.ErrnoException).code;
+    if (errCode === "MODULE_NOT_FOUND" || errCode === "ERR_MODULE_NOT_FOUND") {
       throw new Error(
         `${provider} SDK not installed. Run: npm install ${provider === "anthropic" ? "@anthropic-ai/sdk" : "openai"}`,
       );
     }
-    if (msg.includes("401") || msg.includes("403") || msg.includes("auth") || msg.includes("API key")) {
+
+    // Check for HTTP status errors via the .status property (set by both SDKs)
+    const status = (err as { status?: number }).status;
+    if (status === 401 || status === 403) {
       throw new Error(
-        `${provider} authentication failed. Check your API key environment variable.`,
+        `${provider} authentication failed (HTTP ${status}). Check your API key environment variable.`,
       );
     }
-    if (msg.includes("429") || msg.includes("rate limit") || msg.includes("too many requests")) {
+    if (status === 429) {
       console.error(
         `Warning: LLM API rate limited for ${cacheKey}. Consider adding a delay or reducing concurrency. Falling back to heuristic.`,
       );
     } else {
+      const msg = err instanceof Error ? err.message : String(err);
       console.error(
         `Warning: LLM classification failed for ${cacheKey}, falling back to heuristic: ${msg}`,
       );

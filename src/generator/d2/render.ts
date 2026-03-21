@@ -103,8 +103,9 @@ function isUpToDate(d2Path: string, outPath: string): boolean {
   } catch (err: unknown) {
     const errCode = (err as NodeJS.ErrnoException).code;
     if (errCode === "EMFILE" || errCode === "ENFILE") throw err;
-    // If any stat fails (e.g., file deleted between exists check and stat),
-    // treat as out of date — a re-render is the safe fallback.
+    console.error(
+      `Warning: could not check freshness of ${outPath}, will re-render: ${err instanceof Error ? err.message : err}`,
+    );
     return false;
   }
 }

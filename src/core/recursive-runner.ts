@@ -103,6 +103,8 @@ function detectLanguage(folderPath: string): string | null {
   try {
     entries = fs.readdirSync(folderPath, { withFileTypes: true });
   } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EMFILE" || code === "ENFILE") throw err;
     console.error(
       `Warning: cannot read directory for language detection ${folderPath}: ${err instanceof Error ? err.message : err}`,
     );

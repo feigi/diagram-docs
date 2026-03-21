@@ -86,6 +86,8 @@ export function collectSignals(
   try {
     entries = fs.readdirSync(folderPath, { withFileTypes: true });
   } catch (err: unknown) {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "EMFILE" || code === "ENFILE") throw err;
     console.error(
       `Warning: cannot read directory ${folderPath}: ${err instanceof Error ? err.message : err}. Returning empty signals.`,
     );
@@ -146,7 +148,9 @@ export function collectSignals(
         } catch (err: unknown) {
           const code = (err as NodeJS.ErrnoException).code;
           if (code === "EMFILE" || code === "ENFILE") throw err;
-          // README content is non-critical for classification
+          console.error(
+            `Warning: cannot read README at ${path.join(folderPath, name)}: ${err instanceof Error ? err.message : err}`,
+          );
         }
       }
     } else if (entry.isDirectory() && !EXCLUDED_DIRS.has(name)) {
