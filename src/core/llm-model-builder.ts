@@ -52,12 +52,14 @@ function spawnWithStdin(
   args: string[],
   stdinData: string,
   timeoutMs: number,
+  onStderr?: (line: string) => void,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
     const chunks: Buffer[] = [];
     const errChunks: Buffer[] = [];
     let timedOut = false;
+    let stderrBuf = "";
 
     const timer = setTimeout(() => {
       timedOut = true;
@@ -65,7 +67,18 @@ function spawnWithStdin(
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => chunks.push(chunk));
-    child.stderr.on("data", (chunk) => errChunks.push(chunk));
+    child.stderr.on("data", (chunk) => {
+      errChunks.push(chunk);
+      if (onStderr) {
+        stderrBuf += chunk.toString();
+        const lines = stderrBuf.split("\n");
+        stderrBuf = lines.pop() ?? "";
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (trimmed) onStderr(trimmed);
+        }
+      }
+    });
 
     child.on("error", (err) => {
       clearTimeout(timer);
@@ -109,6 +122,7 @@ interface LLMProvider {
     systemPrompt: string,
     userMessage: string,
     model: string,
+    onProgress?: (line: string) => void,
   ): Promise<string>;
 }
 
@@ -128,7 +142,7 @@ const claudeCodeProvider: LLMProvider = {
     return commandExists("claude");
   },
 
-  async generate(systemPrompt, userMessage, model) {
+  async generate(systemPrompt, userMessage, model, onProgress) {
     // Write system prompt to a temp file to avoid arg length limits.
     // User message goes via stdin using async spawn to handle large data.
     const tmpFile = path.join(os.tmpdir(), `diagram-docs-sysprompt-${Date.now()}.txt`);
@@ -144,6 +158,7 @@ const claudeCodeProvider: LLMProvider = {
         ],
         userMessage,
         600_000, // 10 minutes
+        onProgress,
       );
     } finally {
       try { fs.unlinkSync(tmpFile); } catch { /* ignore */ }
@@ -164,10 +179,10 @@ const copilotProvider: LLMProvider = {
     }
   },
 
-  async generate(systemPrompt, userMessage, _model) {
+  async generate(systemPrompt, userMessage, _model, onProgress) {
     // Copilot CLI doesn't support --system-prompt, so combine into one prompt via stdin
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
-    return spawnWithStdin("gh", ["copilot", "-p", combinedPrompt], "", 600_000);
+    return spawnWithStdin("gh", ["copilot", "-p", combinedPrompt], "", 600_000, onProgress);
   },
 };
 
@@ -337,6 +352,7 @@ export interface BuildModelWithLLMOptions {
   configYaml?: string;
   existingModelYaml?: string;
   onStatus?: (status: string, providerName: string) => void;
+  onProgress?: (line: string) => void;
 }
 
 export async function buildModelWithLLM(
@@ -390,6 +406,7 @@ export async function buildModelWithLLM(
     systemPrompt,
     userMessage,
     options.config.llm.model,
+    options.onProgress,
   );
 
   // 4. Strip markdown fences if present

@@ -223,6 +223,11 @@ async function resolveModel(
           { text: `Model: ${config.llm.model}` },
         ]);
       },
+      onProgress(line) {
+        frame.update([
+          { text: line, spinner: true },
+        ]);
+      },
     });
     frame.stop([
       {

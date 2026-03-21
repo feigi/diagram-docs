@@ -62,6 +62,7 @@ export const modelCommand = new Command("model")
         : undefined;
 
       const frame = createFrame("LLM Agent");
+      let lastProgress = "";
       try {
         const model = await buildModelWithLLM({
           rawStructure,
@@ -69,10 +70,17 @@ export const modelCommand = new Command("model")
           configYaml,
           existingModelYaml,
           onStatus(status, providerName) {
+            lastProgress = "";
             frame.update([
               { text: status, spinner: true },
               { text: `Provider: ${providerName}` },
               { text: `Model: ${config.llm.model}` },
+            ]);
+          },
+          onProgress(line) {
+            lastProgress = line;
+            frame.update([
+              { text: line, spinner: true },
             ]);
           },
         });
