@@ -198,7 +198,9 @@ export function collectSignals(
           ) {
             hasPackageStructure = true;
           }
-        } catch {
+        } catch (err: unknown) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code === "EMFILE" || code === "ENFILE") throw err;
           // Non-critical: if we can't check for Java package structure,
           // the classifier will still work with other signals.
         }
