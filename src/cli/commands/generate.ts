@@ -216,17 +216,14 @@ async function resolveModel(
       rawStructure,
       config,
       configYaml,
-      onStatus(status, providerName) {
+      onStatus(status) {
         frame.update([
           { text: status, spinner: true },
-          { text: `Provider: ${providerName}` },
           { text: `Model: ${config.llm.model}` },
         ]);
       },
       onProgress(line) {
-        frame.update([
-          { text: line, spinner: true },
-        ]);
+        frame.log(line);
       },
     });
     frame.stop([

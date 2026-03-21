@@ -112,6 +112,94 @@ function spawnWithStdin(
 }
 
 // ---------------------------------------------------------------------------
+// Streaming JSON spawn helper (for Claude Code CLI)
+// ---------------------------------------------------------------------------
+
+/**
+ * Spawn a process using stream-json output format.
+ * Parses streaming JSON events from stdout to extract text and report progress.
+ */
+function spawnStreamJson(
+  cmd: string,
+  args: string[],
+  stdinData: string,
+  timeoutMs: number,
+  onProgress?: (line: string) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
+    let resultText = "";
+    let stdoutBuf = "";
+    const errChunks: Buffer[] = [];
+    let timedOut = false;
+
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill("SIGTERM");
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      stdoutBuf += chunk.toString();
+      const lines = stdoutBuf.split("\n");
+      stdoutBuf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+          // Text delta — token-by-token streaming
+          const delta = event.event?.delta ?? event.delta;
+          if (delta?.type === "text_delta" && delta.text) {
+            resultText += delta.text;
+            if (onProgress) {
+              const lastLine = resultText.trimEnd().split("\n").pop()?.trim();
+              if (lastLine) onProgress(lastLine);
+            }
+          }
+          // Thinking delta — show reasoning in frame
+          if (delta?.type === "thinking_delta" && delta.thinking && onProgress) {
+            const thought = delta.thinking.trim();
+            if (thought) onProgress(thought);
+          }
+          // Result event — final text (fallback)
+          if (event.type === "result" && typeof event.result === "string") {
+            resultText = event.result;
+          }
+        } catch { /* skip unparseable lines */ }
+      }
+    });
+
+    child.stderr.on("data", (chunk) => errChunks.push(chunk));
+
+    child.on("error", (err) => {
+      clearTimeout(timer);
+      reject(new LLMCallError(`Failed to spawn ${cmd}: ${err.message}`));
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (timedOut) {
+        reject(new LLMCallError(`${cmd} timed out after ${timeoutMs / 1000}s`));
+        return;
+      }
+      if (code !== 0 && !resultText) {
+        const stderr = Buffer.concat(errChunks).toString().trim();
+        reject(
+          new LLMCallError(
+            `${cmd} exited with code ${code}: ${stderr || "(no output)"}`,
+          ),
+        );
+        return;
+      }
+      resolve(resultText);
+    });
+
+    child.stdin.write(stdinData, () => {
+      child.stdin.end();
+    });
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Provider interface & implementations
 // ---------------------------------------------------------------------------
 
@@ -148,13 +236,15 @@ const claudeCodeProvider: LLMProvider = {
     const tmpFile = path.join(os.tmpdir(), `diagram-docs-sysprompt-${Date.now()}.txt`);
     fs.writeFileSync(tmpFile, systemPrompt, "utf-8");
     try {
-      return await spawnWithStdin(
+      return await spawnStreamJson(
         "claude",
         [
           "-p",
+          "--verbose",
+          "--output-format", "stream-json",
+          "--include-partial-messages",
           "--system-prompt-file", tmpFile,
           "--model", model,
-          "--output-format", "text",
         ],
         userMessage,
         600_000, // 10 minutes

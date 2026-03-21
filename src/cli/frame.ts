@@ -1,13 +1,25 @@
 /**
  * Live-updating boxed frame for stderr output.
- * Shows a bordered panel with spinner animation, elapsed timer, and status lines.
+ * Fixed-size panel with spinner, status line, and scrolling log area.
  * Falls back to static output when stderr is not a TTY.
  */
 import chalk from "chalk";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_INTERVAL = 80;
-const MIN_WIDTH = 36;
+const LOG_LINES = 8;
+
+function getFrameWidth(): number {
+  if (process.stderr.isTTY && process.stderr.columns) {
+    return Math.min(process.stderr.columns, 120);
+  }
+  return 80;
+}
+
+/** Strip newlines and collapse whitespace to produce a single safe line. */
+function sanitize(text: string): string {
+  return text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+}
 
 export interface FrameLine {
   text: string;
@@ -16,6 +28,7 @@ export interface FrameLine {
 
 export interface Frame {
   update(lines: FrameLine[]): void;
+  log(text: string): void;
   stop(lines: FrameLine[]): void;
 }
 
@@ -26,65 +39,104 @@ function formatElapsed(ms: number): string {
   return `${mins}m ${secs % 60}s`;
 }
 
-function pad(text: string, width: number): string {
-  const visible = stripAnsi(text);
-  const padding = Math.max(0, width - visible.length);
+function stripAnsi(str: string): string {
+  // eslint-disable-next-line no-control-regex
+  return str.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
+}
+
+function truncate(text: string, maxLen: number): string {
+  if (text.length <= maxLen) return text;
+  return text.slice(0, maxLen - 1) + "…";
+}
+
+function padRight(text: string, width: number): string {
+  const visible = stripAnsi(text).length;
+  const padding = Math.max(0, width - visible);
   return text + " ".repeat(padding);
 }
 
-function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;]*m/g, "");
-}
+export function createFrame(title: string): Frame {
+  const isTTY = process.stderr.isTTY;
+  const frameWidth = getFrameWidth();
+  const inner = frameWidth - 2;
+  const startTime = Date.now();
+  const STATUS_ROWS = 2;
+  const totalRows = 1 + STATUS_ROWS + 1 + LOG_LINES + 1; // top + status + blank + logs + bottom
 
-function renderBox(title: string, lines: string[], width: number): string {
-  const inner = width - 2; // subtract left and right border chars
+  let spinnerIdx = 0;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let firstRender = true;
+  let stopped = false;
+
+  let statusLines: FrameLine[] = [];
+  const logBuffer: string[] = [];
+
+  // Pre-build static parts
   const titleStr = ` ${title} `;
-  const topFill = inner - titleStr.length - 1; // -1 for leading ─
+  const topFill = inner - titleStr.length - 1;
   const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
   const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
 
-  const rows = lines.map((line) => {
-    return chalk.dim("│") + " " + pad(line, inner - 2) + " " + chalk.dim("│");
-  });
+  function row(content: string): string {
+    return chalk.dim("│") + " " + padRight(content, inner - 2) + " " + chalk.dim("│");
+  }
 
-  return [top, ...rows, bottom].join("\n");
-}
-
-function createTTYFrame(title: string): Frame {
-  const isTTY = process.stderr.isTTY;
-  const startTime = Date.now();
-  let spinnerIdx = 0;
-  let timer: ReturnType<typeof setInterval> | null = null;
-  let lastLineCount = 0;
-  let currentLines: FrameLine[] = [];
-  let stopped = false;
+  function emptyRow(): string {
+    return chalk.dim("│") + " ".repeat(inner) + chalk.dim("│");
+  }
 
   function render() {
     const elapsed = Date.now() - startTime;
     const elapsedStr = formatElapsed(elapsed);
     const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
 
-    const rendered = currentLines.map((line) => {
-      if (line.spinner) {
-        return `${spinner} ${line.text}  ${chalk.dim(elapsedStr)}`;
+    // Build status rows
+    const rows: string[] = [];
+    for (let i = 0; i < STATUS_ROWS; i++) {
+      const line = statusLines[i];
+      if (!line) {
+        rows.push(emptyRow());
+        continue;
       }
-      return `  ${line.text}`;
-    });
-
-    // Determine box width from content
-    const contentWidths = rendered.map((l) => stripAnsi(l).length + 4); // +4 for borders + padding
-    const width = Math.max(MIN_WIDTH, ...contentWidths);
-
-    const box = renderBox(title, rendered, width);
-
-    // Move cursor up to overwrite previous frame
-    if (lastLineCount > 0) {
-      process.stderr.write(`\x1b[${lastLineCount}A\x1b[0J`);
+      const safeText = sanitize(line.text);
+      if (line.spinner) {
+        const maxText = inner - 10 - elapsedStr.length;
+        const text = truncate(safeText, maxText);
+        rows.push(row(`${spinner} ${text}  ${chalk.dim(elapsedStr)}`));
+      } else {
+        rows.push(row(`  ${truncate(safeText, inner - 6)}`));
+      }
     }
 
-    process.stderr.write(box + "\n");
-    lastLineCount = currentLines.length + 2; // lines + top + bottom border
+    // Blank separator
+    rows.push(emptyRow());
+
+    // Log rows (last LOG_LINES, dim, full width)
+    const visibleLogs = logBuffer.slice(-LOG_LINES);
+    for (let i = 0; i < LOG_LINES; i++) {
+      const entry = visibleLogs[i];
+      if (!entry) {
+        rows.push(emptyRow());
+      } else {
+        rows.push(row(chalk.dim(truncate(entry, inner - 4))));
+      }
+    }
+
+    const frame = [top, ...rows, bottom].join("\n");
+
+    // Build a single output string: cursor movement + frame
+    let output = "";
+    if (firstRender) {
+      // Reserve space so terminal scrolling doesn't break cursor math
+      output += "\n".repeat(totalRows) + `\x1b[${totalRows}A`;
+      firstRender = false;
+    } else {
+      output += `\x1b[${totalRows}A`;
+    }
+    output += "\x1b[?25l"; // hide cursor
+    output += frame + "\n";
+
+    process.stderr.write(output);
   }
 
   function startTimer() {
@@ -104,9 +156,8 @@ function createTTYFrame(title: string): Frame {
 
   return {
     update(lines: FrameLine[]) {
-      currentLines = lines;
+      statusLines = lines;
       if (!isTTY) {
-        // Non-TTY: print static lines
         const elapsed = formatElapsed(Date.now() - startTime);
         for (const line of lines) {
           const prefix = line.spinner ? `[${elapsed}] ` : "  ";
@@ -115,18 +166,23 @@ function createTTYFrame(title: string): Frame {
         return;
       }
       render();
-      if (lines.some((l) => l.spinner)) {
-        startTimer();
-      } else {
-        stopTimer();
+      startTimer();
+    },
+
+    log(text: string) {
+      const clean = sanitize(text);
+      if (!clean) return;
+      logBuffer.push(clean);
+      if (!isTTY) {
+        process.stderr.write(`  ${chalk.dim(clean)}\n`);
       }
+      // TTY: next timer tick will pick up the new log entry
     },
 
     stop(lines: FrameLine[]) {
       if (stopped) return;
       stopped = true;
       stopTimer();
-      currentLines = lines;
 
       if (!isTTY) {
         for (const line of lines) {
@@ -135,23 +191,20 @@ function createTTYFrame(title: string): Frame {
         return;
       }
 
-      // Final render with checkmark instead of spinner
-      const rendered = lines.map((line) => {
-        return `${chalk.green("✓")} ${line.text}`;
-      });
+      const elapsed = formatElapsed(Date.now() - startTime);
+      const safeText = sanitize(lines[0]?.text ?? "Done");
+      const stopRow = row(
+        `${chalk.green("✓")} ${truncate(safeText, inner - 8)}  ${chalk.dim(elapsed)}`,
+      );
 
-      const contentWidths = rendered.map((l) => stripAnsi(l).length + 4);
-      const width = Math.max(MIN_WIDTH, ...contentWidths);
-      const box = renderBox(title, rendered, width);
-
-      if (lastLineCount > 0) {
-        process.stderr.write(`\x1b[${lastLineCount}A\x1b[0J`);
+      let output = "";
+      if (!firstRender) {
+        output += `\x1b[${totalRows}A`;
       }
-      process.stderr.write(box + "\n");
+      output += [top, stopRow, bottom].join("\n") + "\n";
+      output += "\x1b[?25h"; // show cursor
+
+      process.stderr.write(output);
     },
   };
-}
-
-export function createFrame(title: string): Frame {
-  return createTTYFrame(title);
 }
