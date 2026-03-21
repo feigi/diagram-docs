@@ -30,6 +30,15 @@ function parsePomDependencies(pomPath: string): ExternalDep[] {
   return deps;
 }
 
+function parsePomProjectName(pomPath: string): string | null {
+  if (!fs.existsSync(pomPath)) return null;
+  const content = fs.readFileSync(pomPath, "utf-8");
+  // Remove <parent> block to avoid matching parent's artifactId
+  const withoutParent = content.replace(/<parent>[\s\S]*?<\/parent>/, "");
+  const match = withoutParent.match(/<artifactId>([^<]+)<\/artifactId>/);
+  return match?.[1] ?? null;
+}
+
 export const javaAnalyzer: LanguageAnalyzer = {
   id: "java",
   name: "Java",
@@ -37,7 +46,7 @@ export const javaAnalyzer: LanguageAnalyzer = {
 
   async analyze(appPath: string, config: ScanConfig): Promise<ScannedApplication> {
     const appId = slugify(appPath);
-    const appName = path.basename(appPath);
+    const dirName = path.basename(appPath);
 
     // Read settings.gradle to discover subprojects and exclude their dirs from root scan
     const settings = parseSettingsGradle(appPath);
@@ -99,11 +108,13 @@ export const javaAnalyzer: LanguageAnalyzer = {
     let internalImports: InternalImport[] = [];
     let buildFile: string;
     let publishedAs: string | undefined;
+    let appName = dirName;
 
     if (fs.existsSync(pomPath)) {
       // Maven project
       buildFile = "pom.xml";
       externalDependencies = parsePomDependencies(pomPath);
+      appName = parsePomProjectName(pomPath) ?? dirName;
     } else if (gradleBuildFile) {
       // Gradle project
       buildFile = path.basename(gradleBuildFile);
@@ -137,28 +148,23 @@ export const javaAnalyzer: LanguageAnalyzer = {
         });
       }
 
+      // Derive app name from Gradle settings
+      if (parentSettings) {
+        const matchingSub = parentSettings.subprojects.find(
+          (s) => s.dir === dirName || s.name === dirName,
+        );
+        if (matchingSub) {
+          appName = matchingSub.name;
+        } else {
+          appName = settings?.rootProjectName ?? dirName;
+        }
+      } else {
+        appName = settings?.rootProjectName ?? dirName;
+      }
+
       // Compute publishedAs from group + artifact name
       if (gradleDeps.group) {
-        // Determine artifact name
-        let artifactName: string;
-
-        // Check if this is a subproject by looking at parent's settings.gradle
-        if (parentSettings) {
-          const matchingSub = parentSettings.subprojects.find(
-            (s) => s.dir === appName || s.name === appName,
-          );
-          if (matchingSub) {
-            artifactName = matchingSub.name;
-          } else {
-            // Root project — use rootProject.name from own settings
-            artifactName = settings?.rootProjectName ?? appName;
-          }
-        } else {
-          // No parent settings — this is either a standalone or root project
-          artifactName = settings?.rootProjectName ?? appName;
-        }
-
-        publishedAs = `${gradleDeps.group}:${artifactName}`;
+        publishedAs = `${gradleDeps.group}:${appName}`;
       }
     } else {
       buildFile = "build.gradle";
