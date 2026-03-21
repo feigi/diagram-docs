@@ -190,4 +190,28 @@ describe("Integration: Post-scan cross-app coordinate matching", () => {
       "org.springframework:spring-web",
     );
   });
+
+  it("does not create self-referencing imports", async () => {
+    const apps: ScannedApplication[] = [
+      {
+        id: "self-ref",
+        path: "self-ref",
+        name: "self-ref",
+        language: "java",
+        buildFile: "build.gradle",
+        modules: [],
+        externalDependencies: [
+          { name: "com.example:self-ref", version: "1.0.0" },
+        ],
+        internalImports: [],
+        publishedAs: "com.example:self-ref",
+      },
+    ];
+
+    const { matchCrossAppCoordinates } = await import("../../src/cli/commands/scan.js");
+    matchCrossAppCoordinates(apps);
+
+    expect(apps[0].internalImports).toHaveLength(0);
+    expect(apps[0].externalDependencies).toHaveLength(1);
+  });
 });

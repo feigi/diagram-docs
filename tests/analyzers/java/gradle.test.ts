@@ -30,6 +30,16 @@ describe("parseSettingsGradle", () => {
     const result = parseSettingsGradle("/tmp/nonexistent-dir");
     expect(result).toBeNull();
   });
+
+  it("handles settings.gradle.kts (Kotlin DSL)", () => {
+    const result = parseSettingsGradle(path.join(FIXTURES, "kts-project"));
+    expect(result).not.toBeNull();
+    expect(result!.rootProjectName).toBe("kts-system");
+    expect(result!.subprojects).toEqual([
+      { name: "api", dir: "api" },
+      { name: "core", dir: "core" },
+    ]);
+  });
 });
 
 describe("parseGradleDependencies", () => {
@@ -64,6 +74,19 @@ describe("parseGradleDependencies", () => {
     const result = parseGradleDependencies(buildFile);
 
     expect(result.group).toBe("com.example.shorthand");
+  });
+
+  it("handles build.gradle.kts (Kotlin DSL)", () => {
+    const buildFile = path.join(FIXTURES, "kts-project", "api", "build.gradle.kts");
+    const result = parseGradleDependencies(buildFile);
+
+    expect(result.group).toBe("com.example.kts");
+    expect(result.projectDeps).toEqual(["core"]);
+    expect(result.mavenDeps).toContainEqual({
+      group: "org.example",
+      artifact: "kts-lib",
+      version: "2.0",
+    });
   });
 
   it("excludes test dependencies", () => {

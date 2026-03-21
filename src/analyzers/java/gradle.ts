@@ -85,27 +85,28 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
   const content = fs.readFileSync(buildFilePath, "utf-8");
 
   // Extract group: handles both `group = '...'` and `group '...'` (Groovy shorthand)
-  const groupMatch = content.match(/^group\s*=?\s*['"]([^'"]+)['"]/m);
+  const groupMatch = content.match(/^group\b\s*=?\s*['"]([^'"]+)['"]/m);
   const group = groupMatch?.[1] ?? null;
 
   const projectDeps: string[] = [];
   const mavenDeps: GradleDependencies["mavenDeps"] = [];
 
-  // Match dependency lines: implementation/api/compileOnly project(':name')
+  // Match dependency lines: both Groovy (`implementation '...'`, `implementation project(':...')`)
+  // and Kotlin DSL (`implementation("...")`, `implementation(project(":..."))`)
   // Word-boundary prefix prevents matching testImplementation as implementation
-  const implConfigs = "(?:^|\\s)(?:implementation|api|compileOnly|runtimeOnly)";
+  const implConfigs = "(?:^|\\s)(?:implementation|api|compileOnly|runtimeOnly|annotationProcessor)";
   const testConfigs = "(?:testImplementation|testCompileOnly|testRuntimeOnly|testAnnotationProcessor)";
 
+  // project(':name') deps — Groovy: `implementation project(':x')`, Kotlin: `implementation(project(":x"))`
   for (const match of content.matchAll(
-    new RegExp(`${implConfigs}\\s+project\\s*\\(\\s*['\"][:.]?([^'\"]+)['\"]\\s*\\)`, "gm"),
+    new RegExp(`${implConfigs}\\s*\\(?\\s*project\\s*\\(\\s*['\"][:.]?([^'\"]+)['\"]\\s*\\)`, "gm"),
   )) {
     projectDeps.push(match[1].replace(/^:/, ""));
   }
 
-  // Match Maven coordinate deps: implementation 'group:artifact:version'
-  // and implementation 'group:artifact' (version managed by BOM)
+  // Maven coordinate deps — Groovy: `implementation 'g:a:v'`, Kotlin: `implementation("g:a:v")`
   for (const match of content.matchAll(
-    new RegExp(`${implConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "gm"),
+    new RegExp(`${implConfigs}\\s*\\(?\\s*['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "gm"),
   )) {
     mavenDeps.push({
       group: match[1],
@@ -117,7 +118,7 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
   // Exclude deps from test configurations — scan for those and remove matches
   const testDeps = new Set<string>();
   for (const match of content.matchAll(
-    new RegExp(`${testConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "g"),
+    new RegExp(`${testConfigs}\\s*\\(?\\s*['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "g"),
   )) {
     testDeps.add(`${match[1]}:${match[2]}`);
   }

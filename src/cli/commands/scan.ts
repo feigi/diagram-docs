@@ -108,6 +108,7 @@ export const scanCommand = new Command("scan")
     };
 
     const applications: ScannedApplication[] = [];
+    const rootPrefix = slugify(rootDir);
     for (const app of discovered) {
       const analyzer = getAnalyzer(app.analyzerId);
       if (!analyzer) {
@@ -149,7 +150,6 @@ export const scanCommand = new Command("scan")
             relativeId + imp.targetApplicationId.slice(absolutePrefix.length);
         }
         // Also normalize targets that use absolute paths of other apps
-        const rootPrefix = slugify(rootDir);
         if (imp.targetApplicationId.startsWith(rootPrefix)) {
           imp.targetApplicationId =
             imp.targetApplicationId.slice(rootPrefix.length + 1); // +1 for the separator

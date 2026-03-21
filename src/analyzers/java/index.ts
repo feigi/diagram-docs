@@ -12,7 +12,7 @@ import type {
 import { slugify } from "../../core/slugify.js";
 import { parseJavaImports } from "./imports.js";
 import { extractPackages, detectSpringAnnotations } from "./packages.js";
-import { parseSettingsGradle, parseGradleDependencies } from "./gradle.js";
+import { parseSettingsGradle, parseGradleDependencies, findFile } from "./gradle.js";
 
 function parsePomDependencies(pomPath: string): ExternalDep[] {
   if (!fs.existsSync(pomPath)) return [];
@@ -93,7 +93,7 @@ export const javaAnalyzer: LanguageAnalyzer = {
 
     // Handle build file dependencies
     const pomPath = path.join(appPath, "pom.xml");
-    const gradleBuildFile = findBuildGradle(appPath);
+    const gradleBuildFile = findFile(appPath, ["build.gradle", "build.gradle.kts"]);
 
     let externalDependencies: ExternalDep[] = [];
     let internalImports: InternalImport[] = [];
@@ -187,10 +187,3 @@ function deduplicateImports(imports: ModuleImport[]): ModuleImport[] {
   });
 }
 
-function findBuildGradle(appPath: string): string | null {
-  for (const name of ["build.gradle", "build.gradle.kts"]) {
-    const p = path.join(appPath, name);
-    if (fs.existsSync(p)) return p;
-  }
-  return null;
-}
