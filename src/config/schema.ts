@@ -28,7 +28,7 @@ export const configSchema = z.object({
     .object({
       context: z.boolean().default(true),
       container: z.boolean().default(true),
-      component: z.boolean().default(false),
+      component: z.boolean().default(true),
     })
     .default({}),
 
