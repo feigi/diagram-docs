@@ -84,8 +84,8 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
 
   const content = fs.readFileSync(buildFilePath, "utf-8");
 
-  // Extract group
-  const groupMatch = content.match(/^group\s*=\s*['"]([^'"]+)['"]/m);
+  // Extract group: handles both `group = '...'` and `group '...'` (Groovy shorthand)
+  const groupMatch = content.match(/^group\s*=?\s*['"]([^'"]+)['"]/m);
   const group = groupMatch?.[1] ?? null;
 
   const projectDeps: string[] = [];

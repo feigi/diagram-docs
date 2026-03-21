@@ -59,6 +59,13 @@ describe("parseGradleDependencies", () => {
     expect(result.mavenDeps).toEqual([]);
   });
 
+  it("handles Groovy shorthand group syntax (no equals sign)", () => {
+    const buildFile = path.join(FIXTURES, "groovy-shorthand", "build.gradle");
+    const result = parseGradleDependencies(buildFile);
+
+    expect(result.group).toBe("com.example.shorthand");
+  });
+
   it("excludes test dependencies", () => {
     const buildFile = path.join(FIXTURES, "app", "build.gradle");
     const result = parseGradleDependencies(buildFile);
