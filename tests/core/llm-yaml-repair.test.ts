@@ -17,6 +17,7 @@ describe("repairLLMYaml", () => {
     expect(result.yaml).toBe(valid);
     expect(result.linesSplit).toBe(0);
     expect(result.linesRemoved).toBe(0);
+    expect(result.removedLines).toEqual([]);
   });
 
   it("splits smashed list items onto separate lines", () => {
@@ -66,6 +67,8 @@ describe("repairLLMYaml", () => {
     const result = repairLLMYaml(truncated);
     expect(result.yaml).not.toContain("cut off");
     expect(result.linesRemoved).toBe(1);
+    expect(result.removedLines).toHaveLength(1);
+    expect(result.removedLines[0]).toContain("cut off");
     // Should still be parseable
     const parsed = parseYaml(result.yaml) as { system: { name: string } };
     expect(parsed.system.name).toBe("Test");

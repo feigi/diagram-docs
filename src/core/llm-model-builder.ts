@@ -124,8 +124,11 @@ function spawnWithStdin(
       if ((err as NodeJS.ErrnoException).code === "EPIPE") {
         epipeSeen = true;
         const warning = `Warning: EPIPE writing to ${cmd} stdin — child may not have consumed full input`;
-        try { process.stderr.write(`${warning}\n`); } catch { /* stderr may be unavailable */ }
-        if (onStderr) onStderr(warning);
+        if (onStderr) {
+          onStderr(warning);
+        } else {
+          try { process.stderr.write(`${warning}\n`); } catch { /* stderr may be unavailable */ }
+        }
         return;
       }
       if (!settled) {
@@ -344,8 +347,11 @@ function spawnStreamJson(
       if ((err as NodeJS.ErrnoException).code === "EPIPE") {
         epipeSeen = true;
         const warning = `Warning: EPIPE writing to ${cmd} stdin — child may not have consumed full input`;
-        try { process.stderr.write(`${warning}\n`); } catch { /* stderr may be unavailable */ }
-        if (onProgress) onProgress({ line: warning, final: true, kind: "thinking" });
+        if (onProgress) {
+          onProgress({ line: warning, final: true, kind: "thinking" });
+        } else {
+          try { process.stderr.write(`${warning}\n`); } catch { /* stderr may be unavailable */ }
+        }
         return;
       }
       if (!settled) {
@@ -454,10 +460,14 @@ const copilotProvider: LLMProvider = {
     }
   },
 
-  async generate(systemPrompt, userMessage, _model, _onProgress) {
-    // Copilot CLI doesn't support --system-prompt or streaming, so combine into one prompt via stdin
+  async generate(systemPrompt, userMessage, _model, onProgress) {
+    // Copilot CLI doesn't support --system-prompt or streaming, so combine into one prompt.
+    // Pass via stdin to avoid OS argument length limits on large codebases.
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
-    return spawnWithStdin("gh", ["copilot", "-p", combinedPrompt], "", 600_000);
+    return spawnWithStdin(
+      "gh", ["copilot", "-p", "-"], combinedPrompt, 600_000,
+      onProgress ? (line) => onProgress({ line, final: true, kind: "output" }) : undefined,
+    );
   },
 };
 
@@ -656,6 +666,8 @@ export interface RepairResult {
   readonly linesSplit: number;
   /** Number of trailing structurally broken lines that were removed. */
   readonly linesRemoved: number;
+  /** Content of lines that were removed during trailing-truncation repair. */
+  readonly removedLines: readonly string[];
 }
 
 /**
@@ -671,6 +683,7 @@ export interface RepairResult {
 export function repairLLMYaml(yaml: string): RepairResult {
   const lines = yaml.split("\n");
   const repaired: string[] = [];
+  const removedLines: string[] = [];
   let linesSplit = 0;
   let linesRemoved = 0;
 
@@ -711,27 +724,27 @@ export function repairLLMYaml(yaml: string): RepairResult {
     const last = repaired[repaired.length - 1];
     const trimmed = last.trim();
     if (!trimmed) {
-      repaired.pop();
+      removedLines.push(repaired.pop()!);
       linesRemoved++;
       continue;
     }
     // Count quotes — odd number means unclosed string
     const quoteCount = (trimmed.match(/"/g) || []).length;
     if (quoteCount % 2 !== 0) {
-      repaired.pop();
+      removedLines.push(repaired.pop()!);
       linesRemoved++;
       continue;
     }
     // Incomplete list item (just a dash with no value)
     if (/^-\s*$/.test(trimmed)) {
-      repaired.pop();
+      removedLines.push(repaired.pop()!);
       linesRemoved++;
       continue;
     }
     break;
   }
 
-  return { yaml: repaired.join("\n"), linesSplit, linesRemoved };
+  return { yaml: repaired.join("\n"), linesSplit, linesRemoved, removedLines };
 }
 
 // ---------------------------------------------------------------------------
@@ -887,6 +900,7 @@ export async function buildModelWithLLM(
   if (!rawOutput.startsWith("version:") && !rawOutput.startsWith("---")) {
     const yamlStart = rawOutput.indexOf("\nversion:");
     if (yamlStart !== -1) {
+      emit(`Stripped ${yamlStart} characters of preamble text before YAML`);
       rawOutput = rawOutput.slice(yamlStart + 1);
     }
   }
@@ -899,6 +913,9 @@ export async function buildModelWithLLM(
       `Repaired LLM YAML: ${repair.linesSplit} smashed lines split, ` +
         `${repair.linesRemoved} trailing broken lines removed.`,
     );
+    if (repair.removedLines.length > 0) {
+      emit(`Removed trailing lines:\n${repair.removedLines.join("\n")}`);
+    }
   }
 
   if (!rawOutput.trim()) {
