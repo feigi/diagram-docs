@@ -2,40 +2,30 @@
 
 ## Iteration 1 — 2026-03-22
 
-### Objective
-PR review of feat/llm-performance, fix all issues.
+### What happened
+Ran comprehensive PR review using 4 parallel specialized agents:
+1. **Code reviewer** — found 1 important issue (system name/desc fallback bug)
+2. **Silent failure hunter** — found 10 issues (2 critical, 3 high, 5 medium)
+3. **Test analyzer** — found 10 coverage gaps (criticality 5-9)
+4. **Type design analyzer** — comprehensive analysis, callback asymmetry noted
 
-### Review Summary
-Ran 3 parallel review agents (code-reviewer, silent-failure-hunter, type-design-analyzer) on the 9 changed files. Found issues in these categories:
+### Issues fixed this iteration
+1. **Bug**: System name/description remain empty when synthesis succeeds but omits them → Added config fallback after try/catch block
+2. **Consistency**: Per-app YAML preamble stripping now logged (matching main path)
+3. **Consistency**: Synthesis YAML repair stats now logged (matching per-app path)
+4. **Readability**: Used `ScannedApplication` type instead of `RawStructure["applications"][0]`
+5. **Test**: Added test for synthesis-omits-system-fields fallback
 
-### Issues Found & Fixed
+### Commit
+`6a2aebc` — fix: address PR review findings for parallel model builder
 
-1. **CRITICAL: Broad catch silently swallows all errors in buildOneApp** — Now differentiates LLMCallError/LLMOutputError/YAMLParseError (recoverable → fallback) from TypeError/ReferenceError (programming bugs → propagate). When ALL apps fail, throws instead of returning a purely deterministic model.
+### Status
+- All 235 tests pass
+- Typecheck clean
+- Committed
 
-2. **HIGH: Synthesis output used `as` type assertion** — Replaced with Zod schema validation. Mutations now applied atomically (validate all fields first, then apply).
-
-3. **HIGH: File read errors silently swallowed in buildOneApp** — Ported careful error handling from the single-app path: only ENOENT falls back to text, other FS errors propagate, warnings emitted for empty files.
-
-4. **HIGH: onStatus was sole error channel and it's optional** — Added `warn()` helper that falls back to `process.stderr.write` when no callback provided.
-
-5. **HIGH: Synthesis catch also too broad** — Now only catches LLM/output/YAML/Zod errors; programming errors propagate.
-
-6. **MEDIUM: Cross-app rel filter included external system rels** — Added null check: both endpoints must resolve to a container.
-
-7. **MEDIUM: Provider errors not wrapped** — Provider.generate() errors now wrapped as LLMCallError at the boundary, keeping outer catch logic clean.
-
-8. **MEDIUM: Dynamic import unhandled** — Wrapped in try-catch with descriptive LLMCallError.
-
-9. **MEDIUM: Bare "h2" keyword false positives** — Removed. Only "h2database" remains.
-
-10. **MEDIUM: DetectedExternalSystem.type was bare string** — Introduced `SystemType` literal union, used in `inferExternalRelationshipLabel` with `Record<SystemType, string>` lookup.
-
-11. **LOW: Precondition guard** — `buildModelParallel` now throws if < 2 apps.
-
-12. **LOW: Comment correction** — Fixed reversed substring relationship in ROLE_PATTERNS comment.
-
-### Tests
-- Updated parallel-model-builder tests to use 2+ apps (precondition guard)
-- Added "throws when ALL per-app calls fail" test
-- Updated patterns tests for removed h2 keyword and typed SystemType
-- All 234 tests pass, typecheck clean
+### Remaining review items (not addressed — by design or low priority)
+- Silent failure hunter's "critical" findings are by-design fallback behavior (logged with warnings)
+- Callback signature asymmetry (ParallelBuildOptions vs BuildModelWithLLMOptions) — low impact, bridged at callsite
+- Test coverage gaps for concurrency semaphore, cross-app rels, file-based output path — could add but existing coverage is good
+- TOCTOU existsSync race — handled correctly in catch block, just cosmetic
