@@ -11,7 +11,7 @@ import type {
 import type { Config } from "../config/schema.js";
 import { slugify } from "./slugify.js";
 import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
-import { detectRole, detectExternalSystems } from "./patterns.js";
+import { detectRole, detectExternalSystems, inferRelationshipLabel, inferComponentTech, type Role } from "./patterns.js";
 
 export interface BuildModelOptions {
   config: Config;
@@ -272,21 +272,11 @@ function inferComponentTechnology(
   mod: ScannedModule,
   language: string,
 ): string {
-  const meta = mod.metadata;
-  // Check annotations for framework stereotypes
-  const annotations = meta["annotations"]?.split(",") ?? [];
-  for (const ann of annotations) {
-    if (ann === "Controller" || ann === "RestController") return "Spring MVC";
-    if (ann === "Service") return "Spring Service";
-    if (ann === "Repository") return "Spring Data JPA";
-    if (ann === "Component") return "Spring Component";
-    if (ann === "Configuration") return "Spring Configuration";
-    if (ann === "Entity") return "JPA Entity";
+  const annotations = mod.metadata["annotations"] ?? "";
+  if (annotations) {
+    return inferComponentTech(annotations, language);
   }
-
-  // Framework annotations from metadata
-  if (meta["framework"]) return meta["framework"];
-
+  if (mod.metadata["framework"]) return mod.metadata["framework"];
   return language.charAt(0).toUpperCase() + language.slice(1);
 }
 
@@ -423,6 +413,26 @@ function buildRelationships(
     }
   }
 
+  // Build module → role lookup
+  const moduleRole = new Map<string, Role | undefined>();
+  for (const app of apps) {
+    for (const m of app.modules) {
+      moduleRole.set(m.id, detectRole(m.metadata["annotations"] ?? ""));
+    }
+  }
+
+  // Build component → role lookup (use first module with a role)
+  const componentRole = new Map<string, Role | undefined>();
+  for (const comp of components) {
+    for (const modId of comp.moduleIds) {
+      const role = moduleRole.get(modId);
+      if (role) {
+        componentRole.set(comp.id, role);
+        break;
+      }
+    }
+  }
+
   // Map component ID → container ID for promoting cross-container relationships
   const componentToContainer = new Map<string, string>();
   for (const comp of components) {
@@ -475,7 +485,10 @@ function buildRelationships(
           relationships.push({
             sourceId: sourceComp,
             targetId: targetComp,
-            label: "Uses",
+            label: inferRelationshipLabel(
+              componentRole.get(sourceComp),
+              componentRole.get(targetComp),
+            ),
           });
         }
 

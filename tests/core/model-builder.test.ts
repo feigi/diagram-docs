@@ -95,9 +95,9 @@ describe("buildModel", () => {
     expect(model.components).toHaveLength(2);
     expect(model.components[0].containerId).toBe("services-user-api");
     expect(model.components[0].name).toBe("User");
-    expect(model.components[0].technology).toBe("Spring MVC");
+    expect(model.components[0].technology).toBe("Java REST Controller");
     expect(model.components[1].name).toBe("Repo");
-    expect(model.components[1].technology).toBe("Spring Data JPA");
+    expect(model.components[1].technology).toBe("Java Repository");
   });
 
   it("produces one component per container in overview mode", () => {
@@ -769,6 +769,98 @@ describe("buildModel", () => {
     expect(model.externalSystems.some((e) => e.name === "PostgreSQL")).toBe(true);
     // Total: 2 distinct systems
     expect(model.externalSystems).toHaveLength(2);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Role-aware relationship labels
+  // ---------------------------------------------------------------------------
+
+  it("labels controller-to-service relationships as 'Delegates to'", () => {
+    const config = makeConfig({ abstraction: { granularity: "detailed" } });
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [
+          {
+            id: "app-ctrl",
+            path: "ctrl",
+            name: "ctrl",
+            files: ["UserController.java"],
+            exports: ["UserController"],
+            imports: [
+              { source: "svc", resolved: "app-svc", isExternal: false },
+            ],
+            metadata: { annotations: "RestController" },
+          },
+          {
+            id: "app-svc",
+            path: "svc",
+            name: "svc",
+            files: ["UserService.java"],
+            exports: ["UserService"],
+            imports: [],
+            metadata: { annotations: "Service" },
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    const rel = model.relationships.find(
+      (r) => r.sourceId === "app-ctrl" && r.targetId === "app-svc",
+    );
+    expect(rel).toBeDefined();
+    expect(rel!.label).toBe("Delegates to");
+  });
+
+  it("labels relationships to repository as 'Persists via'", () => {
+    const config = makeConfig({ abstraction: { granularity: "detailed" } });
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [
+          {
+            id: "app-svc",
+            path: "svc",
+            name: "svc",
+            files: ["UserService.java"],
+            exports: ["UserService"],
+            imports: [
+              { source: "repo", resolved: "app-repo", isExternal: false },
+            ],
+            metadata: { annotations: "Service" },
+          },
+          {
+            id: "app-repo",
+            path: "repo",
+            name: "repo",
+            files: ["UserRepository.java"],
+            exports: ["UserRepository"],
+            imports: [],
+            metadata: { annotations: "Repository" },
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    const rel = model.relationships.find(
+      (r) => r.sourceId === "app-svc" && r.targetId === "app-repo",
+    );
+    expect(rel).toBeDefined();
+    expect(rel!.label).toBe("Persists via");
   });
 
   // ---------------------------------------------------------------------------
