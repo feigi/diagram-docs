@@ -4,6 +4,7 @@
  * Falls back to static output when stderr is not a TTY.
  */
 import chalk from "chalk";
+import { constants as osConstants } from "node:os";
 
 const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 const SPINNER_INTERVAL = 80;
@@ -124,10 +125,23 @@ export function createFrame(title: string): Frame {
   }
 
   function emergencyDisableMouse() {
-    process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h");
+    try { process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h"); } catch { /* best-effort during exit */ }
     if (stdinTTY) {
-      try { process.stdin.setRawMode(false); } catch {}
+      try { process.stdin.setRawMode(false); } catch { /* best-effort during exit */ }
     }
+  }
+
+  // Signal handler that restores the terminal and exits with the conventional
+  // 128+signal code.  This is necessary because raw-mode stdin keeps the event
+  // loop alive, preventing default signal behavior from terminating the process.
+  let signalHandled = false;
+  function handleSignal(signal: NodeJS.Signals) {
+    if (signalHandled) return;
+    signalHandled = true;
+    process.removeListener("exit", emergencyDisableMouse);
+    emergencyDisableMouse();
+    const sigNum = osConstants.signals[signal] ?? 2;
+    process.exit(128 + sigNum);
   }
 
   function enableMouse() {
@@ -135,14 +149,24 @@ export function createFrame(title: string): Frame {
     wasRawMode = process.stdin.isRaw;
     process.stdin.setRawMode(true);
     process.stdin.resume();
-    process.stderr.write("\x1b[?1000h\x1b[?1006h"); // enable SGR mouse mode
+    try {
+      process.stderr.write("\x1b[?1000h\x1b[?1006h"); // enable SGR mouse mode
+    } catch {
+      // stderr unavailable — restore stdin and bail out so the user isn't trapped in raw mode
+      try { process.stdin.setRawMode(wasRawMode); } catch { /* best-effort */ }
+      return;
+    }
     process.on("exit", emergencyDisableMouse);
-    process.on("SIGINT", emergencyDisableMouse);
-    process.on("SIGTERM", emergencyDisableMouse);
+    process.on("SIGINT", handleSignal);
+    process.on("SIGTERM", handleSignal);
     stdinListener = (data: Buffer) => {
       const str = data.toString();
-      // Ctrl+C in raw mode arrives as \x03 — restore terminal and exit
+      // Ctrl+C in raw mode arrives as \x03 — restore terminal and exit.
+      // Uses the same signalHandled guard as handleSignal to prevent double-cleanup if both fire.
       if (str.includes("\x03")) {
+        if (signalHandled) return;
+        signalHandled = true;
+        process.removeListener("exit", emergencyDisableMouse);
         emergencyDisableMouse();
         process.exit(130);
         return;
@@ -164,15 +188,16 @@ export function createFrame(title: string): Frame {
 
   function disableMouse() {
     process.removeListener("exit", emergencyDisableMouse);
-    process.removeListener("SIGINT", emergencyDisableMouse);
-    process.removeListener("SIGTERM", emergencyDisableMouse);
+    process.removeListener("SIGINT", handleSignal);
+    process.removeListener("SIGTERM", handleSignal);
+    signalHandled = false; // Reset for potential re-enable via next enableMouse() call
     if (stdinListener) {
       process.stdin.removeListener("data", stdinListener);
       stdinListener = null;
     }
     if (stdinTTY) {
-      process.stderr.write("\x1b[?1000l\x1b[?1006l"); // disable mouse mode
-      process.stdin.setRawMode(wasRawMode);
+      try { process.stderr.write("\x1b[?1000l\x1b[?1006l"); } catch { /* stderr may be unavailable */ } // disable mouse mode
+      try { process.stdin.setRawMode(wasRawMode); } catch { /* stdin may be unavailable */ }
       process.stdin.unref();
     }
   }

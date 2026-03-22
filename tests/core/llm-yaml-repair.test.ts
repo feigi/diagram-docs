@@ -13,7 +13,10 @@ describe("repairLLMYaml", () => {
       '    name: "Foo"',
     ].join("\n");
 
-    expect(repairLLMYaml(valid)).toBe(valid);
+    const result = repairLLMYaml(valid);
+    expect(result.yaml).toBe(valid);
+    expect(result.linesSplit).toBe(0);
+    expect(result.linesRemoved).toBe(0);
   });
 
   it("splits smashed list items onto separate lines", () => {
@@ -22,14 +25,15 @@ describe("repairLLMYaml", () => {
       '      - "los-some-id"      - "los-other-id"',
     ].join("\n");
 
-    const repaired = repairLLMYaml(broken);
+    const result = repairLLMYaml(broken);
     // Should produce two separate list items
-    expect(repaired).toContain('- "los-some-id"');
-    expect(repaired).toContain('- "los-other-id"');
+    expect(result.yaml).toContain('- "los-some-id"');
+    expect(result.yaml).toContain('- "los-other-id"');
     // Both should be on separate lines
-    const lines = repaired.split("\n");
+    const lines = result.yaml.split("\n");
     const itemLines = lines.filter((l) => l.trim().startsWith("- "));
     expect(itemLines).toHaveLength(2);
+    expect(result.linesSplit).toBe(1);
   });
 
   it("repaired smashed list items produce valid YAML", () => {
@@ -43,8 +47,8 @@ describe("repairLLMYaml", () => {
       '      - "mod-three"',
     ].join("\n");
 
-    const repaired = repairLLMYaml(broken);
-    const parsed = parseYaml(repaired) as {
+    const result = repairLLMYaml(broken);
+    const parsed = parseYaml(result.yaml) as {
       components: { id: string; moduleIds: string[] }[];
     };
     expect(parsed.components[0].moduleIds).toEqual(["mod-one", "mod-two"]);
@@ -59,10 +63,11 @@ describe("repairLLMYaml", () => {
       '  description: "This was cut off mid-sen',
     ].join("\n");
 
-    const repaired = repairLLMYaml(truncated);
-    expect(repaired).not.toContain("cut off");
+    const result = repairLLMYaml(truncated);
+    expect(result.yaml).not.toContain("cut off");
+    expect(result.linesRemoved).toBe(1);
     // Should still be parseable
-    const parsed = parseYaml(repaired) as { system: { name: string } };
+    const parsed = parseYaml(result.yaml) as { system: { name: string } };
     expect(parsed.system.name).toBe("Test");
   });
 
@@ -74,12 +79,13 @@ describe("repairLLMYaml", () => {
       "  - ",
     ].join("\n");
 
-    const repaired = repairLLMYaml(truncated);
-    const parsed = parseYaml(repaired) as {
+    const result = repairLLMYaml(truncated);
+    const parsed = parseYaml(result.yaml) as {
       containers: { id: string }[];
     };
     expect(parsed.containers).toHaveLength(1);
     expect(parsed.containers[0].id).toBe("foo");
+    expect(result.linesRemoved).toBe(1);
   });
 
   it("removes multiple trailing broken lines", () => {
@@ -92,11 +98,12 @@ describe("repairLLMYaml", () => {
       '  - sourceId: "a',
     ].join("\n");
 
-    const repaired = repairLLMYaml(truncated);
+    const result = repairLLMYaml(truncated);
     // The broken sourceId line should be removed
-    expect(repaired).not.toContain("sourceId");
-    const parsed = parseYaml(repaired) as { system: { name: string } };
+    expect(result.yaml).not.toContain("sourceId");
+    const parsed = parseYaml(result.yaml) as { system: { name: string } };
     expect(parsed.system.name).toBe("OK");
+    expect(result.linesRemoved).toBeGreaterThan(0);
   });
 
   it("handles smashed items where first item has unclosed quote", () => {
@@ -107,11 +114,12 @@ describe("repairLLMYaml", () => {
       '      - "los-      - "los-cha-app-com-bmw-los-next-charging-infrastructure-dynamodb"',
     ].join("\n");
 
-    const repaired = repairLLMYaml(broken);
-    const parsed = parseYaml(repaired) as { moduleIds: string[] };
+    const result = repairLLMYaml(broken);
+    const parsed = parseYaml(result.yaml) as { moduleIds: string[] };
     expect(parsed.moduleIds).toContain(
       "los-cha-app-com-bmw-los-next-charging-infrastructure-dynamodb",
     );
+    expect(result.linesSplit).toBe(1);
   });
 
   it("handles multiple smashed items with varied spacing", () => {
@@ -120,8 +128,9 @@ describe("repairLLMYaml", () => {
       '      - "alpha"    - "beta"       - "gamma"',
     ].join("\n");
 
-    const repaired = repairLLMYaml(broken);
-    const parsed = parseYaml(repaired) as { moduleIds: string[] };
+    const result = repairLLMYaml(broken);
+    const parsed = parseYaml(result.yaml) as { moduleIds: string[] };
     expect(parsed.moduleIds).toEqual(["alpha", "beta", "gamma"]);
+    expect(result.linesSplit).toBe(1);
   });
 });
