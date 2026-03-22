@@ -377,7 +377,7 @@ function spawnStreamJson(
 // Provider interface & implementations
 // ---------------------------------------------------------------------------
 
-interface LLMProvider {
+export interface LLMProvider {
   name: string;
   /** Whether this provider can use tools (file read/write) to self-correct output. */
   supportsTools: boolean;
@@ -478,10 +478,48 @@ const copilotProvider: LLMProvider = {
 const providers: LLMProvider[] = [claudeCodeProvider, copilotProvider];
 
 // ---------------------------------------------------------------------------
+// Provider resolution
+// ---------------------------------------------------------------------------
+
+export function resolveProvider(config: Config): LLMProvider {
+  const configuredProvider = config.llm.provider;
+  let provider: LLMProvider | undefined;
+
+  if (configuredProvider === "auto") {
+    provider = providers.find((p) => p.isAvailable());
+  } else {
+    const providerMap: Record<string, LLMProvider> = {
+      "claude-code": claudeCodeProvider,
+      copilot: copilotProvider,
+    };
+    provider = providerMap[configuredProvider];
+    if (provider && !provider.isAvailable()) {
+      throw new LLMUnavailableError(
+        `Configured LLM provider "${configuredProvider}" is not available.\n` +
+          `Ensure the CLI is installed and authenticated.`,
+      );
+    }
+  }
+
+  if (!provider) {
+    throw new LLMUnavailableError(
+      "No LLM provider found.\n\n" +
+        "To generate a high-quality architecture model, install one of:\n" +
+        "  - Claude Code CLI:    https://claude.ai/download\n" +
+        "  - GitHub Copilot CLI: gh extension install github/gh-copilot\n\n" +
+        "Or use the deterministic builder:\n" +
+        "  diagram-docs generate --deterministic",
+    );
+  }
+
+  return provider;
+}
+
+// ---------------------------------------------------------------------------
 // Prompt construction
 // ---------------------------------------------------------------------------
 
-function buildSystemPrompt(outputPath?: string): string {
+export function buildSystemPrompt(outputPath?: string): string {
   const outputInstruction = outputPath
     ? `Write the YAML to: ${outputPath}
 After writing, read the file back and verify the YAML parses correctly and conforms to the schema below. Fix any issues you find — do not stop until the file contains valid YAML.`
@@ -768,37 +806,7 @@ export async function buildModelWithLLM(
   options: BuildModelWithLLMOptions,
 ): Promise<ArchitectureModel> {
   // 1. Resolve provider
-  const configuredProvider = options.config.llm.provider;
-  let provider: LLMProvider | undefined;
-
-  if (configuredProvider === "auto") {
-    provider = providers.find((p) => p.isAvailable());
-  } else {
-    const providerMap: Record<string, LLMProvider> = {
-      "claude-code": claudeCodeProvider,
-      copilot: copilotProvider,
-    };
-    provider = providerMap[configuredProvider];
-    if (provider && !provider.isAvailable()) {
-      throw new LLMUnavailableError(
-        `Configured LLM provider "${configuredProvider}" is not available.\n` +
-          `Ensure the CLI is installed and authenticated.`,
-      );
-    }
-  }
-
-  if (!provider) {
-    throw new LLMUnavailableError(
-      "No LLM provider found.\n\n" +
-        "To generate a high-quality architecture model, install one of:\n" +
-        "  - Claude Code CLI:    https://claude.ai/download\n" +
-        "  - GitHub Copilot CLI: gh extension install github/gh-copilot\n\n" +
-        "Or use the deterministic builder:\n" +
-        "  diagram-docs generate --deterministic",
-    );
-  }
-
-  const resolvedProvider = provider;
+  const resolvedProvider = resolveProvider(options.config);
   const emit = (status: string) => options.onStatus?.(status, resolvedProvider.name);
 
   // 2. Build prompt — tool-using providers write to a temp file and self-validate
@@ -818,7 +826,7 @@ export async function buildModelWithLLM(
     }
   }
 
-  const outputPath = provider.supportsTools
+  const outputPath = resolvedProvider.supportsTools
     ? path.join(os.tmpdir(), `diagram-docs-model-${Date.now()}.yaml`)
     : undefined;
   const systemPrompt = buildSystemPrompt(outputPath);
@@ -831,10 +839,10 @@ export async function buildModelWithLLM(
   });
 
   // 3. Call LLM
-  emit(`Waiting for ${provider.name} response...`);
+  emit(`Waiting for ${resolvedProvider.name} response...`);
   let textOutput: string;
   try {
-    textOutput = await provider.generate(
+    textOutput = await resolvedProvider.generate(
       systemPrompt,
       userMessage,
       options.config.llm.model,
