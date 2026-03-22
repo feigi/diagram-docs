@@ -266,9 +266,15 @@ export async function buildModelParallel(
       // Repair common LLM YAML issues
       const repair = repairLLMYaml(rawOutput);
       rawOutput = repair.yaml;
+      if (repair.linesSplit > 0 || repair.linesRemoved > 0) {
+        warn(
+          `App ${app.id}: Repaired LLM YAML: ${repair.linesSplit} smashed lines split, ` +
+            `${repair.linesRemoved} trailing broken lines removed`,
+        );
+      }
 
       if (!rawOutput.trim()) {
-        throw new LLMOutputError("LLM output was empty after cleanup");
+        throw new LLMOutputError("LLM output was empty after cleanup", rawOutput);
       }
 
       // Parse and validate
@@ -282,7 +288,7 @@ export async function buildModelParallel(
       if (
         err instanceof LLMCallError ||
         err instanceof LLMOutputError ||
-        (err instanceof Error && err.name === "YAMLParseError")
+        (err instanceof Error && (err.name === "YAMLParseError" || err.name === "ZodError"))
       ) {
         const msg = err instanceof Error ? err.message : String(err);
         warn(
@@ -359,6 +365,9 @@ export async function buildModelParallel(
 
   // -- Step 6: Synthesis pass --
   onStatus?.("Running synthesis pass...");
+  // Save pre-synthesis state so the catch block can fully rollback
+  const preSynthActors = merged.actors;
+  const preSynthExternalSystems = merged.externalSystems;
   try {
     const crossAppRels = merged.relationships.filter((r) => {
       const srcContainer = containerIds.has(r.sourceId)
@@ -488,6 +497,8 @@ export async function buildModelParallel(
       warn(`Synthesis failed (${msg}), using config defaults`);
       merged.system.name = config.system.name;
       merged.system.description = config.system.description;
+      merged.actors = preSynthActors;
+      merged.externalSystems = preSynthExternalSystems;
     } else {
       throw err;
     }

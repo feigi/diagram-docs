@@ -11,7 +11,7 @@ import type {
 import type { Config } from "../config/schema.js";
 import { slugify } from "./slugify.js";
 import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
-import { detectRole, detectExternalSystems, inferRelationshipLabel, inferExternalRelationshipLabel, inferComponentTech, type Role, type SystemType } from "./patterns.js";
+import { detectRole, detectExternalSystems, inferRelationshipLabel, inferComponentTech, type Role } from "./patterns.js";
 
 export interface BuildModelOptions {
   config: Config;
