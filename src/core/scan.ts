@@ -84,12 +84,18 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
     console.error(`  ${app.language}: ${app.path} (${app.buildFile})`);
   }
 
-  // Check cache
+  // Check cache — include scan-relevant config so config changes invalidate it
   const manifest = readManifest(rootDir) ?? createDefaultManifest();
+  const configFingerprint = JSON.stringify({
+    exclude: config.scan.exclude,
+    include: config.scan.include,
+    abstraction: config.abstraction,
+  });
   const checksum = await computeChecksum(
     rootDir,
     discovered.map((d) => d.path),
     config.scan.exclude,
+    configFingerprint,
   );
 
   if (
