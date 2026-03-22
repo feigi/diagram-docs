@@ -1,8 +1,12 @@
 import { describe, it, expect } from "vitest";
+import { stringify as stringifyYaml } from "yaml";
 import {
   splitRawStructure,
   mergePartialModels,
+  buildModelParallel,
 } from "../../src/core/parallel-model-builder.js";
+import type { LLMProvider, ProgressEvent } from "../../src/core/llm-model-builder.js";
+import { configSchema } from "../../src/config/schema.js";
 import type {
   RawStructure,
   ArchitectureModel,
@@ -291,5 +295,331 @@ describe("mergePartialModels", () => {
     expect(merged.actors).toHaveLength(0);
     expect(merged.externalSystems).toHaveLength(0);
     expect(merged.relationships).toHaveLength(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Task 8: buildModelParallel orchestration
+// ---------------------------------------------------------------------------
+
+function makeMockProvider(
+  responses: Map<string, string>,
+): LLMProvider {
+  return {
+    name: "mock",
+    supportsTools: false,
+    isAvailable: () => true,
+    generate: async (
+      systemPrompt: string,
+      userMessage: string,
+      _model: string,
+      _onProgress?: (event: ProgressEvent) => void,
+    ) => {
+      // Synthesis calls use a different system prompt (no "Single-App Mode")
+      const isSynthesis = systemPrompt.includes("synthesis agent");
+      if (isSynthesis) {
+        return responses.get("__synthesis__") ?? "";
+      }
+      for (const [appId, yaml] of responses) {
+        if (appId === "__synthesis__") continue;
+        if (userMessage.includes(appId)) return yaml;
+      }
+      return "";
+    },
+  };
+}
+
+function makeConfig(overrides?: Record<string, unknown>) {
+  return configSchema.parse({
+    system: { name: "Test System", description: "A test system" },
+    ...overrides,
+  });
+}
+
+describe("buildModelParallel", () => {
+  it("dispatches one call per app and merges results", async () => {
+    const raw = makeRawStructure([
+      makeApp("svc-a", {
+        modules: [
+          {
+            id: "mod-a1",
+            path: "apps/svc-a/src/main",
+            name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+      makeApp("svc-b", {
+        modules: [
+          {
+            id: "mod-b1",
+            path: "apps/svc-b/src/main",
+            name: "svc-b.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+    ]);
+
+    const partialA: ArchitectureModel = {
+      version: 1,
+      system: { name: "Service A", description: "A service" },
+      actors: [
+        { id: "api-consumer", name: "API Consumer", description: "Calls Service A APIs" },
+      ],
+      externalSystems: [],
+      containers: [
+        {
+          id: "svc-a",
+          applicationId: "svc-a",
+          name: "Service A",
+          description: "Service A application",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-a1",
+          containerId: "svc-a",
+          name: "Main",
+          description: "Core logic",
+          technology: "Java",
+          moduleIds: ["mod-a1"],
+        },
+      ],
+      relationships: [],
+    };
+
+    const partialB: ArchitectureModel = {
+      version: 1,
+      system: { name: "Service B", description: "B service" },
+      actors: [],
+      externalSystems: [
+        {
+          id: "postgresql",
+          name: "PostgreSQL",
+          description: "Relational database",
+          technology: "PostgreSQL",
+        },
+      ],
+      containers: [
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "Service B",
+          description: "Service B application",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core logic",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
+      ],
+      relationships: [
+        { sourceId: "mod-b1", targetId: "postgresql", label: "Reads from" },
+      ],
+    };
+
+    const synthesisYaml = stringifyYaml({
+      system: { name: "My Platform", description: "A multi-service platform" },
+      actors: [
+        { id: "api-consumer", name: "API Consumer", description: "External client" },
+      ],
+      externalSystems: [
+        {
+          id: "postgresql",
+          name: "PostgreSQL",
+          description: "Relational database for persistent storage",
+          technology: "PostgreSQL",
+        },
+      ],
+      relationships: [],
+    });
+
+    const responses = new Map<string, string>();
+    responses.set("svc-a", stringifyYaml(partialA));
+    responses.set("svc-b", stringifyYaml(partialB));
+    responses.set("__synthesis__", synthesisYaml);
+
+    const provider = makeMockProvider(responses);
+    const config = makeConfig({ llm: { concurrency: 2 } });
+
+    const result = await buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider,
+    });
+
+    // Containers from both apps should be present
+    expect(result.containers).toHaveLength(2);
+    expect(result.containers.map((c) => c.id).sort()).toEqual(["svc-a", "svc-b"]);
+
+    // Components from both apps
+    expect(result.components).toHaveLength(2);
+
+    // Synthesis should have set system name
+    expect(result.system.name).toBe("My Platform");
+    expect(result.system.description).toBe("A multi-service platform");
+
+    // Actors from synthesis
+    expect(result.actors).toHaveLength(1);
+    expect(result.actors[0].id).toBe("api-consumer");
+
+    // External systems from synthesis
+    expect(result.externalSystems).toHaveLength(1);
+    expect(result.externalSystems[0].id).toBe("postgresql");
+  });
+
+  it("falls back to deterministic seed when per-app call fails", async () => {
+    const raw = makeRawStructure([
+      makeApp("svc-a", {
+        modules: [
+          {
+            id: "mod-a1",
+            path: "apps/svc-a/src/main",
+            name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+    ]);
+
+    // Provider throws for per-app calls, succeeds for synthesis
+    const failingProvider: LLMProvider = {
+      name: "failing-mock",
+      supportsTools: false,
+      isAvailable: () => true,
+      generate: async (systemPrompt: string, _userMessage: string) => {
+        const isSynthesis = systemPrompt.includes("synthesis agent");
+        if (isSynthesis) {
+          return stringifyYaml({
+            system: { name: "Fallback System", description: "From synthesis" },
+            actors: [],
+            externalSystems: [],
+            relationships: [],
+          });
+        }
+        throw new Error("LLM connection failed");
+      },
+    };
+
+    const config = makeConfig();
+    const statuses: string[] = [];
+
+    const result = await buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider: failingProvider,
+      onStatus: (s) => statuses.push(s),
+    });
+
+    // Should still produce a valid model with deterministic seed data
+    expect(result.containers).toHaveLength(1);
+    expect(result.containers[0].id).toBe("svc-a");
+    expect(result.containers[0].name).toBe("Svc A");
+
+    // Should have logged a fallback message
+    const fallbackMsg = statuses.find((s) => s.includes("deterministic seed"));
+    expect(fallbackMsg).toBeDefined();
+  });
+
+  it("falls back to config system info when synthesis fails", async () => {
+    const raw = makeRawStructure([
+      makeApp("svc-a", {
+        modules: [
+          {
+            id: "mod-a1",
+            path: "apps/svc-a/src/main",
+            name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+    ]);
+
+    const partialA: ArchitectureModel = {
+      version: 1,
+      system: { name: "", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "svc-a",
+          applicationId: "svc-a",
+          name: "Service A",
+          description: "Service A app",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-a1",
+          containerId: "svc-a",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-a1"],
+        },
+      ],
+      relationships: [],
+    };
+
+    let callCount = 0;
+    const synthFailProvider: LLMProvider = {
+      name: "synth-fail-mock",
+      supportsTools: false,
+      isAvailable: () => true,
+      generate: async (systemPrompt: string, _userMessage: string) => {
+        callCount++;
+        // Synthesis calls use a different system prompt
+        const isSynthesis = systemPrompt.includes("synthesis agent");
+        if (isSynthesis) {
+          throw new Error("Synthesis LLM timeout");
+        }
+        // Per-app call succeeds
+        return stringifyYaml(partialA);
+      },
+    };
+
+    const config = makeConfig({
+      system: { name: "Config System Name", description: "Config description" },
+    });
+    const statuses: string[] = [];
+
+    const result = await buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider: synthFailProvider,
+      onStatus: (s) => statuses.push(s),
+    });
+
+    // Should fall back to config values
+    expect(result.system.name).toBe("Config System Name");
+    expect(result.system.description).toBe("Config description");
+
+    // Should have called provider at least twice (per-app + synthesis attempt)
+    expect(callCount).toBeGreaterThanOrEqual(2);
+
+    // Should have logged synthesis failure
+    const synthMsg = statuses.find((s) => s.includes("Synthesis failed"));
+    expect(synthMsg).toBeDefined();
   });
 });
