@@ -238,15 +238,18 @@ export function createFrame(title: string): Frame {
     }
     prevLogRowCount = currentLogRowCount;
 
-    // Clamp scroll offset
-    const maxScroll = Math.max(0, allLogRows.length - MIN_LOG_LINES);
-    scrollOffset = Math.min(scrollOffset, maxScroll);
-
-    // Compute viewport slice — never shrink below previous high-water mark
-    const bottomIdx = allLogRows.length - scrollOffset;
-    const naturalRowCount = Math.max(MIN_LOG_LINES, Math.min(bottomIdx, maxLogLines));
+    // Compute frame height from total content (not viewport position) so
+    // highWaterLogRows keeps growing even while the user is scrolled up.
+    const naturalRowCount = Math.max(MIN_LOG_LINES, Math.min(allLogRows.length, maxLogLines));
     highWaterLogRows = Math.max(highWaterLogRows, naturalRowCount);
     const visibleRowCount = Math.min(highWaterLogRows, maxLogLines);
+
+    // Clamp scroll so the viewport always fills the frame
+    const maxScroll = Math.max(0, allLogRows.length - visibleRowCount);
+    scrollOffset = Math.min(scrollOffset, maxScroll);
+
+    // Compute viewport slice
+    const bottomIdx = allLogRows.length - scrollOffset;
     const topIdx = Math.max(0, bottomIdx - visibleRowCount);
     const visibleLogRows = allLogRows.slice(topIdx, bottomIdx);
 
@@ -256,13 +259,15 @@ export function createFrame(title: string): Frame {
     if (hasAbove && visibleLogRows.length > 0) {
       visibleLogRows[0] = row(chalk.dim(`  ↑ ${topIdx} more`));
     }
-    if (hasBelow && visibleLogRows.length > 1) {
-      visibleLogRows[visibleLogRows.length - 1] = row(chalk.dim(`  ↓ ${scrollOffset} more`));
-    }
 
-    // Pad with empty rows if fewer entries than minimum
+    // Pad with empty rows if fewer entries than minimum (early in session)
     while (visibleLogRows.length < visibleRowCount) {
       visibleLogRows.push(emptyRow());
+    }
+
+    // Place "↓ more" at the actual bottom of the frame
+    if (hasBelow && visibleLogRows.length > 1) {
+      visibleLogRows[visibleLogRows.length - 1] = row(chalk.dim(`  ↓ ${scrollOffset} more`));
     }
     const totalRows = 1 + STATUS_ROWS + visibleRowCount + 1; // top + status + logs + bottom
 
