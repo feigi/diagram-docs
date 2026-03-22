@@ -69,6 +69,7 @@ export const configSchema = z.object({
         .enum(["auto", "claude-code", "copilot"])
         .default("auto"),
       model: z.string().default("sonnet"),
+      concurrency: z.number().int().min(1).max(16).default(4),
     })
     .default({}),
 
