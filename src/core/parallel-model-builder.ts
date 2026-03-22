@@ -10,12 +10,15 @@ import { architectureModelSchema } from "./model.js";
 import {
   type LLMProvider,
   type ProgressEvent,
+  LLMCallError,
+  LLMOutputError,
   buildPerAppSystemPrompt,
   buildPerAppUserMessage,
   buildSynthesisSystemPrompt,
   buildSynthesisUserMessage,
   repairLLMYaml,
 } from "./llm-model-builder.js";
+import { z } from "zod";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -118,6 +121,18 @@ export async function buildModelParallel(
     options;
   const concurrency = config.llm.concurrency;
 
+  const warn = (msg: string) => {
+    if (onStatus) {
+      onStatus(msg);
+    } else {
+      try { process.stderr.write(`${msg}\n`); } catch { /* stderr may be unavailable */ }
+    }
+  };
+
+  if (rawStructure.applications.length < 2) {
+    throw new Error("buildModelParallel requires at least 2 applications");
+  }
+
   // -- Step 1: Split into per-app slices --
   const slices = splitRawStructure(rawStructure);
   onStatus?.(`Split into ${slices.length} per-app slices`);
@@ -152,7 +167,7 @@ export async function buildModelParallel(
     slice: RawStructure,
     seed: ArchitectureModel,
     index: number,
-  ): Promise<ArchitectureModel> {
+  ): Promise<{ model: ArchitectureModel; fellBack: boolean }> {
     await acquireSlot();
     try {
       const app = slice.applications[0];
@@ -184,13 +199,14 @@ export async function buildModelParallel(
         );
       } catch (err) {
         if (outputPath) {
-          try {
-            fs.unlinkSync(outputPath);
-          } catch {
-            /* cleanup is best-effort */
-          }
+          try { fs.unlinkSync(outputPath); } catch { /* cleanup is best-effort */ }
         }
-        throw err;
+        // Wrap non-LLM errors from the provider as LLMCallError
+        if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
+        throw new LLMCallError(
+          `Provider error: ${err instanceof Error ? err.message : String(err)}`,
+          { cause: err },
+        );
       }
 
       // Read output — prefer file written by tool-using agent, fall back to text
@@ -199,16 +215,32 @@ export async function buildModelParallel(
         try {
           rawOutput = fs.readFileSync(outputPath, "utf-8");
           if (!rawOutput.trim()) {
-            rawOutput = textOutput;
+            if (textOutput.trim()) {
+              warn(`App ${slice.applications[0].id}: agent output file was empty, using text stream`);
+              rawOutput = textOutput;
+            } else {
+              throw new LLMOutputError("Agent wrote an empty output file and no text output was streamed");
+            }
           }
-        } catch {
+        } catch (err: unknown) {
+          if (err instanceof LLMOutputError) throw err;
+          const errCode = (err as NodeJS.ErrnoException).code;
+          if (errCode !== "ENOENT") {
+            throw new LLMCallError(
+              `System error reading agent output file: ${err instanceof Error ? err.message : String(err)}`,
+              { cause: err },
+            );
+          }
+          if (!textOutput.trim()) {
+            throw new LLMCallError(
+              `Failed to read agent output file and no text output was streamed`,
+              { cause: err },
+            );
+          }
+          warn(`App ${slice.applications[0].id}: failed to read output file (${errCode}), using text stream`);
           rawOutput = textOutput;
         } finally {
-          try {
-            fs.unlinkSync(outputPath);
-          } catch {
-            /* cleanup is best-effort */
-          }
+          try { fs.unlinkSync(outputPath); } catch { /* cleanup is best-effort */ }
         }
       } else {
         rawOutput = textOutput;
@@ -236,19 +268,29 @@ export async function buildModelParallel(
       rawOutput = repair.yaml;
 
       if (!rawOutput.trim()) {
-        throw new Error("LLM output was empty after cleanup");
+        throw new LLMOutputError("LLM output was empty after cleanup");
       }
 
       // Parse and validate
       const parsed = parseYaml(rawOutput);
-      return architectureModelSchema.parse(parsed) as ArchitectureModel;
+      return {
+        model: architectureModelSchema.parse(parsed) as ArchitectureModel,
+        fellBack: false,
+      };
     } catch (err) {
-      // Fall back to deterministic seed for this app
-      const msg = err instanceof Error ? err.message : String(err);
-      onStatus?.(
-        `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic seed`,
-      );
-      return seed;
+      // Only fall back for LLM/output errors; let programming errors propagate
+      if (
+        err instanceof LLMCallError ||
+        err instanceof LLMOutputError ||
+        (err instanceof Error && err.name === "YAMLParseError")
+      ) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warn(
+          `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic seed`,
+        );
+        return { model: seed, fellBack: true };
+      }
+      throw err;
     } finally {
       releaseSlot();
     }
@@ -257,7 +299,23 @@ export async function buildModelParallel(
   const partialPromises = slices.map((slice, i) =>
     buildOneApp(slice, seeds[i], i),
   );
-  const partials = await Promise.all(partialPromises);
+  const results = await Promise.all(partialPromises);
+
+  const fallbackCount = results.filter((r) => r.fellBack).length;
+  if (fallbackCount === slices.length) {
+    throw new LLMCallError(
+      `All ${slices.length} per-app LLM calls failed. ` +
+      `The result would be identical to --deterministic mode. ` +
+      `Check LLM provider availability and authentication.`,
+    );
+  }
+  if (fallbackCount > 0) {
+    warn(
+      `WARNING: ${fallbackCount}/${slices.length} apps fell back to deterministic modeling`,
+    );
+  }
+
+  const partials = results.map((r) => r.model);
 
   // -- Step 4: Merge partial models --
   onStatus?.("Merging per-app models...");
@@ -309,7 +367,8 @@ export async function buildModelParallel(
       const tgtContainer = containerIds.has(r.targetId)
         ? r.targetId
         : componentToContainer.get(r.targetId);
-      return srcContainer !== tgtContainer;
+      // Both endpoints must resolve to a container — exclude external system rels
+      return srcContainer != null && tgtContainer != null && srcContainer !== tgtContainer;
     });
 
     const synthesisSystem = buildSynthesisSystemPrompt();
@@ -325,12 +384,21 @@ export async function buildModelParallel(
       crossAppRelationships: crossAppRels,
     });
 
-    const synthesisOutput = await provider.generate(
-      synthesisSystem,
-      synthesisUser,
-      config.llm.model,
-      onProgress,
-    );
+    let synthesisOutput: string;
+    try {
+      synthesisOutput = await provider.generate(
+        synthesisSystem,
+        synthesisUser,
+        config.llm.model,
+        onProgress,
+      );
+    } catch (err) {
+      if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
+      throw new LLMCallError(
+        `Provider error during synthesis: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
 
     // Parse synthesis output
     let synthesisYaml = synthesisOutput
@@ -349,49 +417,80 @@ export async function buildModelParallel(
     }
 
     const repaired = repairLLMYaml(synthesisYaml);
-    const synthesis = parseYaml(repaired.yaml) as {
-      system?: { name?: string; description?: string };
-      actors?: ArchitectureModel["actors"];
-      externalSystems?: ArchitectureModel["externalSystems"];
-      relationships?: ArchitectureModel["relationships"];
-    };
 
-    // Apply system info
-    if (synthesis.system?.name) {
-      merged.system.name = synthesis.system.name;
-    }
-    if (synthesis.system?.description) {
-      merged.system.description = synthesis.system.description;
-    }
+    // Validate synthesis output with Zod instead of bare type assertion
+    const synthesisSchema = z.object({
+      system: z.object({
+        name: z.string(),
+        description: z.string(),
+      }).partial().optional(),
+      actors: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        description: z.string(),
+      })).optional(),
+      externalSystems: z.array(z.object({
+        id: z.string(),
+        name: z.string(),
+        description: z.string(),
+        technology: z.string().optional(),
+      })).optional(),
+      relationships: z.array(z.object({
+        sourceId: z.string(),
+        targetId: z.string(),
+        label: z.string(),
+        technology: z.string().optional(),
+      })).optional(),
+    });
 
-    // Replace actors/externals if synthesis provides them
-    if (synthesis.actors && synthesis.actors.length > 0) {
-      merged.actors = synthesis.actors;
-    }
-    if (synthesis.externalSystems && synthesis.externalSystems.length > 0) {
-      merged.externalSystems = synthesis.externalSystems;
-    }
+    const parsed = parseYaml(repaired.yaml);
+    const synthesis = synthesisSchema.parse(parsed);
 
-    // Update cross-app relationship labels (prefer synthesis label over "Uses"/"Calls")
+    // Apply all mutations atomically — collect first, then apply
+    const newSystemName = synthesis.system?.name;
+    const newSystemDesc = synthesis.system?.description;
+    const newActors = synthesis.actors && synthesis.actors.length > 0
+      ? synthesis.actors
+      : undefined;
+    const newExternalSystems = synthesis.externalSystems && synthesis.externalSystems.length > 0
+      ? synthesis.externalSystems
+      : undefined;
+
+    let relLabelUpdates: Map<string, string> | undefined;
     if (synthesis.relationships) {
-      const synthRelMap = new Map<string, string>();
+      relLabelUpdates = new Map<string, string>();
       for (const rel of synthesis.relationships) {
-        synthRelMap.set(`${rel.sourceId}->${rel.targetId}`, rel.label);
+        relLabelUpdates.set(`${rel.sourceId}->${rel.targetId}`, rel.label);
       }
+    }
+
+    // All validation passed — now apply
+    if (newSystemName) merged.system.name = newSystemName;
+    if (newSystemDesc) merged.system.description = newSystemDesc;
+    if (newActors) merged.actors = newActors;
+    if (newExternalSystems) merged.externalSystems = newExternalSystems;
+    if (relLabelUpdates) {
       for (const rel of merged.relationships) {
         const key = `${rel.sourceId}->${rel.targetId}`;
-        const synthLabel = synthRelMap.get(key);
+        const synthLabel = relLabelUpdates.get(key);
         if (synthLabel && synthLabel !== rel.label) {
           rel.label = synthLabel;
         }
       }
     }
   } catch (err) {
-    // Fall back to config values for system info
-    const msg = err instanceof Error ? err.message : String(err);
-    onStatus?.(`Synthesis failed (${msg}), using config defaults`);
-    merged.system.name = config.system.name;
-    merged.system.description = config.system.description;
+    if (
+      err instanceof LLMCallError ||
+      err instanceof LLMOutputError ||
+      (err instanceof Error && (err.name === "YAMLParseError" || err.name === "ZodError"))
+    ) {
+      const msg = err instanceof Error ? err.message : String(err);
+      warn(`Synthesis failed (${msg}), using config defaults`);
+      merged.system.name = config.system.name;
+      merged.system.description = config.system.description;
+    } else {
+      throw err;
+    }
   }
 
   return merged;
