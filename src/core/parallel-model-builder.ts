@@ -4,7 +4,7 @@
  */
 import type { RawStructure, ArchitectureModel } from "../analyzers/types.js";
 import type { Config } from "../config/schema.js";
-import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml, YAMLParseError } from "yaml";
 import { buildModel } from "./model-builder.js";
 import { architectureModelSchema } from "./model.js";
 import {
@@ -18,7 +18,7 @@ import {
   buildSynthesisUserMessage,
   repairLLMYaml,
 } from "./llm-model-builder.js";
-import { z } from "zod";
+import { z, ZodError } from "zod";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -95,6 +95,34 @@ export function mergePartialModels(
     relationships,
   };
 }
+
+// ---------------------------------------------------------------------------
+// Schemas
+// ---------------------------------------------------------------------------
+
+const synthesisSchema = z.object({
+  system: z.object({
+    name: z.string(),
+    description: z.string(),
+  }).partial().optional(),
+  actors: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+  })).optional(),
+  externalSystems: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    description: z.string(),
+    technology: z.string().optional(),
+  })).optional(),
+  relationships: z.array(z.object({
+    sourceId: z.string(),
+    targetId: z.string(),
+    label: z.string(),
+    technology: z.string().optional(),
+  })).optional(),
+});
 
 // ---------------------------------------------------------------------------
 // Orchestration (Task 8)
@@ -201,8 +229,9 @@ export async function buildModelParallel(
         if (outputPath) {
           try { fs.unlinkSync(outputPath); } catch { /* cleanup is best-effort */ }
         }
-        // Wrap non-LLM errors from the provider as LLMCallError
         if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
+        // Only wrap non-programming errors as LLMCallError
+        if (err instanceof TypeError || err instanceof RangeError || err instanceof ReferenceError) throw err;
         throw new LLMCallError(
           `Provider error: ${err instanceof Error ? err.message : String(err)}`,
           { cause: err },
@@ -288,7 +317,8 @@ export async function buildModelParallel(
       if (
         err instanceof LLMCallError ||
         err instanceof LLMOutputError ||
-        (err instanceof Error && (err.name === "YAMLParseError" || err.name === "ZodError"))
+        err instanceof YAMLParseError ||
+        err instanceof ZodError
       ) {
         const msg = err instanceof Error ? err.message : String(err);
         warn(
@@ -305,7 +335,21 @@ export async function buildModelParallel(
   const partialPromises = slices.map((slice, i) =>
     buildOneApp(slice, seeds[i], i),
   );
-  const results = await Promise.all(partialPromises);
+  const settled = await Promise.allSettled(partialPromises);
+
+  // Collect results — use deterministic seed for rejected promises (programming errors)
+  const results: Array<{ model: ArchitectureModel; fellBack: boolean }> = [];
+  const unexpectedErrors: Array<{ index: number; error: unknown }> = [];
+  for (let i = 0; i < settled.length; i++) {
+    const outcome = settled[i];
+    if (outcome.status === "fulfilled") {
+      results.push(outcome.value);
+    } else {
+      unexpectedErrors.push({ index: i, error: outcome.reason });
+      warn(`App ${slices[i].applications[0].id}: unexpected error (${outcome.reason instanceof Error ? outcome.reason.message : String(outcome.reason)}), using deterministic seed`);
+      results.push({ model: seeds[i], fellBack: true });
+    }
+  }
 
   const fallbackCount = results.filter((r) => r.fellBack).length;
   if (fallbackCount === slices.length) {
@@ -403,6 +447,7 @@ export async function buildModelParallel(
       );
     } catch (err) {
       if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
+      if (err instanceof TypeError || err instanceof RangeError || err instanceof ReferenceError) throw err;
       throw new LLMCallError(
         `Provider error during synthesis: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
@@ -426,31 +471,6 @@ export async function buildModelParallel(
     }
 
     const repaired = repairLLMYaml(synthesisYaml);
-
-    // Validate synthesis output with Zod instead of bare type assertion
-    const synthesisSchema = z.object({
-      system: z.object({
-        name: z.string(),
-        description: z.string(),
-      }).partial().optional(),
-      actors: z.array(z.object({
-        id: z.string(),
-        name: z.string(),
-        description: z.string(),
-      })).optional(),
-      externalSystems: z.array(z.object({
-        id: z.string(),
-        name: z.string(),
-        description: z.string(),
-        technology: z.string().optional(),
-      })).optional(),
-      relationships: z.array(z.object({
-        sourceId: z.string(),
-        targetId: z.string(),
-        label: z.string(),
-        technology: z.string().optional(),
-      })).optional(),
-    });
 
     const parsed = parseYaml(repaired.yaml);
     const synthesis = synthesisSchema.parse(parsed);
@@ -491,7 +511,8 @@ export async function buildModelParallel(
     if (
       err instanceof LLMCallError ||
       err instanceof LLMOutputError ||
-      (err instanceof Error && (err.name === "YAMLParseError" || err.name === "ZodError"))
+      err instanceof YAMLParseError ||
+      err instanceof ZodError
     ) {
       const msg = err instanceof Error ? err.message : String(err);
       warn(`Synthesis failed (${msg}), using config defaults`);

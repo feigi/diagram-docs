@@ -345,7 +345,7 @@ function detectExternalSystemsFromApps(
     id: slugify(d.technology),
     name: d.technology,
     description: `${d.type} used by the system`,
-    technology: d.type,
+    technology: d.technology,
   }));
 }
 
