@@ -101,6 +101,31 @@ describe("detectRole", () => {
   it("matches repository as substring of longer annotation", () => {
     expect(detectRole("JpaRepository")).toBe("repository");
   });
+
+  // False positive avoidance
+  it("does not match ExceptionHandler as controller", () => {
+    expect(detectRole("ExceptionHandler")).toBeUndefined();
+  });
+
+  it("does not match ErrorHandler as controller", () => {
+    expect(detectRole("ErrorHandler")).toBeUndefined();
+  });
+
+  it("does not match ResourceConfig as controller", () => {
+    expect(detectRole("ResourceConfig")).toBeUndefined();
+  });
+
+  it("does not match ResourceBundle as controller", () => {
+    expect(detectRole("ResourceBundle")).toBeUndefined();
+  });
+
+  it("matches RequestHandler as controller", () => {
+    expect(detectRole("RequestHandler")).toBe("controller");
+  });
+
+  it("matches LambdaHandler as controller", () => {
+    expect(detectRole("LambdaHandler")).toBe("controller");
+  });
 });
 
 describe("detectExternalSystems", () => {
@@ -128,9 +153,22 @@ describe("detectExternalSystems", () => {
     expect(result).toEqual([{ keyword: "mysql", type: "Database", technology: "MySQL" }]);
   });
 
-  it("detects Oracle", () => {
-    const result = detectExternalSystems(["oracle"]);
-    expect(result).toEqual([{ keyword: "oracle", type: "Database", technology: "Oracle" }]);
+  it("detects Oracle via ojdbc driver artifact", () => {
+    const result = detectExternalSystems(["com.oracle.database.jdbc:ojdbc8"]);
+    expect(result).toEqual([{ keyword: "ojdbc", type: "Database", technology: "Oracle" }]);
+  });
+
+  it("detects Oracle via legacy ojdbc artifact", () => {
+    const result = detectExternalSystems(["oracle:ojdbc14"]);
+    expect(result).toEqual([{ keyword: "ojdbc", type: "Database", technology: "Oracle" }]);
+  });
+
+  it("does not match GraalVM as Oracle (false positive avoidance)", () => {
+    expect(detectExternalSystems(["com.oracle.graalvm:graalvm-sdk"])).toEqual([]);
+  });
+
+  it("does not match OCI SDK as Oracle (false positive avoidance)", () => {
+    expect(detectExternalSystems(["com.oracle.oci.sdk:oci-java-sdk-core"])).toEqual([]);
   });
 
   it("detects SQLite", () => {
@@ -202,9 +240,22 @@ describe("detectExternalSystems", () => {
   });
 
   // Object storage patterns
-  it("detects S3", () => {
+  it("detects S3 from standalone dep name", () => {
     const result = detectExternalSystems(["s3"]);
     expect(result).toEqual([{ keyword: "s3", type: "Object Storage", technology: "S3" }]);
+  });
+
+  it("detects S3 from aws-java-sdk-s3", () => {
+    const result = detectExternalSystems(["aws-java-sdk-s3"]);
+    expect(result).toEqual([{ keyword: "s3", type: "Object Storage", technology: "S3" }]);
+  });
+
+  it("does not match css3 as S3 (false positive avoidance)", () => {
+    expect(detectExternalSystems(["css3-features"])).toEqual([]);
+  });
+
+  it("does not match es3 as S3 (false positive avoidance)", () => {
+    expect(detectExternalSystems(["es3-compat"])).toEqual([]);
   });
 
   it("detects MinIO", () => {

@@ -493,7 +493,13 @@ export function resolveProvider(config: Config): LLMProvider {
       copilot: copilotProvider,
     };
     provider = providerMap[configuredProvider];
-    if (provider && !provider.isAvailable()) {
+    if (!provider) {
+      throw new LLMUnavailableError(
+        `Unknown LLM provider "${configuredProvider}". ` +
+          `Valid providers are: ${Object.keys(providerMap).join(", ")}`,
+      );
+    }
+    if (!provider.isAvailable()) {
       throw new LLMUnavailableError(
         `Configured LLM provider "${configuredProvider}" is not available.\n` +
           `Ensure the CLI is installed and authenticated.`,
@@ -932,23 +938,23 @@ export async function buildModelWithLLM(
   const isSeedMode = !options.existingModelYaml;
   const apps = options.rawStructure.applications;
   if (isSeedMode && apps.length > 1) {
-    let buildModelParallel: typeof import("./parallel-model-builder.js")["buildModelParallel"];
     try {
-      ({ buildModelParallel } = await import("./parallel-model-builder.js"));
+      const { buildModelParallel } = await import("./parallel-model-builder.js");
+      return await buildModelParallel({
+        rawStructure: options.rawStructure,
+        config: options.config,
+        configYaml: options.configYaml,
+        provider: resolvedProvider,
+        onStatus: (status) => options.onStatus?.(status, resolvedProvider.name),
+        onProgress: options.onProgress,
+      });
     } catch (err) {
+      if (err instanceof LLMCallError || err instanceof LLMOutputError || err instanceof LLMUnavailableError) throw err;
       throw new LLMCallError(
-        `Failed to load parallel model builder: ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to initialize parallel model builder: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
       );
     }
-    return buildModelParallel({
-      rawStructure: options.rawStructure,
-      config: options.config,
-      configYaml: options.configYaml,
-      provider: resolvedProvider,
-      onStatus: (status) => options.onStatus?.(status, resolvedProvider.name),
-      onProgress: options.onProgress,
-    });
   }
 
   // 2. Build prompt — tool-using providers write to a temp file and self-validate
@@ -988,7 +994,12 @@ export async function buildModelWithLLM(
     );
   } catch (err) {
     if (outputPath) {
-      try { fs.unlinkSync(outputPath); } catch { /* cleanup is best-effort */ }
+      try { fs.unlinkSync(outputPath); } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+          const warning = `Failed to clean up temp file ${outputPath}: ${(e as Error).message}`;
+          emit(warning);
+        }
+      }
     }
     throw err;
   }
@@ -1033,7 +1044,12 @@ export async function buildModelWithLLM(
       emit(warning);
       rawOutput = textOutput;
     } finally {
-      try { fs.unlinkSync(outputPath); } catch { /* cleanup is best-effort */ }
+      try { fs.unlinkSync(outputPath); } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+          const warning = `Failed to clean up temp file ${outputPath}: ${(e as Error).message}`;
+          emit(warning);
+        }
+      }
     }
   } else {
     rawOutput = textOutput;
