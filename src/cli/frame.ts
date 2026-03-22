@@ -81,7 +81,10 @@ function padRight(text: string, width: number): string {
 
 function getMaxLogLines(): number {
   const termRows = process.stderr.isTTY && process.stderr.rows ? process.stderr.rows : 24;
-  return Math.max(MIN_LOG_LINES, termRows - FRAME_OVERHEAD);
+  // Reserve 1 extra row for the trailing \n after the frame content.
+  // Without this, a full-height frame's trailing \n causes a scroll that
+  // pushes the top border into scrollback, unreachable by cursor-up.
+  return Math.max(MIN_LOG_LINES, termRows - FRAME_OVERHEAD - 1);
 }
 
 export function createFrame(title: string): Frame {
@@ -226,10 +229,12 @@ export function createFrame(title: string): Frame {
       }
     }
 
-    // Keep viewport stable when new content arrives while scrolled up
+    // Keep viewport stable when content changes while scrolled up.
+    // Adjust for both growth (new rows appended) and shrinkage (thinking
+    // text re-wrapped to fewer lines or entries removed).
     const currentLogRowCount = allLogRows.length;
-    if (scrollOffset > 0 && currentLogRowCount > prevLogRowCount) {
-      scrollOffset += currentLogRowCount - prevLogRowCount;
+    if (scrollOffset > 0 && currentLogRowCount !== prevLogRowCount) {
+      scrollOffset = Math.max(0, scrollOffset + (currentLogRowCount - prevLogRowCount));
     }
     prevLogRowCount = currentLogRowCount;
 
@@ -291,11 +296,17 @@ export function createFrame(title: string): Frame {
       output += "\n".repeat(totalRows) + `\x1b[${totalRows}A`;
       firstRender = false;
     } else {
-      // Move up by previous frame height
-      output += `\x1b[${prevTotalRows}A`;
+      // When the frame grows, reserve extra lines so the terminal scrolls
+      // correctly and the old top border remains reachable by cursor-up.
+      const extra = Math.max(0, totalRows - prevTotalRows);
+      output += "\n".repeat(extra);
+      output += `\x1b[${prevTotalRows + extra}A`;
     }
     output += "\x1b[?25l"; // hide cursor
     output += frame + "\n";
+    // Erase any leftover content below the frame from a previous taller
+    // render (e.g. after thinking→output transition resets highWaterLogRows).
+    output += "\x1b[J";
     prevTotalRows = totalRows;
 
     process.stderr.write(output);
@@ -339,17 +350,24 @@ export function createFrame(title: string): Frame {
       // When transitioning from thinking to output, clear all thinking entries
       // so they don't leave a blank gap in the frame.
       if (kind === "output" && logBuffer.length > 0 && logBuffer[logBuffer.length - 1]?.kind === "thinking") {
+        // Collect finalized state of non-thinking entries before splicing
+        const keptFinals: boolean[] = [];
+        for (let i = 0; i < logBuffer.length; i++) {
+          if (logBuffer[i]?.kind !== "thinking") {
+            keptFinals.push(!!logFinalized[i]);
+          }
+        }
         // Remove all thinking entries
         for (let i = logBuffer.length - 1; i >= 0; i--) {
           if (logBuffer[i]?.kind === "thinking") {
             logBuffer.splice(i, 1);
-            delete logFinalized[i];
           }
         }
-        // Re-index finalized map after splice
+        // Rebuild finalized map preserving original states (don't mark
+        // partial output entries as finalized — that causes duplication)
         const newFinalized: Record<number, boolean> = {};
         for (let i = 0; i < logBuffer.length; i++) {
-          newFinalized[i] = true;
+          newFinalized[i] = keptFinals[i] ?? true;
         }
         Object.keys(logFinalized).forEach((k) => delete logFinalized[Number(k)]);
         Object.assign(logFinalized, newFinalized);
@@ -402,12 +420,8 @@ export function createFrame(title: string): Frame {
         output += `\x1b[${prevTotalRows}A`;
       }
       output += [top, stopRow, bottom].join("\n") + "\n";
-      // Clear any leftover rows from the previous (taller) frame
-      const stopHeight = 3; // top + stopRow + bottom
-      const leftover = prevTotalRows - stopHeight;
-      for (let i = 0; i < leftover; i++) {
-        output += "\x1b[2K\n"; // clear line, move down
-      }
+      // Erase all leftover frame content below the collapsed stop frame
+      output += "\x1b[J";
       output += "\x1b[?25h"; // show cursor
 
       process.stderr.write(output);
