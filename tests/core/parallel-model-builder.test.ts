@@ -324,7 +324,7 @@ function makeMockProvider(
         if (appId === "__synthesis__") continue;
         if (userMessage.includes(appId)) return yaml;
       }
-      return "";
+      throw new Error("Mock provider: no response configured for this app — check test setup");
     },
   };
 }
