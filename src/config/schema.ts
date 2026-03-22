@@ -14,8 +14,8 @@ export const configSchema = z.object({
       exclude: z
         .array(z.string())
         .default([
-          "**/test/**",
-          "**/tests/**",
+          "**/*test*/**",
+          "**/*test*",
           "**/node_modules/**",
           "**/build/**",
           "**/dist/**",
