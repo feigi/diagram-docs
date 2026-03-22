@@ -41,7 +41,7 @@ function isRecoverableLLMError(err: unknown): boolean {
  * Returns true for native JS programming errors that should never be
  * caught and silently swallowed — they indicate bugs in the code.
  */
-function isProgrammingError(err: unknown): boolean {
+export function isProgrammingError(err: unknown): boolean {
   return (
     err instanceof TypeError ||
     err instanceof RangeError ||
@@ -59,14 +59,14 @@ const SYSTEM_ERROR_CODES = new Set(["ENOMEM", "ENOSPC", "EMFILE", "ENFILE"]);
  * Returns true for OS-level resource errors that should propagate rather
  * than be wrapped as recoverable LLM errors.
  */
-function isSystemResourceError(err: unknown): boolean {
+export function isSystemResourceError(err: unknown): boolean {
   if (!(err instanceof Error)) return false;
   const code = (err as NodeJS.ErrnoException).code;
   return typeof code === "string" && SYSTEM_ERROR_CODES.has(code);
 }
 
 // ---------------------------------------------------------------------------
-// Split & Merge (Task 7)
+// Split & Merge
 // ---------------------------------------------------------------------------
 
 /**
@@ -167,7 +167,7 @@ const synthesisSchema = z.object({
 });
 
 // ---------------------------------------------------------------------------
-// Orchestration (Task 8)
+// Orchestration
 // ---------------------------------------------------------------------------
 
 export interface ParallelBuildOptions {
@@ -376,12 +376,28 @@ export async function buildModelParallel(
         throw new LLMOutputError("LLM output was empty after cleanup", rawOutput);
       }
 
-      // Parse and validate
-      const parsed = parseYaml(rawOutput);
-      return {
-        model: architectureModelSchema.parse(parsed) as ArchitectureModel,
-        fellBack: false,
-      };
+      let parsed: unknown;
+      try {
+        parsed = parseYaml(rawOutput);
+      } catch (parseErr) {
+        throw new LLMOutputError(
+          `Failed to parse LLM output as YAML for app ${app.id}: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+          rawOutput,
+          { cause: parseErr },
+        );
+      }
+      try {
+        return {
+          model: architectureModelSchema.parse(parsed) as ArchitectureModel,
+          fellBack: false,
+        };
+      } catch (schemaErr) {
+        throw new LLMOutputError(
+          `LLM output failed schema validation for app ${app.id}: ${schemaErr instanceof Error ? schemaErr.message : String(schemaErr)}`,
+          rawOutput,
+          { cause: schemaErr },
+        );
+      }
     } catch (err) {
       // Only fall back for LLM/output errors; let programming errors propagate
       if (isRecoverableLLMError(err)) {
@@ -448,7 +464,7 @@ export async function buildModelParallel(
 
   // Cross-app container-level relationships
   const crossAppContainerRels = fullDeterministic.relationships.filter(
-    (r) => containerIds.has(r.sourceId) && containerIds.has(r.targetId),
+    (r) => containerIds.has(r.sourceId) && containerIds.has(r.targetId) && r.sourceId !== r.targetId,
   );
 
   // Cross-app component-level relationships (source and target in different containers)
@@ -579,7 +595,19 @@ export async function buildModelParallel(
     if (newSystemName) merged.system.name = newSystemName;
     if (newSystemDesc) merged.system.description = newSystemDesc;
     if (newActors) merged.actors = newActors;
-    if (newExternalSystems) merged.externalSystems = newExternalSystems;
+    if (newExternalSystems) {
+      // Preserve technology from pre-synthesis when synthesis omits it
+      const preTechMap = new Map(
+        merged.externalSystems.map((es) => [es.id, es.technology]),
+      );
+      for (const es of newExternalSystems) {
+        if (!es.technology) {
+          const preTech = preTechMap.get(es.id);
+          if (preTech) es.technology = preTech;
+        }
+      }
+      merged.externalSystems = newExternalSystems;
+    }
     if (relUpdates) {
       for (const rel of merged.relationships) {
         const key = `${rel.sourceId}->${rel.targetId}`;
