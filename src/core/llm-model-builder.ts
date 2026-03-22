@@ -8,7 +8,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { Config } from "../config/schema.js";
-import type { RawStructure, ArchitectureModel } from "../analyzers/types.js";
+import type { RawStructure, ScannedApplication, ArchitectureModel } from "../analyzers/types.js";
 import { architectureModelSchema } from "./model.js";
 import { buildModel } from "./model-builder.js";
 
@@ -711,7 +711,7 @@ You are modeling a SINGLE APPLICATION within a larger multi-app system.
 }
 
 export function buildPerAppUserMessage(options: {
-  app: RawStructure["applications"][0];
+  app: ScannedApplication;
   configYaml?: string;
   seedYaml: string;
   outputPath?: string;
