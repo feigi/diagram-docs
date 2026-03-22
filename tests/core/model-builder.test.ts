@@ -378,7 +378,7 @@ describe("buildModel", () => {
     expect(pgRels.map((r) => r.sourceId).sort()).toEqual(["app-a", "app-b"]);
   });
 
-  it("produces no external systems without config", () => {
+  it("produces no external systems without config or known deps", () => {
     const config = makeConfig();
     const raw = makeRawStructure([
       {
@@ -388,13 +388,13 @@ describe("buildModel", () => {
         language: "java",
         buildFile: "pom.xml",
         modules: [],
-        externalDependencies: [{ name: "org.postgresql:postgresql" }],
+        externalDependencies: [{ name: "some-unknown-library" }],
         internalImports: [],
       },
     ]);
     const model = buildModel({ config, rawStructure: raw });
 
-    // Without config, no external systems are created (deterministic path is config-only)
+    // Without config or recognizable deps, no external systems are created
     expect(model.externalSystems).toHaveLength(0);
   });
 
@@ -595,5 +595,253 @@ describe("buildModel", () => {
     const b = buildModel({ config, rawStructure: raw });
 
     expect(a).toEqual(b);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Actor inference
+  // ---------------------------------------------------------------------------
+
+  it("infers API consumer actor from controller annotations", () => {
+    const config = makeConfig();
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [
+          {
+            id: "app-api",
+            path: "api",
+            name: "api",
+            files: ["UserController.java"],
+            exports: ["UserController"],
+            imports: [],
+            metadata: { annotations: "RestController" },
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    expect(model.actors).toContainEqual(
+      expect.objectContaining({ id: "api-consumer", name: "API Consumer" }),
+    );
+  });
+
+  it("infers upstream system actor from listener annotations", () => {
+    const config = makeConfig();
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [
+          {
+            id: "app-events",
+            path: "events",
+            name: "events",
+            files: ["OrderListener.java"],
+            exports: ["OrderListener"],
+            imports: [],
+            metadata: { annotations: "KafkaListener" },
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    expect(model.actors).toContainEqual(
+      expect.objectContaining({ id: "upstream-system", name: "Upstream System" }),
+    );
+  });
+
+  it("deduplicates actors across multiple apps", () => {
+    const config = makeConfig();
+    const raw = makeRawStructure([
+      {
+        id: "app-a",
+        path: "a",
+        name: "a",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [
+          {
+            id: "app-a-ctrl",
+            path: "ctrl",
+            name: "ctrl",
+            files: ["AController.java"],
+            exports: [],
+            imports: [],
+            metadata: { annotations: "Controller" },
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+      {
+        id: "app-b",
+        path: "b",
+        name: "b",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [
+          {
+            id: "app-b-ctrl",
+            path: "ctrl",
+            name: "ctrl",
+            files: ["BController.java"],
+            exports: [],
+            imports: [],
+            metadata: { annotations: "Controller" },
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    const apiConsumers = model.actors.filter((a) => a.id === "api-consumer");
+    expect(apiConsumers).toHaveLength(1);
+  });
+
+  // ---------------------------------------------------------------------------
+  // External system detection from deps
+  // ---------------------------------------------------------------------------
+
+  it("detects external systems from dependency names", () => {
+    const config = makeConfig();
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [],
+        externalDependencies: [
+          { name: "org.postgresql:postgresql" },
+          { name: "spring-kafka" },
+        ],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    expect(model.externalSystems.some((e) => e.name === "PostgreSQL")).toBe(true);
+    expect(model.externalSystems.some((e) => e.name === "Apache Kafka")).toBe(true);
+  });
+
+  it("merges config-declared and detected external systems without duplicates", () => {
+    // Config declares Redis explicitly; deps also contain redis → no duplicate
+    // Deps contain postgresql → detected automatically
+    const config = makeConfig({
+      externalSystems: [{ name: "Redis", technology: "Cache" }],
+    });
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [],
+        externalDependencies: [
+          { name: "spring-data-redis" },
+          { name: "org.postgresql:postgresql" },
+        ],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    // Redis from config + PostgreSQL from deps, no duplicate Redis
+    const redisEntries = model.externalSystems.filter((e) => e.name === "Redis");
+    expect(redisEntries).toHaveLength(1);
+    expect(model.externalSystems.some((e) => e.name === "PostgreSQL")).toBe(true);
+    // Total: 2 distinct systems
+    expect(model.externalSystems).toHaveLength(2);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Role-informed component descriptions
+  // ---------------------------------------------------------------------------
+
+  it("uses role-informed descriptions for components", () => {
+    const config = makeConfig({ abstraction: { granularity: "detailed" } });
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [
+          {
+            id: "app-user-ctrl",
+            path: "ctrl",
+            name: "UserController",
+            files: ["UserController.java"],
+            exports: [],
+            imports: [],
+            metadata: { annotations: "RestController" },
+          },
+          {
+            id: "app-user-svc",
+            path: "svc",
+            name: "UserService",
+            files: ["UserService.java"],
+            exports: [],
+            imports: [],
+            metadata: { annotations: "Service" },
+          },
+          {
+            id: "app-user-repo",
+            path: "repo",
+            name: "UserRepository",
+            files: ["UserRepository.java"],
+            exports: [],
+            imports: [],
+            metadata: { annotations: "Repository" },
+          },
+          {
+            id: "app-order-listener",
+            path: "listener",
+            name: "OrderListener",
+            files: ["OrderListener.java"],
+            exports: [],
+            imports: [],
+            metadata: { annotations: "KafkaListener" },
+          },
+          {
+            id: "app-plain",
+            path: "plain",
+            name: "PlainModule",
+            files: ["PlainModule.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+        externalDependencies: [],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    const byId = (id: string) => model.components.find((c) => c.id === id)!;
+    expect(byId("app-user-ctrl").description).toContain("REST API controller");
+    expect(byId("app-user-svc").description).toContain("Business logic service");
+    expect(byId("app-user-repo").description).toContain("Data access layer");
+    expect(byId("app-order-listener").description).toContain("Message listener");
+    expect(byId("app-plain").description).toContain("module");
   });
 });
