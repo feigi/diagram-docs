@@ -233,8 +233,9 @@ export async function buildModelParallel(
     try {
       seeds.push(buildModel({ config, rawStructure: slices[i] }));
     } catch (err) {
-      rethrowIfFatal(err);
       const appId = slices[i].applications[0].id;
+      progress?.stop(`Seed generation failed for ${appId}`);
+      rethrowIfFatal(err);
       throw new LLMCallError(
         `Failed to generate deterministic seed for app "${appId}": ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
