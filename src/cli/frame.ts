@@ -5,18 +5,18 @@
  */
 import chalk from "chalk";
 import { constants as osConstants } from "node:os";
+import {
+  SPINNER_FRAMES,
+  SPINNER_INTERVAL,
+  getFrameWidth,
+  formatElapsed,
+  stripAnsi,
+  truncate,
+  padRight,
+} from "./terminal-utils.js";
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
-const SPINNER_INTERVAL = 80;
 const MIN_LOG_LINES = 3;
 const FRAME_OVERHEAD = 4; // top + 2 status rows + bottom
-
-function getFrameWidth(): number {
-  if (process.stderr.isTTY && process.stderr.columns) {
-    return Math.min(process.stderr.columns, 120);
-  }
-  return 80;
-}
 
 /** Strip newlines and collapse whitespace to produce a single safe line. */
 function sanitize(text: string): string {
@@ -34,23 +34,6 @@ export interface Frame {
   update(lines: FrameLine[]): void;
   log(text: string, final?: boolean, kind?: LogKind): void;
   stop(lines: FrameLine[]): void;
-}
-
-function formatElapsed(ms: number): string {
-  const secs = Math.floor(ms / 1000);
-  if (secs < 60) return `${secs}s`;
-  const mins = Math.floor(secs / 60);
-  return `${mins}m ${secs % 60}s`;
-}
-
-function stripAnsi(str: string): string {
-  // eslint-disable-next-line no-control-regex
-  return str.replace(/\x1b\[[0-9;?]*[A-Za-z]/g, "");
-}
-
-function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen - 1) + "…";
 }
 
 /** Word-wrap text to fit within maxWidth, breaking on spaces. */
@@ -71,12 +54,6 @@ function wordWrap(text: string, maxWidth: number): string[] {
   }
   if (current) lines.push(current);
   return lines.length ? lines : [""];
-}
-
-function padRight(text: string, width: number): string {
-  const visible = stripAnsi(text).length;
-  const padding = Math.max(0, width - visible);
-  return text + " ".repeat(padding);
 }
 
 function getMaxLogLines(): number {
@@ -352,31 +329,10 @@ export function createFrame(title: string): Frame {
       const clean = sanitize(text);
       if (!clean) return;
 
-      // When transitioning from thinking to output, clear all thinking entries
-      // so they don't leave a blank gap in the frame.
+      // Finalize any trailing partial thinking entry so it stays in the
+      // buffer as a complete scrollback record before output begins.
       if (kind === "output" && logBuffer.length > 0 && logBuffer[logBuffer.length - 1]?.kind === "thinking") {
-        // Collect finalized state of non-thinking entries before splicing
-        const keptFinals: boolean[] = [];
-        for (let i = 0; i < logBuffer.length; i++) {
-          if (logBuffer[i]?.kind !== "thinking") {
-            keptFinals.push(!!logFinalized[i]);
-          }
-        }
-        // Remove all thinking entries
-        for (let i = logBuffer.length - 1; i >= 0; i--) {
-          if (logBuffer[i]?.kind === "thinking") {
-            logBuffer.splice(i, 1);
-          }
-        }
-        // Rebuild finalized map preserving original states (don't mark
-        // partial output entries as finalized — that causes duplication)
-        const newFinalized: Record<number, boolean> = {};
-        for (let i = 0; i < logBuffer.length; i++) {
-          newFinalized[i] = keptFinals[i] ?? true;
-        }
-        Object.keys(logFinalized).forEach((k) => delete logFinalized[Number(k)]);
-        Object.assign(logFinalized, newFinalized);
-        highWaterLogRows = MIN_LOG_LINES;
+        logFinalized[logBuffer.length - 1] = true;
       }
 
       const lastIdx = logBuffer.length - 1;
