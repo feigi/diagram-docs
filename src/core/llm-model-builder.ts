@@ -963,8 +963,11 @@ export async function buildModelWithLLM(
       if (err instanceof LLMCallError || err instanceof LLMOutputError || err instanceof LLMUnavailableError) throw err;
       // Propagate programming errors and system resource errors unchanged —
       // these indicate bugs or host-level issues, not LLM failures.
-      const { isProgrammingError, isSystemResourceError } = await import("./parallel-model-builder.js");
-      if (isProgrammingError(err) || isSystemResourceError(err)) throw err;
+      let classifiers: { isProgrammingError: (e: unknown) => boolean; isSystemResourceError: (e: unknown) => boolean } | undefined;
+      try {
+        classifiers = await import("./parallel-model-builder.js");
+      } catch { /* module failed to load — fall through to LLMCallError wrapping */ }
+      if (classifiers?.isProgrammingError(err) || classifiers?.isSystemResourceError(err)) throw err;
       throw new LLMCallError(
         `Failed to initialize parallel model builder: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
