@@ -25,6 +25,10 @@ import { z } from "zod";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import chalk from "chalk";
+import { createParallelProgress } from "../cli/parallel-progress.js";
+import { createFrame } from "../cli/frame.js";
+import { AgentLogger } from "./agent-logger.js";
 
 /** Result of building a single app — tracks whether it degraded to deterministic mode. */
 interface AppBuildResult {
@@ -172,6 +176,27 @@ export async function buildModelParallel(
     options;
   const concurrency = config.llm.concurrency;
 
+  // -- Log directory setup --
+  const logsDir = path.join(".diagram-docs", "logs");
+  const manageOwnUI = !onStatus && !onProgress;
+
+  if (manageOwnUI) {
+    fs.rmSync(logsDir, { recursive: true, force: true });
+    fs.mkdirSync(logsDir, { recursive: true });
+
+    try {
+      const gitignorePath = ".gitignore";
+      if (fs.existsSync(gitignorePath)) {
+        const gitignore = fs.readFileSync(gitignorePath, "utf-8");
+        if (!gitignore.includes(".diagram-docs/logs")) {
+          process.stderr.write(
+            chalk.yellow("Warning: .diagram-docs/logs/ is not in .gitignore\n"),
+          );
+        }
+      }
+    } catch { /* best-effort check */ }
+  }
+
   const warn = (msg: string) => {
     if (onStatus) {
       onStatus(msg);
@@ -187,9 +212,18 @@ export async function buildModelParallel(
     );
   }
 
+  const progress = manageOwnUI
+    ? createParallelProgress(config.llm.model)
+    : undefined;
+
   // -- Step 1: Split into per-app slices --
   const slices = splitRawStructure(rawStructure);
   onStatus?.(`Split into ${slices.length} per-app slices`);
+
+  if (progress) {
+    const appIds = slices.map((s) => s.applications[0].id);
+    progress.setApps(appIds);
+  }
 
   // -- Step 2: Build per-app deterministic seeds --
   const seeds: ArchitectureModel[] = [];
@@ -244,13 +278,40 @@ export async function buildModelParallel(
     index: number,
   ): Promise<AppBuildResult> {
     await acquireSlot();
+    const app = slice.applications[0];
+    // Sanitize app.id to prevent path traversal (app.id comes from scanned source code)
+    const safeAppId = app.id.replace(/[^a-zA-Z0-9_-]/g, "_");
+
+    const logger = manageOwnUI
+      ? new AgentLogger(
+          path.join(logsDir, `agent-${safeAppId}.log`),
+          { appId: app.id, model: config.llm.model, provider: provider.name },
+        )
+      : undefined;
+
+    const appStartTime = Date.now();
+
     try {
-      const app = slice.applications[0];
-      onStatus?.(`Modeling app ${index + 1}/${slices.length}: ${app.id}`);
+
+      let currentAppState: "queued" | "thinking" | "output" = "queued";
+      const appOnProgress = manageOwnUI
+        ? (event: ProgressEvent) => {
+            logger!.logProgress(event);
+            const newState = event.kind;
+            if (newState !== currentAppState) {
+              currentAppState = newState;
+              progress!.updateApp(app.id, newState);
+            }
+          }
+        : onProgress;
+
+      if (progress) {
+        progress.updateApp(app.id, "thinking");
+      } else {
+        onStatus?.(`Modeling app ${index + 1}/${slices.length}: ${app.id}`);
+      }
 
       const seedYaml = stringifyYaml(seed, { lineWidth: 120 });
-      // Sanitize app.id to prevent path traversal (app.id comes from scanned source code)
-      const safeAppId = app.id.replace(/[^a-zA-Z0-9_-]/g, "_");
       const outputPath = provider.supportsTools
         ? path.join(
             os.tmpdir(),
@@ -266,13 +327,15 @@ export async function buildModelParallel(
         outputPath,
       });
 
+      logger?.logPrompt(systemPrompt, userMessage);
+
       let textOutput: string;
       try {
         textOutput = await provider.generate(
           systemPrompt,
           userMessage,
           config.llm.model,
-          onProgress,
+          appOnProgress,
         );
       } catch (err) {
         cleanupFile(outputPath);
@@ -365,10 +428,10 @@ export async function buildModelParallel(
         );
       }
       try {
-        return {
-          model: architectureModelSchema.parse(parsed) as ArchitectureModel,
-          fellBack: false,
-        };
+        const model = architectureModelSchema.parse(parsed) as ArchitectureModel;
+        progress?.updateApp(app.id, "done");
+        await logger?.logDone(Date.now() - appStartTime);
+        return { model, fellBack: false };
       } catch (schemaErr) {
         throw new LLMOutputError(
           `LLM output failed schema validation for app ${app.id}: ${schemaErr instanceof Error ? schemaErr.message : String(schemaErr)}`,
@@ -380,6 +443,8 @@ export async function buildModelParallel(
       // Only fall back for LLM/output errors; let programming errors propagate
       if (isRecoverableLLMError(err)) {
         const msg = err instanceof Error ? err.message : String(err);
+        progress?.updateApp(slice.applications[0].id, "failed");
+        await logger?.logFailed(msg, Date.now() - appStartTime);
         warn(
           `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic seed`,
         );
@@ -431,6 +496,11 @@ export async function buildModelParallel(
     warn(
       `WARNING: ${fallbackCount}/${slices.length} apps fell back to deterministic modeling: [${fellBackIds.join(", ")}]`,
     );
+  }
+
+  const doneCount = results.filter((r) => !r.fellBack).length;
+  if (progress) {
+    progress.stop(`${doneCount}/${slices.length} apps modeled`);
   }
 
   const partials = results.map((r) => r.model);
@@ -497,7 +567,18 @@ export async function buildModelParallel(
   }
 
   // -- Step 6: Synthesis pass --
-  onStatus?.("Running synthesis pass...");
+  const synthesisFrame = manageOwnUI ? createFrame("LLM Synthesis") : undefined;
+  const synthesisOnStatus = manageOwnUI
+    ? (status: string) => synthesisFrame!.update([
+        { text: status, spinner: true },
+        { text: `Model: ${config.llm.model}` },
+      ])
+    : onStatus;
+  const synthesisOnProgress = manageOwnUI
+    ? (event: ProgressEvent) => synthesisFrame!.log(event.line, event.final, event.kind)
+    : onProgress;
+
+  synthesisOnStatus?.("Running synthesis pass...");
   // Save pre-synthesis state so the catch block can fully rollback.
   // Rollback restores system name/description to config defaults,
   // replaces actors and externalSystems arrays wholesale,
@@ -536,7 +617,7 @@ export async function buildModelParallel(
         synthesisSystem,
         synthesisUser,
         config.llm.model,
-        onProgress,
+        synthesisOnProgress,
       );
     } catch (err) {
       if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
@@ -646,6 +727,7 @@ export async function buildModelParallel(
   } catch (err) {
     if (isRecoverableLLMError(err)) {
       const msg = err instanceof Error ? err.message : String(err);
+      synthesisFrame?.stop([{ text: `Synthesis failed: ${msg}` }]);
       warn(
         `Synthesis failed (${msg}): rolling back system name/description to config defaults, ` +
         `actors and external systems to pre-synthesis state, ` +
@@ -659,6 +741,10 @@ export async function buildModelParallel(
     } else {
       throw err;
     }
+  }
+
+  if (synthesisFrame) {
+    synthesisFrame.stop([{ text: "Synthesis complete" }]);
   }
 
   // Fallback: if system name/description are still empty (synthesis succeeded

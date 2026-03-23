@@ -61,34 +61,52 @@ export const modelCommand = new Command("model")
         ? fs.readFileSync(outputPath, "utf-8")
         : undefined;
 
-      const frame = createFrame("LLM Agent");
-      try {
-        const model = await buildModelWithLLM({
-          rawStructure,
-          config,
-          configYaml,
-          existingModelYaml,
-          onStatus(status) {
-            frame.update([
-              { text: status, spinner: true },
-              { text: `Model: ${config.llm.model}` },
-            ]);
-          },
-          onProgress({ line, final: done, kind }) {
-            frame.log(line, done, kind);
-          },
-        });
-        frame.stop([
-          {
-            text: `${model.containers.length} container(s), ` +
-              `${model.components.length} component(s), ` +
-              `${model.relationships.length} relationship(s)`,
-          },
-        ]);
-        yamlContent = serializeModel(model);
+      const isSeedMode = !existingModelYaml?.trim();
+      const isParallel = isSeedMode && rawStructure.applications.length > 1;
 
-        fs.writeFileSync(outputPath, yamlContent, "utf-8");
-        console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+      try {
+        if (isParallel) {
+          // Multi-app: parallel builder manages its own UI internally
+          const model = await buildModelWithLLM({
+            rawStructure,
+            config,
+            configYaml,
+            existingModelYaml,
+          });
+          yamlContent = serializeModel(model);
+
+          fs.writeFileSync(outputPath, yamlContent, "utf-8");
+          console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+        } else {
+          // Single-app / update: use Frame as before
+          const frame = createFrame("LLM Agent");
+          const model = await buildModelWithLLM({
+            rawStructure,
+            config,
+            configYaml,
+            existingModelYaml,
+            onStatus(status) {
+              frame.update([
+                { text: status, spinner: true },
+                { text: `Model: ${config.llm.model}` },
+              ]);
+            },
+            onProgress({ line, final: done, kind }) {
+              frame.log(line, done, kind);
+            },
+          });
+          frame.stop([
+            {
+              text: `${model.containers.length} container(s), ` +
+                `${model.components.length} component(s), ` +
+                `${model.relationships.length} relationship(s)`,
+            },
+          ]);
+          yamlContent = serializeModel(model);
+
+          fs.writeFileSync(outputPath, yamlContent, "utf-8");
+          console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+        }
       } catch (err) {
         if (
           err instanceof LLMUnavailableError ||

@@ -1031,7 +1031,9 @@ export async function buildModelWithLLM(
         config: options.config,
         configYaml: options.configYaml,
         provider: resolvedProvider,
-        onStatus: (status) => options.onStatus?.(status, resolvedProvider.name),
+        onStatus: options.onStatus
+          ? (status) => options.onStatus!(status, resolvedProvider.name)
+          : undefined,
         onProgress: options.onProgress,
       });
     } catch (err) {
