@@ -11,8 +11,8 @@ const DEFAULT_CONFIG = {
   scan: {
     include: ["**"],
     exclude: [
-      "**/test/**",
-      "**/tests/**",
+      "**/*test*/**",
+      "**/*test*",
       "**/node_modules/**",
       "**/build/**",
       "**/dist/**",
