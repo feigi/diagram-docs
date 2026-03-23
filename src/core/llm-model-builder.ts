@@ -950,6 +950,16 @@ export async function buildModelWithLLM(
       });
     } catch (err) {
       if (err instanceof LLMCallError || err instanceof LLMOutputError || err instanceof LLMUnavailableError) throw err;
+      // Propagate programming errors and system resource errors unchanged —
+      // these indicate bugs or host-level issues, not LLM failures.
+      if (
+        err instanceof TypeError || err instanceof RangeError ||
+        err instanceof ReferenceError || err instanceof SyntaxError
+      ) throw err;
+      if (err instanceof Error) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "ENOMEM" || code === "ENOSPC" || code === "EMFILE" || code === "ENFILE") throw err;
+      }
       throw new LLMCallError(
         `Failed to initialize parallel model builder: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
