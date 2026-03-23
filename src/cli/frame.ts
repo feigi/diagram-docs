@@ -168,7 +168,7 @@ export function createFrame(title: string): Frame {
         signalHandled = true;
         process.removeListener("exit", emergencyDisableMouse);
         emergencyDisableMouse();
-        process.exit(130);
+        process.exit(128 + (osConstants.signals.SIGINT ?? 2));
         return;
       }
       // SGR mouse: \x1b[<btn;col;rowM  (64=wheel up, 65=wheel down)
