@@ -928,12 +928,23 @@ export async function buildModelWithLLM(
   const resolvedProvider = resolveProvider(options.config);
   const emit = (status: string) => options.onStatus?.(status, resolvedProvider.name);
 
+  // Parallel path: multi-app seed mode dispatches per-app LLM calls concurrently
+  const isSeedMode = !options.existingModelYaml;
+  const apps = options.rawStructure.applications;
+  if (isSeedMode && apps.length > 1) {
+    const { buildModelParallel } = await import("./parallel-model-builder.js");
+    return buildModelParallel({
+      rawStructure: options.rawStructure,
+      config: options.config,
+      configYaml: options.configYaml,
+      provider: resolvedProvider,
+      onStatus: (status) => options.onStatus?.(status, resolvedProvider.name),
+      onProgress: options.onProgress,
+    });
+  }
+
   // 2. Build prompt — tool-using providers write to a temp file and self-validate
   emit("Building prompt...");
-
-  // Generate a deterministic seed so the LLM refines rather than creates from scratch.
-  // Skip if the caller already provided an existing model (real update mode).
-  const isSeedMode = !options.existingModelYaml;
   let existingModelYaml = options.existingModelYaml;
   if (isSeedMode) {
     try {
