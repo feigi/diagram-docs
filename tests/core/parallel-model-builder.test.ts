@@ -273,6 +273,35 @@ describe("mergePartialModels", () => {
     expect(merged.relationships[1].label).toBe("Reads from");
   });
 
+  it("deduplicates relationships by sourceId->targetId key", () => {
+    const a = makePartialModel({
+      relationships: [
+        { sourceId: "comp-x", targetId: "ext-db", label: "Reads from" },
+      ],
+    });
+
+    const b = makePartialModel({
+      relationships: [
+        { sourceId: "comp-x", targetId: "ext-db", label: "Writes to" },
+        { sourceId: "comp-y", targetId: "ext-db", label: "Reads from" },
+      ],
+    });
+
+    const merged = mergePartialModels([a, b]);
+
+    // comp-x->ext-db appears in both; first wins
+    expect(merged.relationships).toHaveLength(2);
+    expect(merged.relationships[0]).toMatchObject({
+      sourceId: "comp-x",
+      targetId: "ext-db",
+      label: "Reads from",
+    });
+    expect(merged.relationships[1]).toMatchObject({
+      sourceId: "comp-y",
+      targetId: "ext-db",
+    });
+  });
+
   it("leaves system name/description empty for synthesis", () => {
     const a = makePartialModel({
       system: { name: "App A System", description: "Desc A" },
@@ -1508,6 +1537,201 @@ describe("buildModelParallel", () => {
     expect(result.actors[0].id).toBe("user");
     expect(result.externalSystems).toHaveLength(1);
     expect(result.externalSystems[0].id).toBe("db");
+  });
+
+  it("enforces concurrency limit on parallel LLM calls", async () => {
+    const raw = makeRawStructure([
+      makeApp("svc-a", {
+        modules: [{
+          id: "mod-a1", path: "apps/svc-a/src/main", name: "svc-a.main",
+          files: ["Main.java"], exports: [], imports: [], metadata: {},
+        }],
+      }),
+      makeApp("svc-b", {
+        modules: [{
+          id: "mod-b1", path: "apps/svc-b/src/main", name: "svc-b.main",
+          files: ["Main.java"], exports: [], imports: [], metadata: {},
+        }],
+      }),
+      makeApp("svc-c", {
+        modules: [{
+          id: "mod-c1", path: "apps/svc-c/src/main", name: "svc-c.main",
+          files: ["Main.java"], exports: [], imports: [], metadata: {},
+        }],
+      }),
+      makeApp("svc-d", {
+        modules: [{
+          id: "mod-d1", path: "apps/svc-d/src/main", name: "svc-d.main",
+          files: ["Main.java"], exports: [], imports: [], metadata: {},
+        }],
+      }),
+      makeApp("svc-e", {
+        modules: [{
+          id: "mod-e1", path: "apps/svc-e/src/main", name: "svc-e.main",
+          files: ["Main.java"], exports: [], imports: [], metadata: {},
+        }],
+      }),
+    ]);
+
+    let running = 0;
+    let maxRunning = 0;
+    const barriers: Array<() => void> = [];
+
+    const concurrencyProvider: LLMProvider = {
+      name: "concurrency-mock",
+      supportsTools: false,
+      isAvailable: () => true,
+      generate: async (systemPrompt: string, userMessage: string) => {
+        if (systemPrompt.includes("synthesis agent")) {
+          return stringifyYaml({
+            system: { name: "Test", description: "Test" },
+          });
+        }
+
+        running++;
+        maxRunning = Math.max(maxRunning, running);
+
+        // Wait for barrier to release — simulates async LLM work
+        await new Promise<void>((resolve) => barriers.push(resolve));
+
+        running--;
+
+        // Find which app this is for
+        for (const id of ["svc-a", "svc-b", "svc-c", "svc-d", "svc-e"]) {
+          if (userMessage.includes(id)) {
+            return stringifyYaml({
+              version: 1,
+              system: { name: "", description: "" },
+              actors: [],
+              externalSystems: [],
+              containers: [
+                { id, applicationId: id, name: id, description: id, technology: "Java" },
+              ],
+              components: [
+                { id: `mod-${id.split("-")[1]}1`, containerId: id, name: "Main", description: "Core", technology: "Java", moduleIds: [`mod-${id.split("-")[1]}1`] },
+              ],
+              relationships: [],
+            });
+          }
+        }
+        throw new Error("Unexpected app");
+      },
+    };
+
+    const config = makeConfig({ llm: { concurrency: 2 } });
+
+    const resultPromise = buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider: concurrencyProvider,
+      onStatus: () => {},
+    });
+
+    // Let microtasks run so concurrency slots fill
+    await new Promise((r) => setTimeout(r, 10));
+
+    // With concurrency 2, exactly 2 should be running
+    expect(running).toBe(2);
+    expect(maxRunning).toBe(2);
+
+    // Release first two, let next two start
+    barriers.shift()!();
+    barriers.shift()!();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(running).toBe(2);
+
+    // Release next two
+    barriers.shift()!();
+    barriers.shift()!();
+    await new Promise((r) => setTimeout(r, 10));
+    expect(running).toBe(1);
+
+    // Release last one
+    barriers.shift()!();
+    await new Promise((r) => setTimeout(r, 10));
+
+    const result = await resultPromise;
+    expect(result.containers).toHaveLength(5);
+    // Concurrency was never exceeded
+    expect(maxRunning).toBe(2);
+  });
+
+  it("synthesis updates relationship labels on merged model", async () => {
+    const raw = makeRawStructure([
+      makeApp("svc-a", {
+        modules: [{
+          id: "mod-a1", path: "apps/svc-a/src/main", name: "svc-a.main",
+          files: ["Main.java"], exports: [], imports: [], metadata: {},
+        }],
+      }),
+      makeApp("svc-b", {
+        modules: [{
+          id: "mod-b1", path: "apps/svc-b/src/main", name: "svc-b.main",
+          files: ["Main.java"], exports: [], imports: [], metadata: {},
+        }],
+      }),
+    ]);
+
+    const partialA: ArchitectureModel = {
+      version: 1,
+      system: { name: "", description: "" },
+      actors: [],
+      externalSystems: [
+        { id: "postgresql", name: "PostgreSQL", description: "Database", technology: "PostgreSQL" },
+      ],
+      containers: [
+        { id: "svc-a", applicationId: "svc-a", name: "Service A", description: "A", technology: "Java" },
+      ],
+      components: [
+        { id: "mod-a1", containerId: "svc-a", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-a1"] },
+      ],
+      relationships: [
+        { sourceId: "mod-a1", targetId: "postgresql", label: "Uses" },
+      ],
+    };
+
+    const partialB: ArchitectureModel = {
+      version: 1,
+      system: { name: "", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        { id: "svc-b", applicationId: "svc-b", name: "Service B", description: "B", technology: "Java" },
+      ],
+      components: [
+        { id: "mod-b1", containerId: "svc-b", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-b1"] },
+      ],
+      relationships: [],
+    };
+
+    // Synthesis returns updated relationship labels
+    const synthesisYaml = stringifyYaml({
+      system: { name: "Platform", description: "Multi-service platform" },
+      relationships: [
+        { sourceId: "mod-a1", targetId: "postgresql", label: "Reads/writes user profiles via JDBC" },
+      ],
+    });
+
+    const responses = new Map<string, string>();
+    responses.set("svc-a", stringifyYaml(partialA));
+    responses.set("svc-b", stringifyYaml(partialB));
+    responses.set("__synthesis__", synthesisYaml);
+
+    const provider = makeMockProvider(responses);
+    const config = makeConfig();
+
+    const result = await buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider,
+    });
+
+    // The generic "Uses" label should be updated by synthesis
+    const pgRel = result.relationships.find(
+      (r) => r.sourceId === "mod-a1" && r.targetId === "postgresql",
+    );
+    expect(pgRel).toBeDefined();
+    expect(pgRel!.label).toBe("Reads/writes user profiles via JDBC");
   });
 
   it("synthesis rollback restores actors and relationship labels", async () => {

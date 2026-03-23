@@ -8,9 +8,9 @@ export type Role = "controller" | "listener" | "repository" | "service";
 export type SystemType = "Database" | "Message Broker" | "Cache" | "Search Engine" | "Object Storage";
 
 export interface DetectedExternalSystem {
-  keyword: string;
-  type: SystemType;
-  technology: string;
+  readonly keyword: string;
+  readonly type: SystemType;
+  readonly technology: string;
 }
 
 // ---------------------------------------------------------------------------
