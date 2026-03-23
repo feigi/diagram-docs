@@ -62,6 +62,10 @@ export class AgentLogger {
     if (!this.buffer) return Promise.resolve();
     const data = this.buffer;
     this.buffer = "";
-    return fs.promises.writeFile(this.logPath, data, { flag: "a" });
+    return fs.promises.writeFile(this.logPath, data, { flag: "a" }).catch((err) => {
+      try {
+        process.stderr.write(`Warning: failed to write agent log ${this.logPath}: ${err.message}\n`);
+      } catch { /* stderr unavailable */ }
+    });
   }
 }
