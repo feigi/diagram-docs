@@ -46,6 +46,38 @@ export class LLMOutputError extends Error {
 }
 
 // ---------------------------------------------------------------------------
+// Error classification
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true for native JS programming errors that should never be
+ * caught and silently swallowed — they indicate bugs in the code.
+ */
+export function isProgrammingError(err: unknown): boolean {
+  return (
+    err instanceof TypeError ||
+    err instanceof RangeError ||
+    err instanceof ReferenceError ||
+    err instanceof SyntaxError ||
+    err instanceof URIError ||
+    err instanceof EvalError
+  );
+}
+
+/** System-level error codes that indicate resource exhaustion, not LLM issues. */
+const SYSTEM_ERROR_CODES = new Set(["ENOMEM", "ENOSPC", "EMFILE", "ENFILE"]);
+
+/**
+ * Returns true for OS-level resource errors that should propagate rather
+ * than be wrapped as recoverable LLM errors.
+ */
+export function isSystemResourceError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const code = (err as NodeJS.ErrnoException).code;
+  return typeof code === "string" && SYSTEM_ERROR_CODES.has(code);
+}
+
+// ---------------------------------------------------------------------------
 // Async spawn helper
 // ---------------------------------------------------------------------------
 
@@ -155,11 +187,11 @@ function spawnWithStdin(
  * Parses streaming JSON events from stdout to extract text and report progress.
  */
 export interface ProgressEvent {
-  line: string;
+  readonly line: string;
   /** true when this line is complete (a newline was seen); false while still being built */
-  final: boolean;
+  readonly final: boolean;
   /** "thinking" for internal reasoning, "output" for actual generated content */
-  kind: "thinking" | "output";
+  readonly kind: "thinking" | "output";
 }
 
 function spawnStreamJson(
@@ -378,9 +410,9 @@ function spawnStreamJson(
 // ---------------------------------------------------------------------------
 
 export interface LLMProvider {
-  name: string;
+  readonly name: string;
   /** Whether this provider can use tools (file read/write) to self-correct output. */
-  supportsTools: boolean;
+  readonly supportsTools: boolean;
   isAvailable(): boolean;
   generate(
     systemPrompt: string,
@@ -870,7 +902,8 @@ export function repairLLMYaml(yaml: string): RepairResult {
     // The LLM sometimes concatenates list items when wrapping long output.
     // E.g.: `      - "mod-one"      - "mod-two"`
     const indent = line.match(/^(\s*)/)?.[1] ?? "";
-    const items = [...line.matchAll(/-\s+"[^"]*"/g)];
+    const isListItem = /^\s*-\s/.test(line);
+    const items = isListItem ? [...line.matchAll(/-\s+"[^"]*"/g)] : [];
     if (items.length > 1) {
       for (const m of items) {
         repaired.push(indent + m[0]);
@@ -946,7 +979,7 @@ export async function buildModelWithLLM(
   const emit = (status: string) => options.onStatus?.(status, resolvedProvider.name);
 
   // Parallel path: multi-app seed mode dispatches per-app LLM calls concurrently
-  const isSeedMode = !options.existingModelYaml;
+  const isSeedMode = !options.existingModelYaml?.trim();
   const apps = options.rawStructure.applications;
   if (isSeedMode && apps.length > 1) {
     try {
@@ -961,15 +994,10 @@ export async function buildModelWithLLM(
       });
     } catch (err) {
       if (err instanceof LLMCallError || err instanceof LLMOutputError || err instanceof LLMUnavailableError) throw err;
-      // Propagate programming errors and system resource errors unchanged —
-      // these indicate bugs or host-level issues, not LLM failures.
-      let classifiers: { isProgrammingError: (e: unknown) => boolean; isSystemResourceError: (e: unknown) => boolean } | undefined;
-      try {
-        classifiers = await import("./parallel-model-builder.js");
-      } catch { /* module failed to load — fall through to LLMCallError wrapping */ }
-      if (classifiers?.isProgrammingError(err) || classifiers?.isSystemResourceError(err)) throw err;
+      if (isProgrammingError(err)) throw err;
+      if (isSystemResourceError(err)) throw err;
       throw new LLMCallError(
-        `Failed to initialize parallel model builder: ${err instanceof Error ? err.message : String(err)}`,
+        `Parallel model builder failed: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
       );
     }
@@ -983,11 +1011,8 @@ export async function buildModelWithLLM(
       const seed = buildModel({ config: options.config, rawStructure: options.rawStructure });
       existingModelYaml = stringifyYaml(seed, { lineWidth: 120 });
     } catch (err: unknown) {
-      if (
-        err instanceof TypeError || err instanceof RangeError ||
-        err instanceof ReferenceError || err instanceof SyntaxError ||
-        err instanceof URIError || err instanceof EvalError
-      ) throw err;
+      if (isProgrammingError(err)) throw err;
+      if (isSystemResourceError(err)) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       throw new LLMCallError(`Failed to generate deterministic seed for LLM: ${msg}`, { cause: err });
     }
