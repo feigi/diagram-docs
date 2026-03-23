@@ -432,7 +432,7 @@ const claudeCodeProvider: LLMProvider = {
           "--allowedTools", "Write", "Read", "Edit",
         ],
         userMessage,
-        600_000, // 10 minutes
+        900_000, // 15 minutes
         onProgress,
       );
     } finally {
@@ -465,7 +465,7 @@ const copilotProvider: LLMProvider = {
     // Pass via stdin to avoid OS argument length limits on large codebases.
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
     return spawnWithStdin(
-      "gh", ["copilot", "-p", "-"], combinedPrompt, 600_000,
+      "gh", ["copilot", "-p", "-"], combinedPrompt, 900_000,
       onProgress ? (line) => onProgress({ line, final: true, kind: "output" }) : undefined,
     );
   },
