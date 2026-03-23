@@ -11,6 +11,7 @@ import type {
 import type { Config } from "../config/schema.js";
 import { slugify } from "./slugify.js";
 import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
+import { detectRole, detectExternalSystems } from "./patterns.js";
 
 export interface BuildModelOptions {
   config: Config;
@@ -85,7 +86,7 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
         id: group.representative.id,
         containerId: app.id,
         name: group.displayName,
-        description: `${group.displayName} module`,
+        description: roleDescription(group.displayName, group.representative.metadata["annotations"] ?? ""),
         technology: inferComponentTechnology(group.representative, app.language),
         moduleIds: group.moduleIds,
       }));
@@ -111,15 +112,17 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
         id: mod.id,
         containerId: app.id,
         name: displayName,
-        description: `${displayName} module`,
+        description: roleDescription(displayName, mod.metadata["annotations"] ?? ""),
         technology: inferComponentTechnology(mod, app.language),
         moduleIds: [mod.id],
       };
     });
   });
 
-  // External systems: declared in config
-  const externalSystems = buildExternalSystems(config.externalSystems);
+  // External systems: merge config-declared with auto-detected from deps
+  const configExternalSystems = buildExternalSystems(config.externalSystems);
+  const detectedExternalSystems = detectExternalSystemsFromApps(apps);
+  const externalSystems = mergeExternalSystems(configExternalSystems, detectedExternalSystems);
 
   // Relationships
   const relationships = buildRelationships(apps, components, externalSystems, config.externalSystems);
@@ -130,7 +133,7 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
       name: config.system.name,
       description: config.system.description,
     },
-    actors: [], // User fills these in
+    actors: inferActors(apps),
     externalSystems,
     containers,
     components,
@@ -298,6 +301,100 @@ function buildExternalSystems(
       technology: entry.technology ?? "External System",
     }))
     .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Infer actors from scanned applications by looking for controller/listener roles.
+ * - Any controller → API Consumer actor
+ * - Any listener → Upstream System actor
+ * Deduplicates: one actor per type regardless of how many apps have controllers/listeners.
+ */
+function inferActors(apps: ScannedApplication[]): ArchitectureModel["actors"] {
+  let hasController = false;
+  let hasListener = false;
+
+  for (const app of apps) {
+    for (const mod of app.modules) {
+      const annotations = mod.metadata["annotations"] ?? "";
+      const role = detectRole(annotations);
+      if (role === "controller") hasController = true;
+      if (role === "listener") hasListener = true;
+      if (hasController && hasListener) break;
+    }
+    if (hasController && hasListener) break;
+  }
+
+  const actors: ArchitectureModel["actors"] = [];
+  if (hasController) {
+    actors.push({
+      id: "api-consumer",
+      name: "API Consumer",
+      description: "External client that consumes the system's APIs",
+    });
+  }
+  if (hasListener) {
+    actors.push({
+      id: "upstream-system",
+      name: "Upstream System",
+      description: "External system that produces messages consumed by the system",
+    });
+  }
+  return actors;
+}
+
+/**
+ * Detect external systems from dependency names across all apps.
+ * Maps detected systems to ArchitectureModel format.
+ */
+function detectExternalSystemsFromApps(
+  apps: ScannedApplication[],
+): ArchitectureModel["externalSystems"] {
+  const allDepNames = apps.flatMap((app) => app.externalDependencies.map((d) => d.name));
+  const detected = detectExternalSystems(allDepNames);
+  return detected.map((d) => ({
+    id: slugify(d.technology),
+    name: d.technology,
+    description: `${d.type} used by the system`,
+    technology: d.type,
+  }));
+}
+
+/**
+ * Merge config-declared external systems with auto-detected ones.
+ * Config-declared entries take precedence (keyed by id).
+ * Detected systems fill in what config doesn't declare.
+ * Result is sorted by name.
+ */
+function mergeExternalSystems(
+  configSystems: ArchitectureModel["externalSystems"],
+  detectedSystems: ArchitectureModel["externalSystems"],
+): ArchitectureModel["externalSystems"] {
+  const configIds = new Set(configSystems.map((s) => s.id));
+  const merged = [
+    ...configSystems,
+    ...detectedSystems.filter((s) => !configIds.has(s.id)),
+  ];
+  return merged.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Produce a role-informed description for a component.
+ * Matches annotations to known roles and returns a descriptive string.
+ */
+function roleDescription(displayName: string, annotations: string): string {
+  const role = detectRole(annotations);
+  switch (role) {
+    case "controller":
+      return `REST API controller for ${displayName}`;
+    case "service":
+      return `Business logic service for ${displayName}`;
+    case "repository":
+      return `Data access layer for ${displayName}`;
+    case "listener":
+      return `Message listener for ${displayName}`;
+    default:
+      return `${displayName} module`;
+  }
 }
 
 function buildRelationships(
