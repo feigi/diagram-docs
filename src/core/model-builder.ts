@@ -11,7 +11,7 @@ import type {
 import type { Config } from "../config/schema.js";
 import { slugify } from "./slugify.js";
 import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
-import { detectRole, detectExternalSystems, inferRelationshipLabel, inferComponentTech, type Role } from "./patterns.js";
+import { detectRole, detectExternalSystems, inferRelationshipLabel, inferExternalRelationshipLabel, inferComponentTech, type Role } from "./patterns.js";
 
 export interface BuildModelOptions {
   config: Config;
@@ -112,7 +112,7 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
         id: mod.id,
         containerId: app.id,
         name: displayName,
-        description: roleDescription(displayName, mod.metadata["annotations"] ?? ""),
+        description: roleDescription(displayName, String(mod.metadata["annotations"] ?? "")),
         technology: inferComponentTechnology(mod, app.language),
         moduleIds: [mod.id],
       };
@@ -272,7 +272,7 @@ function inferComponentTechnology(
   mod: ScannedModule,
   language: string,
 ): string {
-  const annotations = mod.metadata["annotations"] ?? "";
+  const annotations = String(mod.metadata["annotations"] ?? "");
   if (annotations) {
     return inferComponentTech(annotations, language);
   }
@@ -305,7 +305,7 @@ function inferActors(apps: ScannedApplication[]): ArchitectureModel["actors"] {
 
   for (const app of apps) {
     for (const mod of app.modules) {
-      const annotations = mod.metadata["annotations"] ?? "";
+      const annotations = String(mod.metadata["annotations"] ?? "");
       const role = detectRole(annotations);
       if (role === "controller") hasController = true;
       if (role === "listener") hasListener = true;
@@ -525,6 +525,29 @@ function buildRelationships(
           targetId: extId,
           label: `Uses ${entry.name}`,
           technology: entry.technology,
+        });
+      }
+    }
+  }
+
+  // Auto-detected external system relationships (from dependency names)
+  const configExtIds = new Set(configEntries.map((e) => slugify(e.name)));
+  for (const app of apps) {
+    const depNames = app.externalDependencies.map((d) => d.name);
+    const detected = detectExternalSystems(depNames);
+    for (const d of detected) {
+      const extId = slugify(d.technology);
+      // Skip if this external system is config-declared (already handled above with usedBy)
+      if (configExtIds.has(extId)) continue;
+      if (!extIds.has(extId)) continue;
+      const key = `${app.id}->${extId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        relationships.push({
+          sourceId: app.id,
+          targetId: extId,
+          label: inferExternalRelationshipLabel(d.type),
+          technology: d.technology,
         });
       }
     }
