@@ -209,10 +209,12 @@ function spawnStreamJson(
             if (onProgress) {
               const lines = resultText.trimEnd().split("\n");
               const lastLine = lines[lines.length - 1]?.trim();
-              // New line started → push previous as finished
+              // New line(s) started → push all completed lines as finished
               if (lines.length > lastTextLineCount) {
-                const prev = lines[lines.length - 2]?.trim();
-                if (prev) onProgress({ line: prev, final: true, kind: "output" });
+                for (let li = lastTextLineCount - 1; li < lines.length - 1; li++) {
+                  const completed = lines[li]?.trim();
+                  if (completed) onProgress({ line: completed, final: true, kind: "output" });
+                }
                 lastTextLineCount = lines.length;
               }
               if (lastLine) onProgress({ line: lastLine, final: false, kind: "output" });
@@ -225,8 +227,10 @@ function spawnStreamJson(
               const lines = thinkingText.trimEnd().split("\n");
               const lastLine = lines[lines.length - 1]?.trim();
               if (lines.length > lastThinkLineCount) {
-                const prev = lines[lines.length - 2]?.trim();
-                if (prev) onProgress({ line: prev, final: true, kind: "thinking" });
+                for (let li = lastThinkLineCount - 1; li < lines.length - 1; li++) {
+                  const completed = lines[li]?.trim();
+                  if (completed) onProgress({ line: completed, final: true, kind: "thinking" });
+                }
                 lastThinkLineCount = lines.length;
               }
               if (lastLine) onProgress({ line: lastLine, final: false, kind: "thinking" });
