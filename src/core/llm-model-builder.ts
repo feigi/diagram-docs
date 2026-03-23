@@ -458,6 +458,8 @@ const claudeCodeProvider: LLMProvider = {
     try {
       fs.writeFileSync(tmpFile, systemPrompt, "utf-8");
     } catch (err: unknown) {
+      if (isProgrammingError(err)) throw err;
+      if (isSystemResourceError(err)) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       throw new LLMCallError(`Failed to write system prompt to temp file: ${msg}`, { cause: err });
     }
