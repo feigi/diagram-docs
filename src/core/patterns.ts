@@ -79,7 +79,7 @@ const EXTERNAL_SYSTEM_PATTERNS: Array<{
   keyword: string;
   type: SystemType;
   technology: string;
-  boundary?: boolean;
+  boundaryRegex?: RegExp;
 }> = [
   // Databases
   { keyword: "postgresql", type: "Database", technology: "PostgreSQL" },
@@ -108,7 +108,7 @@ const EXTERNAL_SYSTEM_PATTERNS: Array<{
   // "s3" requires word-boundary matching to avoid false positives on "css3",
   // "es3", "js3". Real deps are named like "aws-java-sdk-s3" or
   // "software.amazon.awssdk:s3" where s3 appears as a separate token.
-  { keyword: "s3", type: "Object Storage", technology: "S3", boundary: true },
+  { keyword: "s3", type: "Object Storage", technology: "S3", boundaryRegex: /(?:^|[^a-z])s3(?:$|[^a-z0-9])/i },
   { keyword: "minio", type: "Object Storage", technology: "S3" },
 ];
 
@@ -123,9 +123,9 @@ export function detectExternalSystems(depNames: string[]): DetectedExternalSyste
 
   for (const dep of depNames) {
     const depLower = dep.toLowerCase();
-    for (const { keyword, type, technology, boundary } of EXTERNAL_SYSTEM_PATTERNS) {
-      const matches = boundary
-        ? new RegExp(`(?:^|[^a-z])${keyword}(?:$|[^a-z0-9])`, "i").test(depLower)
+    for (const { keyword, type, technology, boundaryRegex } of EXTERNAL_SYSTEM_PATTERNS) {
+      const matches = boundaryRegex
+        ? boundaryRegex.test(depLower)
         : depLower.includes(keyword);
       if (matches) {
         const dedupeKey = `${type}::${technology}`;
