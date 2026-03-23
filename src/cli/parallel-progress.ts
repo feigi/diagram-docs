@@ -1,0 +1,254 @@
+/**
+ * Compact terminal display for parallel LLM agent status.
+ * Shows per-app state (queued/thinking/output/done/failed) with spinners and elapsed timers.
+ * Falls back to one-line-per-transition when stderr is not a TTY.
+ */
+import chalk from "chalk";
+import {
+  SPINNER_FRAMES,
+  SPINNER_INTERVAL,
+  formatElapsed,
+  getFrameWidth,
+  truncate,
+  padRight,
+} from "./terminal-utils.js";
+
+export type AppState = "queued" | "thinking" | "output" | "done" | "failed";
+
+export interface ParallelProgress {
+  /** Register apps upfront so queued state renders immediately */
+  setApps(appIds: string[]): void;
+  /** Update a single app's state */
+  updateApp(appId: string, state: AppState): void;
+  /** Overall status text (e.g. "Merging models...") */
+  setStatus(text: string): void;
+  /** Collapse to summary and release terminal */
+  stop(summary: string): void;
+}
+
+interface AppEntry {
+  id: string;
+  state: AppState;
+  startTime: number | null;
+  elapsed: number | null; // frozen on done/failed
+}
+
+export function createParallelProgress(llmModel: string): ParallelProgress {
+  const isTTY = process.stderr.isTTY;
+  const startTime = Date.now();
+  const apps: AppEntry[] = [];
+  let statusText = "";
+  let spinnerIdx = 0;
+  let timer: ReturnType<typeof setInterval> | null = null;
+  let prevTotalRows = 0;
+  let firstRender = true;
+  let stopped = false;
+  const MAX_APP_ID_LEN = 28;
+
+  function overallElapsed(): string {
+    return formatElapsed(Date.now() - startTime);
+  }
+
+  // ── Non-TTY helpers ──
+
+  function printLine(text: string): void {
+    process.stderr.write(`[${overallElapsed().padStart(7)}] ${text}\n`);
+  }
+
+  // ── TTY rendering ──
+
+  function stateIcon(state: AppState): string {
+    switch (state) {
+      case "done": return chalk.green("✓");
+      case "failed": return chalk.red("✗");
+      case "queued": return chalk.dim("○");
+      default: return chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+    }
+  }
+
+  function render(): void {
+    if (!isTTY || stopped) return;
+
+    const frameWidth = getFrameWidth();
+    const inner = frameWidth - 2;
+
+    function row(content: string): string {
+      return chalk.dim("│") + " " + padRight(content, inner - 2) + " " + chalk.dim("│");
+    }
+
+    const titleStr = " LLM Agents ";
+    const topFill = inner - titleStr.length - 1;
+    const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
+    const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
+
+    // Header: spinner + "Modeling N apps" + overall elapsed
+    const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+    const headerText = statusText || `Modeling ${apps.length} apps`;
+    const elapsed = overallElapsed();
+    const maxHeaderText = inner - 10 - elapsed.length;
+    const headerRow = row(`${spinner} ${truncate(headerText, maxHeaderText)}  ${chalk.dim(elapsed)}`);
+
+    // Model line
+    const modelRow = row(`  Model: ${llmModel}`);
+
+    // Blank separator
+    const blankRow = chalk.dim("│") + " ".repeat(inner) + chalk.dim("│");
+
+    // App rows — limit to terminal height
+    const termRows = process.stderr.rows || 24;
+    const maxAppRows = Math.max(3, termRows - 6);
+
+    // Partition: active/recent first, then queued
+    const active = apps.filter((a) => a.state !== "queued");
+    const queued = apps.filter((a) => a.state === "queued");
+    let visibleApps: AppEntry[];
+    let hiddenCount = 0;
+
+    if (active.length + queued.length <= maxAppRows) {
+      visibleApps = [...active, ...queued];
+    } else if (active.length >= maxAppRows) {
+      visibleApps = active.slice(0, maxAppRows - 1);
+      hiddenCount = apps.length - visibleApps.length;
+    } else {
+      const queuedSlots = maxAppRows - active.length - 1;
+      visibleApps = [...active, ...queued.slice(0, Math.max(0, queuedSlots))];
+      hiddenCount = apps.length - visibleApps.length;
+    }
+
+    const appRows = visibleApps.map((app) => {
+      const icon = stateIcon(app.state);
+      const id = truncate(app.id, MAX_APP_ID_LEN);
+      const stateLabel = app.state === "done" || app.state === "failed"
+        ? app.state
+        : app.state === "queued"
+          ? "queued"
+          : `${app.state}...`;
+      const elapsedStr = app.elapsed != null
+        ? formatElapsed(app.elapsed)
+        : app.startTime != null
+          ? formatElapsed(Date.now() - app.startTime)
+          : "";
+      const leftPart = `${icon} ${padRight(id, MAX_APP_ID_LEN + 2)}${stateLabel}`;
+      if (elapsedStr) {
+        const maxLeft = inner - 4 - elapsedStr.length;
+        return row(`  ${padRight(leftPart, maxLeft)}${chalk.dim(elapsedStr)}`);
+      }
+      return row(`  ${leftPart}`);
+    });
+
+    if (hiddenCount > 0) {
+      appRows.push(row(chalk.dim(`  … and ${hiddenCount} more queued`)));
+    }
+
+    const rows = [top, headerRow, modelRow, blankRow, ...appRows, bottom];
+    const totalRows = rows.length;
+
+    let output = "";
+    if (firstRender) {
+      output += "\n".repeat(totalRows) + `\x1b[${totalRows}A`;
+      firstRender = false;
+    } else {
+      const extra = Math.max(0, totalRows - prevTotalRows);
+      output += "\n".repeat(extra);
+      output += `\x1b[${prevTotalRows + extra}A`;
+    }
+    output += "\x1b[?25l";
+    output += rows.join("\n") + "\n";
+    output += "\x1b[J";
+    prevTotalRows = totalRows;
+
+    process.stderr.write(output);
+  }
+
+  function startTimer(): void {
+    if (timer || !isTTY) return;
+    timer = setInterval(() => {
+      spinnerIdx++;
+      render();
+    }, SPINNER_INTERVAL);
+  }
+
+  function stopTimer(): void {
+    if (timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  }
+
+  return {
+    setApps(appIds: string[]): void {
+      apps.length = 0;
+      for (const id of appIds) {
+        apps.push({ id, state: "queued", startTime: null, elapsed: null });
+      }
+      if (!isTTY) {
+        printLine(`Modeling ${appIds.length} apps (${llmModel})`);
+        return;
+      }
+      render();
+      startTimer();
+    },
+
+    updateApp(appId: string, state: AppState): void {
+      const entry = apps.find((a) => a.id === appId);
+      if (!entry) return;
+
+      if (entry.startTime == null && state !== "queued") {
+        entry.startTime = Date.now();
+      }
+      if ((state === "done" || state === "failed") && entry.startTime != null) {
+        entry.elapsed = Date.now() - entry.startTime;
+      }
+      entry.state = state;
+
+      if (!isTTY) {
+        const elapsedStr = entry.elapsed != null ? ` (${formatElapsed(entry.elapsed)})` : "";
+        printLine(`${appId}: ${state}${elapsedStr}`);
+        return;
+      }
+      render();
+    },
+
+    setStatus(text: string): void {
+      statusText = text;
+      if (!isTTY) {
+        printLine(text);
+        return;
+      }
+      render();
+    },
+
+    stop(summary: string): void {
+      if (stopped) return;
+      stopped = true;
+      stopTimer();
+
+      const elapsed = overallElapsed();
+
+      if (!isTTY) {
+        printLine(summary);
+        return;
+      }
+
+      const frameWidth = getFrameWidth();
+      const inner = frameWidth - 2;
+      const titleStr = " LLM Agents ";
+      const topFill = inner - titleStr.length - 1;
+      const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
+      const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
+      const summaryRow = chalk.dim("│") + " " +
+        padRight(`${chalk.green("✓")} ${truncate(summary, inner - 8)}  ${chalk.dim(elapsed)}`, inner - 2) +
+        " " + chalk.dim("│");
+
+      let output = "";
+      if (prevTotalRows > 0) {
+        output += `\x1b[${prevTotalRows}A`;
+      }
+      output += [top, summaryRow, bottom].join("\n") + "\n";
+      output += "\x1b[J";
+      output += "\x1b[?25h";
+
+      process.stderr.write(output);
+    },
+  };
+}
