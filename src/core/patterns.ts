@@ -5,9 +5,11 @@
 
 export type Role = "controller" | "listener" | "repository" | "service";
 
+export type SystemType = "Database" | "Message Broker" | "Cache" | "Search Engine" | "Object Storage";
+
 export interface DetectedExternalSystem {
   keyword: string;
-  type: string;
+  type: SystemType;
   technology: string;
 }
 
@@ -20,10 +22,10 @@ export interface DetectedExternalSystem {
  * First match wins, so order matters if patterns could overlap.
  */
 const ROLE_PATTERNS: Array<{ pattern: string; role: Role }> = [
-  // restcontroller and controller both map to "controller". restcontroller is a
-  // substring of controller, so this entry is unreachable in practice. Kept for
-  // documentation: it makes the intent explicit that Spring's @RestController is
-  // a first-class controller pattern.
+  // restcontroller and controller both map to "controller". "controller" is a
+  // substring of "restcontroller", so the restcontroller entry matches first for
+  // that specific token. Kept for documentation: it makes the intent explicit
+  // that Spring's @RestController is a first-class controller pattern.
   { pattern: "restcontroller", role: "controller" },
   { pattern: "controller", role: "controller" },
   { pattern: "resource", role: "controller" },
@@ -69,7 +71,7 @@ export function detectRole(annotations: string): Role | undefined {
  */
 const EXTERNAL_SYSTEM_PATTERNS: Array<{
   keyword: string;
-  type: string;
+  type: SystemType;
   technology: string;
 }> = [
   // Databases
@@ -77,11 +79,9 @@ const EXTERNAL_SYSTEM_PATTERNS: Array<{
   { keyword: "mysql", type: "Database", technology: "MySQL" },
   { keyword: "oracle", type: "Database", technology: "Oracle" },
   { keyword: "sqlite", type: "Database", technology: "SQLite" },
-  // "h2database" matches the Maven group ID (com.h2database:h2) and is specific
-  // enough to avoid false positives. "h2" is kept as a secondary entry for
-  // build files that reference just the artifact name.
+  // "h2database" matches the Maven group ID (com.h2database:h2). The bare "h2"
+  // keyword is too short and risks false positives (e.g. "auth2-client").
   { keyword: "h2database", type: "Database", technology: "H2" },
-  { keyword: "h2", type: "Database", technology: "H2" },
   // Message brokers
   { keyword: "kafka", type: "Message Broker", technology: "Apache Kafka" },
   { keyword: "rabbitmq", type: "Message Broker", technology: "RabbitMQ" },
@@ -153,21 +153,16 @@ export function inferRelationshipLabel(
 /**
  * Infer a relationship label from a component to an external system.
  */
-export function inferExternalRelationshipLabel(systemType: string): string {
-  switch (systemType) {
-    case "Database":
-      return "Reads/writes data in";
-    case "Message Broker":
-      return "Publishes/consumes messages via";
-    case "Cache":
-      return "Caches data in";
-    case "Search Engine":
-      return "Indexes/queries";
-    case "Object Storage":
-      return "Stores objects in";
-    default:
-      return "Integrates with";
-  }
+const EXTERNAL_RELATIONSHIP_LABELS: Record<SystemType, string> = {
+  "Database": "Reads/writes data in",
+  "Message Broker": "Publishes/consumes messages via",
+  "Cache": "Caches data in",
+  "Search Engine": "Indexes/queries",
+  "Object Storage": "Stores objects in",
+};
+
+export function inferExternalRelationshipLabel(systemType: SystemType): string {
+  return EXTERNAL_RELATIONSHIP_LABELS[systemType];
 }
 
 // ---------------------------------------------------------------------------

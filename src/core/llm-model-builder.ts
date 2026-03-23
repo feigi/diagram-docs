@@ -932,7 +932,15 @@ export async function buildModelWithLLM(
   const isSeedMode = !options.existingModelYaml;
   const apps = options.rawStructure.applications;
   if (isSeedMode && apps.length > 1) {
-    const { buildModelParallel } = await import("./parallel-model-builder.js");
+    let buildModelParallel: typeof import("./parallel-model-builder.js")["buildModelParallel"];
+    try {
+      ({ buildModelParallel } = await import("./parallel-model-builder.js"));
+    } catch (err) {
+      throw new LLMCallError(
+        `Failed to load parallel model builder: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
     return buildModelParallel({
       rawStructure: options.rawStructure,
       config: options.config,

@@ -482,7 +482,7 @@ describe("buildModelParallel", () => {
     expect(result.externalSystems[0].id).toBe("postgresql");
   });
 
-  it("falls back to deterministic seed when per-app call fails", async () => {
+  it("falls back to deterministic seed when a per-app call fails", async () => {
     const raw = makeRawStructure([
       makeApp("svc-a", {
         modules: [
@@ -497,14 +497,54 @@ describe("buildModelParallel", () => {
           },
         ],
       }),
+      makeApp("svc-b", {
+        modules: [
+          {
+            id: "mod-b1",
+            path: "apps/svc-b/src/main",
+            name: "svc-b.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
     ]);
 
-    // Provider throws for per-app calls, succeeds for synthesis
+    const partialB: ArchitectureModel = {
+      version: 1,
+      system: { name: "Service B", description: "B service" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "Service B",
+          description: "Service B application",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core logic",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
+      ],
+      relationships: [],
+    };
+
+    // Provider throws for svc-a, succeeds for svc-b, succeeds for synthesis
     const failingProvider: LLMProvider = {
       name: "failing-mock",
       supportsTools: false,
       isAvailable: () => true,
-      generate: async (systemPrompt: string, _userMessage: string) => {
+      generate: async (systemPrompt: string, userMessage: string) => {
         const isSynthesis = systemPrompt.includes("synthesis agent");
         if (isSynthesis) {
           return stringifyYaml({
@@ -514,7 +554,10 @@ describe("buildModelParallel", () => {
             relationships: [],
           });
         }
-        throw new Error("LLM connection failed");
+        if (userMessage.includes("svc-a")) {
+          throw new Error("LLM connection failed");
+        }
+        return stringifyYaml(partialB);
       },
     };
 
@@ -528,14 +571,68 @@ describe("buildModelParallel", () => {
       onStatus: (s) => statuses.push(s),
     });
 
-    // Should still produce a valid model with deterministic seed data
-    expect(result.containers).toHaveLength(1);
-    expect(result.containers[0].id).toBe("svc-a");
-    expect(result.containers[0].name).toBe("Svc A");
+    // Should still produce a valid model — svc-a falls back to deterministic seed
+    expect(result.containers).toHaveLength(2);
+    expect(result.containers.map((c) => c.id).sort()).toEqual(["svc-a", "svc-b"]);
 
-    // Should have logged a fallback message
+    // Should have logged a fallback message for svc-a
     const fallbackMsg = statuses.find((s) => s.includes("deterministic seed"));
     expect(fallbackMsg).toBeDefined();
+
+    // Should have logged partial fallback warning
+    const warnMsg = statuses.find((s) => s.includes("WARNING") && s.includes("fell back"));
+    expect(warnMsg).toBeDefined();
+  });
+
+  it("throws when ALL per-app calls fail", async () => {
+    const raw = makeRawStructure([
+      makeApp("svc-a", {
+        modules: [
+          {
+            id: "mod-a1",
+            path: "apps/svc-a/src/main",
+            name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+      makeApp("svc-b", {
+        modules: [
+          {
+            id: "mod-b1",
+            path: "apps/svc-b/src/main",
+            name: "svc-b.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+    ]);
+
+    const allFailProvider: LLMProvider = {
+      name: "all-fail-mock",
+      supportsTools: false,
+      isAvailable: () => true,
+      generate: async () => {
+        throw new Error("LLM connection failed");
+      },
+    };
+
+    const config = makeConfig();
+
+    await expect(
+      buildModelParallel({
+        rawStructure: raw,
+        config,
+        provider: allFailProvider,
+        onStatus: () => {},
+      }),
+    ).rejects.toThrow("All 2 per-app LLM calls failed");
   });
 
   it("falls back to config system info when synthesis fails", async () => {
@@ -546,6 +643,19 @@ describe("buildModelParallel", () => {
             id: "mod-a1",
             path: "apps/svc-a/src/main",
             name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+      makeApp("svc-b", {
+        modules: [
+          {
+            id: "mod-b1",
+            path: "apps/svc-b/src/main",
+            name: "svc-b.main",
             files: ["Main.java"],
             exports: [],
             imports: [],
@@ -582,19 +692,45 @@ describe("buildModelParallel", () => {
       relationships: [],
     };
 
+    const partialB: ArchitectureModel = {
+      version: 1,
+      system: { name: "", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "Service B",
+          description: "Service B app",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
+      ],
+      relationships: [],
+    };
+
     let callCount = 0;
     const synthFailProvider: LLMProvider = {
       name: "synth-fail-mock",
       supportsTools: false,
       isAvailable: () => true,
-      generate: async (systemPrompt: string, _userMessage: string) => {
+      generate: async (systemPrompt: string, userMessage: string) => {
         callCount++;
-        // Synthesis calls use a different system prompt
         const isSynthesis = systemPrompt.includes("synthesis agent");
         if (isSynthesis) {
           throw new Error("Synthesis LLM timeout");
         }
-        // Per-app call succeeds
+        if (userMessage.includes("svc-b")) return stringifyYaml(partialB);
         return stringifyYaml(partialA);
       },
     };
@@ -615,8 +751,8 @@ describe("buildModelParallel", () => {
     expect(result.system.name).toBe("Config System Name");
     expect(result.system.description).toBe("Config description");
 
-    // Should have called provider at least twice (per-app + synthesis attempt)
-    expect(callCount).toBeGreaterThanOrEqual(2);
+    // Should have called provider at least 3 times (2 per-app + synthesis attempt)
+    expect(callCount).toBeGreaterThanOrEqual(3);
 
     // Should have logged synthesis failure
     const synthMsg = statuses.find((s) => s.includes("Synthesis failed"));

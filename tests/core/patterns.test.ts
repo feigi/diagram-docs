@@ -143,9 +143,9 @@ describe("detectExternalSystems", () => {
     expect(result).toEqual([{ keyword: "h2database", type: "Database", technology: "H2" }]);
   });
 
-  it("detects H2 via bare h2 artifact name (secondary keyword)", () => {
+  it("does not match bare h2 to avoid false positives", () => {
     const result = detectExternalSystems(["h2"]);
-    expect(result).toEqual([{ keyword: "h2", type: "Database", technology: "H2" }]);
+    expect(result).toEqual([]);
   });
 
   // Message broker patterns
@@ -286,8 +286,12 @@ describe("inferExternalRelationshipLabel", () => {
     expect(inferExternalRelationshipLabel("Object Storage")).toBe("Stores objects in");
   });
 
-  it("returns 'Integrates with' for unknown system type", () => {
-    expect(inferExternalRelationshipLabel("Unknown")).toBe("Integrates with");
+  it("covers all SystemType values", () => {
+    // Ensure every SystemType has a non-empty label
+    const systemTypes = ["Database", "Message Broker", "Cache", "Search Engine", "Object Storage"] as const;
+    for (const st of systemTypes) {
+      expect(inferExternalRelationshipLabel(st)).toBeTruthy();
+    }
   });
 });
 
