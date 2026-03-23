@@ -567,8 +567,26 @@ export async function buildModelParallel(
       );
     }
 
-    const parsed = parseYaml(repaired.yaml);
-    const synthesis = synthesisSchema.parse(parsed);
+    let parsed: unknown;
+    try {
+      parsed = parseYaml(repaired.yaml);
+    } catch (parseErr) {
+      throw new LLMOutputError(
+        `Failed to parse synthesis output as YAML: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`,
+        repaired.yaml,
+        { cause: parseErr },
+      );
+    }
+    let synthesis: z.infer<typeof synthesisSchema>;
+    try {
+      synthesis = synthesisSchema.parse(parsed);
+    } catch (schemaErr) {
+      throw new LLMOutputError(
+        `Synthesis output failed schema validation: ${schemaErr instanceof Error ? schemaErr.message : String(schemaErr)}`,
+        repaired.yaml,
+        { cause: schemaErr },
+      );
+    }
 
     // Apply all mutations atomically — collect first, then apply
     const newSystemName = synthesis.system?.name;

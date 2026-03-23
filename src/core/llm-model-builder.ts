@@ -983,6 +983,11 @@ export async function buildModelWithLLM(
       const seed = buildModel({ config: options.config, rawStructure: options.rawStructure });
       existingModelYaml = stringifyYaml(seed, { lineWidth: 120 });
     } catch (err: unknown) {
+      if (
+        err instanceof TypeError || err instanceof RangeError ||
+        err instanceof ReferenceError || err instanceof SyntaxError ||
+        err instanceof URIError || err instanceof EvalError
+      ) throw err;
       const msg = err instanceof Error ? err.message : String(err);
       throw new LLMCallError(`Failed to generate deterministic seed for LLM: ${msg}`, { cause: err });
     }
