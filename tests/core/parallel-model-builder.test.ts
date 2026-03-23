@@ -1862,4 +1862,42 @@ describe("buildModelParallel", () => {
     expect(rollbackMsg).toContain("actors");
     expect(rollbackMsg).toContain("relationship labels");
   });
+
+  it("creates its own UI when onStatus/onProgress are omitted", async () => {
+    const provider: LLMProvider = {
+      name: "test-provider",
+      supportsTools: false,
+      isAvailable: () => true,
+      generate: async (_sys, userMessage, _model, _onProgress) => {
+        const isSynthesis = _sys.includes("synthesis agent");
+        if (isSynthesis) {
+          return stringifyYaml({
+            system: { name: "Test", description: "test" },
+          });
+        }
+        const appId = userMessage.includes("app-a") ? "app-a" : "app-b";
+        return stringifyYaml(makePartialModel({
+          system: { name: "Test", description: "test" },
+          containers: [{ id: appId, applicationId: appId, name: appId, description: "c", technology: "java" }],
+          components: [],
+          relationships: [],
+        }));
+      },
+    };
+
+    const raw = makeRawStructure([makeApp("app-a"), makeApp("app-b")]);
+    const config = configSchema.parse({
+      system: { name: "Test", description: "test" },
+      llm: { model: "test", concurrency: 2 },
+    });
+
+    // Call WITHOUT onStatus/onProgress — should not throw
+    const result = await buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider,
+    });
+
+    expect(result.containers.length).toBeGreaterThanOrEqual(2);
+  });
 });
