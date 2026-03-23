@@ -997,6 +997,7 @@ export async function buildModelWithLLM(
       ({ buildModelParallel } = await import("./parallel-model-builder.js"));
     } catch (err) {
       if (isProgrammingError(err)) throw err;
+      if (isSystemResourceError(err)) throw err;
       throw new LLMCallError(
         `Failed to load parallel model builder module: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
