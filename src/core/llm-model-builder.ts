@@ -440,7 +440,18 @@ const claudeCodeProvider: LLMProvider = {
         onProgress,
       );
     } finally {
-      try { fs.unlinkSync(tmpFile); } catch { /* cleanup is best-effort */ }
+      try {
+        fs.unlinkSync(tmpFile);
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+          const warning = `Failed to clean up temp file ${tmpFile}: ${(e as Error).message}`;
+          if (onProgress) {
+            onProgress({ line: warning, final: true, kind: "thinking" });
+          } else {
+            try { process.stderr.write(`${warning}\n`); } catch { /* stderr unavailable */ }
+          }
+        }
+      }
     }
   },
 };
@@ -637,7 +648,7 @@ A machine-generated scaffold is provided. IDs and module mappings are already co
 
 /**
  * Create a lean version of raw-structure for LLM consumption.
- * Strips verbose fields (files[], detailed imports) to fit context windows.
+ * Strips verbose per-module fields (files, exports, imports, non-annotation metadata) to fit context windows.
  */
 function summarizeForLLM(rawStructure: RawStructure): unknown {
   return {
@@ -952,14 +963,8 @@ export async function buildModelWithLLM(
       if (err instanceof LLMCallError || err instanceof LLMOutputError || err instanceof LLMUnavailableError) throw err;
       // Propagate programming errors and system resource errors unchanged —
       // these indicate bugs or host-level issues, not LLM failures.
-      if (
-        err instanceof TypeError || err instanceof RangeError ||
-        err instanceof ReferenceError || err instanceof SyntaxError
-      ) throw err;
-      if (err instanceof Error) {
-        const code = (err as NodeJS.ErrnoException).code;
-        if (code === "ENOMEM" || code === "ENOSPC" || code === "EMFILE" || code === "ENFILE") throw err;
-      }
+      const { isProgrammingError, isSystemResourceError } = await import("./parallel-model-builder.js");
+      if (isProgrammingError(err) || isSystemResourceError(err)) throw err;
       throw new LLMCallError(
         `Failed to initialize parallel model builder: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
