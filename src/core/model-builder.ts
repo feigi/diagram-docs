@@ -274,7 +274,8 @@ function inferComponentTechnology(
 ): string {
   const annotations = String(mod.metadata["annotations"] ?? "");
   if (annotations) {
-    return inferComponentTech(annotations, language);
+    const role = detectRole(annotations);
+    if (role) return inferComponentTech(annotations, language);
   }
   if (mod.metadata["framework"]) return mod.metadata["framework"];
   return language.charAt(0).toUpperCase() + language.slice(1);
