@@ -53,10 +53,10 @@ export class LLMOutputError extends Error {
  * Returns true for native JS programming errors that should never be
  * caught and silently swallowed — they indicate bugs in the code.
  *
- * Note: SyntaxError is included here. YAML/JSON parse failures also throw
- * SyntaxError, but those MUST be caught and wrapped into LLMOutputError in
- * an inner try block before they can reach any outer catch that calls this
- * function. A raw SyntaxError escaping to an outer catch is a real bug.
+ * Note: SyntaxError is included here because it is a native JS programming
+ * error. The YAML library throws YAMLParseError (not SyntaxError), and those
+ * MUST be caught and wrapped into LLMOutputError in an inner try block before
+ * they can reach any outer catch that calls this function.
  */
 export function isProgrammingError(err: unknown): boolean {
   return (
@@ -432,8 +432,9 @@ function commandExists(cmd: string): boolean {
     execFileSync("which", [cmd], { stdio: "pipe" });
     return true;
   } catch (err: unknown) {
+    if (isProgrammingError(err)) throw err;
+    if (isSystemResourceError(err)) throw err;
     // `which` exiting non-zero means the command was not found — expected.
-    // System-level spawn failures (ENOMEM, EACCES, etc.) should propagate.
     if (err instanceof Error && "status" in err && typeof (err as { status: unknown }).status === "number") {
       return false;
     }
@@ -503,6 +504,8 @@ const copilotProvider: LLMProvider = {
       execFileSync("gh", ["copilot", "--version"], { stdio: "pipe" });
       return true;
     } catch (err: unknown) {
+      if (isProgrammingError(err)) throw err;
+      if (isSystemResourceError(err)) throw err;
       // Non-zero exit means the copilot extension is not installed — expected.
       if (err instanceof Error && "status" in err && typeof (err as { status: unknown }).status === "number") {
         return false;

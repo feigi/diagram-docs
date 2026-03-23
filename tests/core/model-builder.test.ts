@@ -773,6 +773,32 @@ describe("buildModel", () => {
     expect(model.externalSystems).toHaveLength(2);
   });
 
+  it("creates relationships from containers to auto-detected external systems", () => {
+    const config = makeConfig();
+    const raw = makeRawStructure([
+      {
+        id: "app",
+        path: "app",
+        name: "app",
+        language: "java",
+        buildFile: "pom.xml",
+        modules: [],
+        externalDependencies: [
+          { name: "org.postgresql:postgresql" },
+        ],
+        internalImports: [],
+      },
+    ]);
+    const model = buildModel({ config, rawStructure: raw });
+
+    const pgRel = model.relationships.find(
+      (r) => r.sourceId === "app" && r.targetId === "postgresql",
+    );
+    expect(pgRel).toBeDefined();
+    expect(pgRel!.label).toBe("Reads/writes data in");
+    expect(pgRel!.technology).toBe("PostgreSQL");
+  });
+
   // ---------------------------------------------------------------------------
   // Role-aware relationship labels
   // ---------------------------------------------------------------------------
