@@ -72,17 +72,21 @@ Orchestrates the split → parallel dispatch → merge → synthesis flow.
 buildModelWithLLM() entry point:
 ├── Resolve provider (unchanged)
 ├── If single app → existing single-call path (with enhanced seed)
-└── If multiple apps → parallel path:
+├── If update mode (existingModelYaml provided) → existing single-call path
+└── If multiple apps, seed mode → parallel path:
     ├── Split RawStructure into per-app slices
     ├── Build per-app deterministic seeds
-    ├── Fire N parallel LLM calls (Promise.allSettled, concurrency-limited)
+    ├── Build cross-app relationships deterministically (kept separate from per-app calls)
+    ├── Fire N parallel LLM calls (concurrency-limited via pLimit-style queue)
     │   ├── Each call: one app's scan data + its seed + scoped system prompt
-    │   └── Per-app timeout: 5 minutes (vs 15 for the old monolithic call)
+    │   └── Per-app timeout: 5 minutes (starting point — may need tuning for large apps)
     ├── Collect partial models, fall back to deterministic seed on failure
     ├── Merge partial models:
     │   ├── Concatenate containers, components, intra-app relationships
-    │   ├── Deduplicate actors (by role/type)
-    │   └── Deduplicate external systems (by id)
+    │   ├── Deduplicate actors by slugified name (same name = same actor, merge descriptions)
+    │   ├── Deduplicate external systems by id
+    │   ├── Inject deterministic cross-app relationships (container-level and component-level)
+    │   └── Resolve relationship label conflicts: LLM label wins over deterministic "Uses"/"Calls"
     ├── One synthesis LLM call (lightweight):
     │   ├── Input: container summaries, merged actors, merged externals, cross-app relationships
     │   ├── Job: system description, cross-app relationship labels, actor/external consolidation
@@ -90,25 +94,47 @@ buildModelWithLLM() entry point:
     └── Merge synthesis into final model → validate against schema
 ```
 
+#### Per-App RawStructure Split
+
+Each per-app slice contains:
+- One `ScannedApplication` with all its modules, dependencies, and configFiles
+- `internalImports` included as **read-only context** — the per-app LLM sees which other apps this app depends on (by name/ID) but is instructed not to produce cross-app relationships. This gives the LLM enough context to write informed descriptions (e.g., "Calls the user service for authentication") without requiring it to resolve cross-app component IDs.
+- Cross-app relationships are handled entirely by the deterministic builder (`buildRelationships()` in `model-builder.ts`), which already resolves them via the global `componentByModule` and `componentToContainer` maps. These are injected during the merge step.
+
 #### Per-App Prompt
 
 Same system prompt as today but scoped:
 - Adds context: "You are modeling a single application within a larger system. Focus only on this application's internal architecture."
-- Removes cross-app concerns (no system description, no cross-container relationships).
+- Explicitly instructs: "Do not produce cross-container relationships. These are handled separately."
+- `internalImports` included for context but marked as informational only.
 - Input is one app's scan data + one app's seed. Much smaller token footprint.
 
 #### Synthesis Prompt
 
 A new, minimal prompt:
-- Input: list of containers (id, name, description, technology), merged actors, merged external systems, deterministic cross-app relationships.
-- Job: write system name + description, refine cross-app relationship labels, consolidate duplicate actors/externals.
-- No component-level detail — keeps input small and fast.
+- Input: list of containers (id, name, description, technology), merged actors, merged external systems, deterministic cross-app relationships (container-level only).
+- Job: write system name + description, refine cross-app relationship labels from generic "Uses"/"Calls" to specific verb phrases, consolidate duplicate actors/externals.
+- No component-level detail — keeps input small and fast. Component-level cross-app relationships use deterministic labels (from the enhanced seed's pattern-based labeling).
+
+#### Merge Logic Details
+
+**Relationship dedup:** When two sources produce a relationship with the same `sourceId → targetId`:
+1. LLM-generated label always wins over deterministic "Uses"/"Calls".
+2. Between two LLM-generated labels, keep the longer/more specific one.
+3. `technology` field: keep whichever is non-empty; if both present, prefer the LLM-generated one.
+
+**Actor dedup:** Actors are deduplicated by `slugify(name)`. When two per-app models produce actors with the same slugified name:
+1. Keep the longer/more specific description.
+2. Merge any distinct relationship references.
+
+**External system dedup:** Already keyed by `slugify(name)` → same ID = same system. Keep the more specific description/technology.
 
 #### Concurrency Control
 
 - New config option: `llm.concurrency` (default: 4, max parallel LLM calls)
-- Implementation: simple semaphore pattern with `Promise.allSettled()`
+- Implementation: `pLimit`-style concurrency queue — wraps each per-app call in a slot-limited async executor. `Promise.allSettled()` collects results after all slots complete.
 - Each spawned process is independent (separate stdin/stdout/temp files)
+- Note: `concurrency: 1` means serial per-app calls, which is slower than the monolithic path due to N invocations + synthesis overhead. This is intentional for rate-limit-constrained environments.
 
 #### Progress Reporting
 
@@ -116,14 +142,15 @@ Uses existing `onStatus` and `onProgress` callbacks:
 - "Modeling application 1/5: order-service..."
 - "Modeling application 2/5: user-service..."
 - "Synthesizing cross-app architecture..."
-- Per-app streaming progress interleaved (each app's tokens stream independently)
+- Per-app progress shows only the most recently started app's streaming output (avoids garbled interleaved output). Status messages for all apps are shown sequentially.
 
 #### Error Handling
 
 - **Per-app call fails**: Log warning, use that app's deterministic seed. Other apps unaffected.
-- **Synthesis call fails**: Use merged per-app results as-is. Cross-app labels remain as deterministic defaults ("Calls", "Uses"). System description falls back to config value.
+- **Synthesis call fails**: Use merged per-app results as-is. Cross-app labels remain as deterministic defaults. System description falls back to config value.
 - **All per-app calls fail**: Throw `LLMCallError` (same as today's total failure).
 - **Partial timeout**: Per-app timeout (5 min) is independent. One slow app doesn't block others.
+- **Update mode**: Always uses the single-call path. Splitting an existing human-edited model across per-app calls would risk losing manual edits that span multiple apps.
 
 ### Configuration
 
@@ -143,7 +170,7 @@ llm:
 - `src/core/parallel-model-builder.ts` — parallel orchestration: split, dispatch, merge, synthesis
 
 ### Modified Files
-- `src/core/model-builder.ts` — use patterns for actors, externals, relationship labels, descriptions
+- `src/core/model-builder.ts` — use patterns for actors, externals, relationship labels, descriptions. Consolidate existing `inferComponentTechnology()` annotation matching into the shared pattern registry.
 - `src/core/llm-model-builder.ts` — delegate to parallel builder for multi-app; add per-app and synthesis prompt builders
 - `src/config/schema.ts` — add `llm.concurrency` option
 
