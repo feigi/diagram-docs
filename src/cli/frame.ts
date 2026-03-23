@@ -260,7 +260,7 @@ export function createFrame(title: string): Frame {
       visibleLogRows[0] = row(chalk.dim(`  ↑ ${topIdx} more`));
     }
 
-    // Pad with empty rows if fewer entries than minimum (early in session)
+    // Pad with empty rows if fewer entries than the frame height
     while (visibleLogRows.length < visibleRowCount) {
       visibleLogRows.push(emptyRow());
     }
@@ -309,8 +309,8 @@ export function createFrame(title: string): Frame {
     }
     output += "\x1b[?25l"; // hide cursor
     output += frame + "\n";
-    // Erase any leftover content below the frame from a previous taller
-    // render (e.g. after thinking→output transition resets highWaterLogRows).
+    // Erase any leftover content below the frame (the frame can shrink
+    // when thinking entries are cleared, leaving stale terminal content).
     output += "\x1b[J";
     prevTotalRows = totalRows;
 
