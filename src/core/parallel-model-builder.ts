@@ -239,10 +239,12 @@ export async function buildModelParallel(
       onStatus?.(`Modeling app ${index + 1}/${slices.length}: ${app.id}`);
 
       const seedYaml = stringifyYaml(seed, { lineWidth: 120 });
+      // Sanitize app.id to prevent path traversal (app.id comes from scanned source code)
+      const safeAppId = app.id.replace(/[^a-zA-Z0-9_-]/g, "_");
       const outputPath = provider.supportsTools
         ? path.join(
             os.tmpdir(),
-            `diagram-docs-parallel-${app.id}-${Date.now()}.yaml`,
+            `diagram-docs-parallel-${safeAppId}-${Date.now()}.yaml`,
           )
         : undefined;
 
@@ -298,7 +300,6 @@ export async function buildModelParallel(
               warn(`App ${slice.applications[0].id}: agent output file was empty, using text stream`);
               rawOutput = textOutput;
             } else {
-              cleanupOutputFile();
               throw new LLMOutputError("Agent wrote an empty output file and no text output was streamed");
             }
           }
@@ -308,14 +309,12 @@ export async function buildModelParallel(
           if (isSystemResourceError(err)) throw err;
           const errCode = (err as NodeJS.ErrnoException).code;
           if (errCode !== "ENOENT") {
-            cleanupOutputFile();
             throw new LLMCallError(
               `System error reading agent output file: ${err instanceof Error ? err.message : String(err)}`,
               { cause: err },
             );
           }
           if (!textOutput.trim()) {
-            cleanupOutputFile();
             throw new LLMCallError(
               `Failed to read agent output file and no text output was streamed`,
               { cause: err },
@@ -323,8 +322,9 @@ export async function buildModelParallel(
           }
           warn(`App ${slice.applications[0].id}: failed to read output file (${errCode}), using text stream`);
           rawOutput = textOutput;
+        } finally {
+          cleanupOutputFile();
         }
-        cleanupOutputFile();
       } else {
         rawOutput = textOutput;
       }
@@ -460,13 +460,25 @@ export async function buildModelParallel(
   for (const comp of merged.components) {
     componentToContainer.set(comp.id, comp.containerId);
   }
-  const crossAppComponentRels = fullDeterministic.relationships.filter((r) => {
-    if (!componentIds.has(r.sourceId) || !componentIds.has(r.targetId))
-      return false;
-    const srcContainer = componentToContainer.get(r.sourceId);
-    const tgtContainer = componentToContainer.get(r.targetId);
-    return srcContainer !== tgtContainer;
+  const deterministicCrossAppComponentRels = fullDeterministic.relationships.filter((r) => {
+    const srcContainer = componentToContainer.get(r.sourceId) ?? (containerIds.has(r.sourceId) ? r.sourceId : undefined);
+    const tgtContainer = componentToContainer.get(r.targetId) ?? (containerIds.has(r.targetId) ? r.targetId : undefined);
+    // Both endpoints must be components (not containers, not external systems)
+    if (!r.sourceId || !r.targetId) return false;
+    if (containerIds.has(r.sourceId) || containerIds.has(r.targetId)) return false;
+    return srcContainer != null && tgtContainer != null && srcContainer !== tgtContainer;
   });
+  const crossAppComponentRels = deterministicCrossAppComponentRels.filter(
+    (r) => componentIds.has(r.sourceId) && componentIds.has(r.targetId),
+  );
+
+  // Warn if deterministic model had cross-app component rels but LLM changed component IDs
+  if (crossAppComponentRels.length === 0 && deterministicCrossAppComponentRels.length > 0) {
+    warn(
+      `WARNING: ${deterministicCrossAppComponentRels.length} cross-app component relationship(s) ` +
+      `could not be injected because LLM-generated component IDs do not match the deterministic model`,
+    );
+  }
 
   for (const rel of [...crossAppContainerRels, ...crossAppComponentRels]) {
     const key = `${rel.sourceId}->${rel.targetId}`;
