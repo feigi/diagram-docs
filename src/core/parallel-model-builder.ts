@@ -39,6 +39,12 @@ function isRecoverableLLMError(err: unknown): boolean {
   );
 }
 
+/** Result of building a single app — tracks whether it degraded to deterministic mode. */
+interface AppBuildResult {
+  readonly model: ArchitectureModel;
+  readonly fellBack: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Split & Merge
 // ---------------------------------------------------------------------------
@@ -228,11 +234,21 @@ export async function buildModelParallel(
     }
   }
 
+  /** Best-effort removal of a temp file; warns on non-ENOENT errors. */
+  function cleanupFile(filePath: string | undefined): void {
+    if (!filePath) return;
+    try { fs.unlinkSync(filePath); } catch (e) {
+      if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+        warn(`Failed to clean up temp file ${filePath}: ${(e as Error).message}`);
+      }
+    }
+  }
+
   async function buildOneApp(
     slice: RawStructure,
     seed: ArchitectureModel,
     index: number,
-  ): Promise<{ model: ArchitectureModel; fellBack: boolean }> {
+  ): Promise<AppBuildResult> {
     await acquireSlot();
     try {
       const app = slice.applications[0];
@@ -265,13 +281,7 @@ export async function buildModelParallel(
           onProgress,
         );
       } catch (err) {
-        if (outputPath) {
-          try { fs.unlinkSync(outputPath); } catch (e) {
-            if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
-              warn(`Failed to clean up temp file ${outputPath}: ${(e as Error).message}`);
-            }
-          }
-        }
+        cleanupFile(outputPath);
         if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
         if (isProgrammingError(err)) throw err;
         if (isSystemResourceError(err)) throw err;
@@ -282,14 +292,6 @@ export async function buildModelParallel(
       }
 
       // Read output — prefer file written by tool-using agent, fall back to text
-      const cleanupOutputFile = () => {
-        if (!outputPath) return;
-        try { fs.unlinkSync(outputPath); } catch (e) {
-          if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
-            warn(`Failed to clean up temp file ${outputPath}: ${(e as Error).message}`);
-          }
-        }
-      };
 
       let rawOutput: string;
       if (outputPath && fs.existsSync(outputPath)) {
@@ -323,7 +325,7 @@ export async function buildModelParallel(
           warn(`App ${slice.applications[0].id}: failed to read output file (${errCode}), using text stream`);
           rawOutput = textOutput;
         } finally {
-          cleanupOutputFile();
+          cleanupFile(outputPath);
         }
       } else {
         rawOutput = textOutput;
@@ -405,7 +407,7 @@ export async function buildModelParallel(
 
   // Collect results — programming errors (rejected promises) must propagate,
   // not silently degrade to deterministic seeds.
-  const results: Array<{ model: ArchitectureModel; fellBack: boolean }> = [];
+  const results: AppBuildResult[] = [];
   for (let i = 0; i < settled.length; i++) {
     const outcome = settled[i];
     if (outcome.status === "fulfilled") {

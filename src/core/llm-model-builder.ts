@@ -52,6 +52,11 @@ export class LLMOutputError extends Error {
 /**
  * Returns true for native JS programming errors that should never be
  * caught and silently swallowed — they indicate bugs in the code.
+ *
+ * Note: SyntaxError is included here. YAML/JSON parse failures also throw
+ * SyntaxError, but those MUST be caught and wrapped into LLMOutputError in
+ * an inner try block before they can reach any outer catch that calls this
+ * function. A raw SyntaxError escaping to an outer catch is a real bug.
  */
 export function isProgrammingError(err: unknown): boolean {
   return (
@@ -982,8 +987,19 @@ export async function buildModelWithLLM(
   const isSeedMode = !options.existingModelYaml?.trim();
   const apps = options.rawStructure.applications;
   if (isSeedMode && apps.length > 1) {
+    // Dynamic import is separated from the call so module resolution
+    // errors are not accidentally wrapped as LLMCallError.
+    let buildModelParallel: typeof import("./parallel-model-builder.js")["buildModelParallel"];
     try {
-      const { buildModelParallel } = await import("./parallel-model-builder.js");
+      ({ buildModelParallel } = await import("./parallel-model-builder.js"));
+    } catch (err) {
+      if (isProgrammingError(err)) throw err;
+      throw new LLMCallError(
+        `Failed to load parallel model builder module: ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
+    try {
       return await buildModelParallel({
         rawStructure: options.rawStructure,
         config: options.config,
@@ -1072,6 +1088,8 @@ export async function buildModelWithLLM(
       }
     } catch (err: unknown) {
       if (err instanceof LLMOutputError) throw err;
+      if (isProgrammingError(err)) throw err;
+      if (isSystemResourceError(err)) throw err;
       const errCode = (err as NodeJS.ErrnoException).code;
       const msg = err instanceof Error ? err.message : String(err);
       // Only ENOENT (file vanished between existsSync and readFileSync) is safe for fallback.
