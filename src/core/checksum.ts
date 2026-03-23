@@ -20,8 +20,14 @@ export async function computeChecksum(
   rootDir: string,
   appPaths: string[],
   exclude: string[],
+  configFingerprint?: string,
 ): Promise<string> {
   const hash = crypto.createHash("sha256");
+
+  if (configFingerprint) {
+    hash.update(configFingerprint);
+  }
+
   const extPattern = `**/*.{${SOURCE_EXTENSIONS.join(",")}}`;
 
   for (const appPath of appPaths.sort()) {

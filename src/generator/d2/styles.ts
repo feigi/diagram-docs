@@ -48,6 +48,7 @@ classes: {
   system-boundary: {
     shape: rectangle
     style.fill: "#ffffff"
+    style.font-color: "#444444"
     style.stroke: "#444444"
     style.stroke-dash: 5
     style.border-radius: 8
