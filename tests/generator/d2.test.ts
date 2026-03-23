@@ -5,7 +5,7 @@ import { loadModel } from "../../src/core/model.js";
 import { generateContextDiagram } from "../../src/generator/d2/context.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateComponentDiagram } from "../../src/generator/d2/component.js";
-import { D2Writer } from "../../src/generator/d2/writer.js";
+import { D2Writer, wrapText } from "../../src/generator/d2/writer.js";
 
 const MODEL_PATH = path.resolve(__dirname, "../fixtures/model.yaml");
 
@@ -31,6 +31,43 @@ describe("D2 Writer", () => {
     expect(out).toContain("outer: Outer {");
     expect(out).toContain("  inner: Inner");
     expect(out).toContain("}");
+  });
+});
+
+describe("wrapText", () => {
+  it("returns short text unchanged", () => {
+    expect(wrapText("hello world", 50)).toBe("hello world");
+  });
+
+  it("wraps text at word boundaries with D2 newline escape", () => {
+    const result = wrapText("This is a long description that needs wrapping", 25, 5);
+    expect(result).toContain("\\n");
+    for (const line of result.split("\\n")) {
+      expect(line.length).toBeLessThanOrEqual(25);
+    }
+  });
+
+  it("truncates with ellipsis beyond maxLines", () => {
+    const result = wrapText("word ".repeat(20).trim(), 15, 2);
+    const lines = result.split("\\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[1]).toContain("...");
+  });
+
+  it("does not truncate when lines fit within maxLines", () => {
+    const result = wrapText("short text here", 50, 2);
+    expect(result).not.toContain("...");
+  });
+
+  it("handles single-line maxLines", () => {
+    const result = wrapText("This text is too long to fit on one line", 20, 1);
+    const lines = result.split("\\n");
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("...");
+  });
+
+  it("handles empty string", () => {
+    expect(wrapText("", 50)).toBe("");
   });
 });
 

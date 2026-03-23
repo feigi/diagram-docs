@@ -1,6 +1,6 @@
 /**
  * Wrap text at word boundaries, inserting D2 newline escapes.
- * Keeps each line under `maxWidth` characters.
+ * Keeps each line within `maxWidth` characters and truncates with "..." beyond `maxLines`.
  */
 export function wrapText(
   text: string,
@@ -70,17 +70,12 @@ export class D2Writer {
     sourceId: string,
     targetId: string,
     label?: string,
-    props?: Record<string, string>,
   ): this {
     const prefix = this.pad();
     if (label) {
       this.lines.push(`${prefix}${sourceId} -> ${targetId}: ${this.quote(label)}`);
     } else {
       this.lines.push(`${prefix}${sourceId} -> ${targetId}`);
-    }
-    if (props) {
-      // Connection props use (source -> target)[prop] syntax in D2,
-      // but for simplicity we'll add as comments
     }
     return this;
   }
