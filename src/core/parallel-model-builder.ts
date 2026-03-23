@@ -200,6 +200,8 @@ export async function buildModelParallel(
   const warn = (msg: string) => {
     if (onStatus) {
       onStatus(msg);
+    } else if (progress) {
+      progress.setStatus(msg);
     } else {
       try { process.stderr.write(`${msg}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
     }
@@ -478,11 +480,13 @@ export async function buildModelParallel(
     for (let i = 1; i < rejections.length; i++) {
       warn(`Additional app error (${i + 1}/${rejections.length}): ${rejections[i] instanceof Error ? (rejections[i] as Error).message : String(rejections[i])}`);
     }
+    progress?.stop(`${results.filter(r => !r.fellBack).length}/${slices.length} apps modeled`);
     throw rejections[0];
   }
 
   const fallbackCount = results.filter((r) => r.fellBack).length;
   if (fallbackCount === slices.length) {
+    progress?.stop(`0/${slices.length} apps modeled`);
     throw new LLMCallError(
       `All ${slices.length} per-app LLM calls failed. ` +
       `The result would be identical to --deterministic mode. ` +
@@ -739,6 +743,7 @@ export async function buildModelParallel(
       merged.externalSystems = preSynthExternalSystems;
       merged.relationships = preSynthRelationships;
     } else {
+      synthesisFrame?.stop([{ text: "Synthesis error" }]);
       throw err;
     }
   }
