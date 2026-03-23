@@ -766,7 +766,9 @@ describe("buildModel", () => {
     // Redis from config + PostgreSQL from deps, no duplicate Redis
     const redisEntries = model.externalSystems.filter((e) => e.name === "Redis");
     expect(redisEntries).toHaveLength(1);
-    expect(model.externalSystems.some((e) => e.name === "PostgreSQL")).toBe(true);
+    const pgSystem = model.externalSystems.find((e) => e.name === "PostgreSQL");
+    expect(pgSystem).toBeDefined();
+    expect(pgSystem!.technology).toBe("PostgreSQL");
     // Total: 2 distinct systems
     expect(model.externalSystems).toHaveLength(2);
   });
