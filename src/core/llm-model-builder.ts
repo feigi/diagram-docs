@@ -697,6 +697,125 @@ export function buildUserMessage(options: {
 }
 
 // ---------------------------------------------------------------------------
+// Per-app and synthesis prompt builders
+// ---------------------------------------------------------------------------
+
+export function buildPerAppSystemPrompt(outputPath?: string): string {
+  const base = buildSystemPrompt(outputPath);
+  return base + `\n\n### Single-App Mode
+You are modeling a SINGLE APPLICATION within a larger multi-app system.
+- Focus only on this application's internal architecture.
+- Do NOT produce cross-container relationships. These are handled separately.
+- The internalImports field is provided for context only (to inform descriptions). Do not create relationships from it.
+- Produce: containers (just this one), components, intra-app relationships, actors, externalSystems relevant to this app.`;
+}
+
+export function buildPerAppUserMessage(options: {
+  app: RawStructure["applications"][0];
+  configYaml?: string;
+  seedYaml: string;
+  outputPath?: string;
+}): string {
+  // Build single-app raw structure summary (same format as summarizeForLLM but for one app)
+  const singleAppStructure = {
+    version: 1,
+    applications: [{
+      id: options.app.id,
+      path: options.app.path,
+      name: options.app.name,
+      language: options.app.language,
+      modules: options.app.modules.map((mod) => {
+        const annotations = mod.metadata["annotations"];
+        return {
+          id: mod.id,
+          name: mod.name,
+          ...(annotations ? { annotations } : {}),
+        };
+      }),
+      externalDependencies: options.app.externalDependencies.map((d) => d.name),
+      internalImports: options.app.internalImports,
+      ...(options.app.publishedAs ? { publishedAs: options.app.publishedAs } : {}),
+      ...(options.app.configFiles?.length ? { configFiles: options.app.configFiles } : {}),
+    }],
+  };
+
+  const parts: string[] = [];
+  parts.push("## raw-structure.json\n");
+  parts.push(JSON.stringify(singleAppStructure));
+
+  if (options.configYaml) {
+    parts.push("\n\n## diagram-docs.yaml\n");
+    parts.push(options.configYaml);
+  }
+
+  parts.push(`\n\n## Deterministic seed (seed mode — reshape freely)\n`);
+  parts.push(options.seedYaml);
+
+  if (options.outputPath) {
+    parts.push(
+      `\n\nWrite the architecture-model.yaml to: ${options.outputPath}\n` +
+        "After writing, read it back and verify the YAML is valid and conforms to the schema. Fix any issues.",
+    );
+  } else {
+    parts.push(
+      "\n\nProduce the architecture-model.yaml content. Output ONLY the YAML — no markdown fences, no explanatory text before or after.",
+    );
+  }
+
+  return parts.join("");
+}
+
+export function buildSynthesisSystemPrompt(): string {
+  return `You are an architecture synthesis agent. You are given the results of per-application architecture modeling and need to produce a unified system-level view.
+
+## Your Job
+1. Write a meaningful system name and description (what the system does for users, not how it's built).
+2. Refine cross-app relationship labels from generic "Uses"/"Calls" to specific verb phrases (e.g., "Reads user profiles from", "Publishes order events to").
+3. Consolidate actors — merge duplicates, improve descriptions.
+4. Consolidate external systems — merge duplicates, improve descriptions.
+
+## Output
+Output ONLY valid YAML with this structure:
+system:
+  name: "string"
+  description: "string"
+actors:
+  - id: "kebab-case"
+    name: "Human Name"
+    description: "What this actor does"
+externalSystems:
+  - id: "kebab-case"
+    name: "Human Name"
+    description: "What this system provides"
+    technology: "e.g. PostgreSQL"
+relationships:
+  - sourceId: "string"
+    targetId: "string"
+    label: "Specific verb phrase"
+    technology: "optional"
+
+Only include relationships that were provided to you. Do not invent new ones. Refine labels only.`;
+}
+
+export function buildSynthesisUserMessage(options: {
+  containers: Array<{ id: string; name: string; description: string; technology: string }>;
+  actors: ArchitectureModel["actors"];
+  externalSystems: ArchitectureModel["externalSystems"];
+  crossAppRelationships: ArchitectureModel["relationships"];
+}): string {
+  const parts: string[] = [];
+  parts.push("## Containers\n");
+  parts.push(JSON.stringify(options.containers, null, 2));
+  parts.push("\n\n## Current Actors\n");
+  parts.push(JSON.stringify(options.actors, null, 2));
+  parts.push("\n\n## Current External Systems\n");
+  parts.push(JSON.stringify(options.externalSystems, null, 2));
+  parts.push("\n\n## Cross-App Relationships (refine labels)\n");
+  parts.push(JSON.stringify(options.crossAppRelationships, null, 2));
+  return parts.join("");
+}
+
+// ---------------------------------------------------------------------------
 // YAML repair for common LLM output issues
 // ---------------------------------------------------------------------------
 
