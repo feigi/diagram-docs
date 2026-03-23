@@ -166,9 +166,18 @@ export async function buildModelParallel(
   onStatus?.(`Split into ${slices.length} per-app slices`);
 
   // -- Step 2: Build per-app deterministic seeds --
-  const seeds = slices.map((slice) =>
-    buildModel({ config, rawStructure: slice }),
-  );
+  const seeds: ArchitectureModel[] = [];
+  for (let i = 0; i < slices.length; i++) {
+    try {
+      seeds.push(buildModel({ config, rawStructure: slices[i] }));
+    } catch (err) {
+      const appId = slices[i].applications[0].id;
+      throw new LLMCallError(
+        `Failed to generate deterministic seed for app "${appId}": ${err instanceof Error ? err.message : String(err)}`,
+        { cause: err },
+      );
+    }
+  }
 
   // -- Step 3: Dispatch parallel LLM calls with concurrency limit --
   let running = 0;
@@ -351,6 +360,18 @@ export async function buildModelParallel(
     }
   }
 
+  // Surface unexpected error stack traces so programming bugs are visible
+  if (unexpectedErrors.length > 0) {
+    const details = unexpectedErrors
+      .map(({ index, error }) => {
+        const appId = slices[index].applications[0].id;
+        const stack = error instanceof Error ? error.stack : String(error);
+        return `  ${appId}: ${stack}`;
+      })
+      .join("\n");
+    warn(`WARNING: ${unexpectedErrors.length} app(s) hit unexpected errors (possible bugs):\n${details}`);
+  }
+
   const fallbackCount = results.filter((r) => r.fellBack).length;
   if (fallbackCount === slices.length) {
     throw new LLMCallError(
@@ -412,6 +433,9 @@ export async function buildModelParallel(
   // Save pre-synthesis state so the catch block can fully rollback
   const preSynthActors = merged.actors;
   const preSynthExternalSystems = merged.externalSystems;
+  const preSynthRelLabels = new Map(
+    merged.relationships.map((r) => [`${r.sourceId}->${r.targetId}`, r.label]),
+  );
   try {
     const crossAppRels = merged.relationships.filter((r) => {
       const srcContainer = containerIds.has(r.sourceId)
@@ -520,6 +544,11 @@ export async function buildModelParallel(
       merged.system.description = config.system.description;
       merged.actors = preSynthActors;
       merged.externalSystems = preSynthExternalSystems;
+      for (const rel of merged.relationships) {
+        const key = `${rel.sourceId}->${rel.targetId}`;
+        const original = preSynthRelLabels.get(key);
+        if (original !== undefined) rel.label = original;
+      }
     } else {
       throw err;
     }
