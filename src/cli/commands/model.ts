@@ -114,6 +114,9 @@ export const modelCommand = new Command("model")
           err instanceof LLMOutputError
         ) {
           console.error(`Error: ${err.message}`);
+          if (isParallel) {
+            console.error("  Per-app agent logs may be available in .diagram-docs/logs/");
+          }
           process.exit(1);
         }
         throw err;

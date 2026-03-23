@@ -194,7 +194,7 @@ export async function buildModelParallel(
           );
         }
       }
-    } catch { /* best-effort check */ }
+    } catch (e) { rethrowIfFatal(e); /* gitignore check is advisory */ }
   }
 
   const warn = (msg: string) => {

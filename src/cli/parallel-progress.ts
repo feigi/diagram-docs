@@ -160,8 +160,13 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     process.stderr.write(output);
   }
 
+  function emergencyRestore() {
+    try { process.stderr.write("\x1b[?25h"); } catch { /* best-effort during exit */ }
+  }
+
   function startTimer(): void {
     if (timer || !isTTY) return;
+    process.on("exit", emergencyRestore);
     timer = setInterval(() => {
       spinnerIdx++;
       render();
@@ -172,6 +177,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     if (timer) {
       clearInterval(timer);
       timer = null;
+      process.removeListener("exit", emergencyRestore);
     }
   }
 
@@ -191,7 +197,12 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
 
     updateApp(appId: string, state: AppState): void {
       const entry = apps.find((a) => a.id === appId);
-      if (!entry) return;
+      if (!entry) {
+        if (!isTTY) {
+          printLine(`Warning: updateApp called with unknown appId "${appId}"`);
+        }
+        return;
+      }
 
       if (entry.startTime == null && state !== "queued") {
         entry.startTime = Date.now();
