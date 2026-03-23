@@ -297,6 +297,7 @@ export async function buildModelParallel(
       ) {
         const yamlStart = rawOutput.indexOf("\nversion:");
         if (yamlStart !== -1) {
+          warn(`App ${app.id}: Stripped ${yamlStart} characters of preamble text before YAML`);
           rawOutput = rawOutput.slice(yamlStart + 1);
         }
       }
@@ -495,6 +496,12 @@ export async function buildModelParallel(
     }
 
     const repaired = repairLLMYaml(synthesisYaml);
+    if (repaired.linesSplit > 0 || repaired.linesRemoved > 0) {
+      warn(
+        `Synthesis: Repaired LLM YAML: ${repaired.linesSplit} smashed lines split, ` +
+          `${repaired.linesRemoved} trailing broken lines removed`,
+      );
+    }
 
     const parsed = parseYaml(repaired.yaml);
     const synthesis = synthesisSchema.parse(parsed);
@@ -553,6 +560,11 @@ export async function buildModelParallel(
       throw err;
     }
   }
+
+  // Fallback: if system name/description are still empty (synthesis succeeded
+  // but omitted them, or synthesis was skipped), use config defaults.
+  if (!merged.system.name) merged.system.name = config.system.name;
+  if (!merged.system.description) merged.system.description = config.system.description;
 
   return merged;
 }

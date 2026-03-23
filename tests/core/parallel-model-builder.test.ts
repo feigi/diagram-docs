@@ -758,4 +758,116 @@ describe("buildModelParallel", () => {
     const synthMsg = statuses.find((s) => s.includes("Synthesis failed"));
     expect(synthMsg).toBeDefined();
   });
+
+  it("falls back to config defaults when synthesis omits system fields", async () => {
+    const raw = makeRawStructure([
+      makeApp("svc-a", {
+        modules: [
+          {
+            id: "mod-a1",
+            path: "apps/svc-a/src/main",
+            name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+      makeApp("svc-b", {
+        modules: [
+          {
+            id: "mod-b1",
+            path: "apps/svc-b/src/main",
+            name: "svc-b.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      }),
+    ]);
+
+    const partialA: ArchitectureModel = {
+      version: 1,
+      system: { name: "", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "svc-a",
+          applicationId: "svc-a",
+          name: "Service A",
+          description: "Service A app",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-a1",
+          containerId: "svc-a",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-a1"],
+        },
+      ],
+      relationships: [],
+    };
+
+    const partialB: ArchitectureModel = {
+      version: 1,
+      system: { name: "", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "Service B",
+          description: "Service B app",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
+      ],
+      relationships: [],
+    };
+
+    // Synthesis succeeds but returns no system fields
+    const synthesisYaml = stringifyYaml({
+      actors: [],
+      externalSystems: [],
+      relationships: [],
+    });
+
+    const responses = new Map<string, string>();
+    responses.set("svc-a", stringifyYaml(partialA));
+    responses.set("svc-b", stringifyYaml(partialB));
+    responses.set("__synthesis__", synthesisYaml);
+
+    const provider = makeMockProvider(responses);
+    const config = makeConfig({
+      system: { name: "From Config", description: "Config description" },
+    });
+
+    const result = await buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider,
+    });
+
+    // Should fall back to config defaults, not empty strings
+    expect(result.system.name).toBe("From Config");
+    expect(result.system.description).toBe("Config description");
+  });
 });
