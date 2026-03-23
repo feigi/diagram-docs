@@ -13,7 +13,8 @@ import {
   LLMCallError,
   LLMOutputError,
   isProgrammingError,
-  isSystemResourceError,
+  rethrowIfFatal,
+  isRecoverableLLMError,
   buildPerAppSystemPrompt,
   buildPerAppUserMessage,
   buildSynthesisSystemPrompt,
@@ -25,24 +26,15 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 
-/**
- * Returns true for errors that indicate a recoverable LLM/output failure
- * (provider errors, bad output). All YAML/Zod errors from LLM output are
- * wrapped in LLMOutputError before reaching the outer catch; a raw
- * YAMLParseError or ZodError escaping would indicate a missing wrapper
- * and should propagate as a bug.
- */
-function isRecoverableLLMError(err: unknown): boolean {
-  return (
-    err instanceof LLMCallError ||
-    err instanceof LLMOutputError
-  );
-}
-
 /** Result of building a single app — tracks whether it degraded to deterministic mode. */
 interface AppBuildResult {
   readonly model: ArchitectureModel;
   readonly fellBack: boolean;
+}
+
+/** Relationship deduplication key — centralizes the `source→target` convention. */
+function relKey(sourceId: string, targetId: string): string {
+  return `${sourceId}->${targetId}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,7 +80,7 @@ export function mergePartialModels(
     containers.push(...partial.containers);
     components.push(...partial.components);
     for (const rel of partial.relationships) {
-      const key = `${rel.sourceId}->${rel.targetId}`;
+      const key = relKey(rel.sourceId, rel.targetId);
       if (!relKeys.has(key)) {
         relKeys.add(key);
         relationships.push(rel);
@@ -160,12 +152,12 @@ const synthesisSchema = z.object({
 // ---------------------------------------------------------------------------
 
 export interface ParallelBuildOptions {
-  rawStructure: RawStructure;
-  config: Config;
-  configYaml?: string;
-  provider: LLMProvider;
-  onStatus?: (status: string) => void;
-  onProgress?: (event: ProgressEvent) => void;
+  readonly rawStructure: RawStructure;
+  readonly config: Config;
+  readonly configYaml?: string;
+  readonly provider: LLMProvider;
+  readonly onStatus?: (status: string) => void;
+  readonly onProgress?: (event: ProgressEvent) => void;
 }
 
 /**
@@ -184,7 +176,7 @@ export async function buildModelParallel(
     if (onStatus) {
       onStatus(msg);
     } else {
-      try { process.stderr.write(`${msg}\n`); } catch { /* stderr may be unavailable */ }
+      try { process.stderr.write(`${msg}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
     }
   };
 
@@ -205,8 +197,7 @@ export async function buildModelParallel(
     try {
       seeds.push(buildModel({ config, rawStructure: slices[i] }));
     } catch (err) {
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       const appId = slices[i].applications[0].id;
       throw new LLMCallError(
         `Failed to generate deterministic seed for app "${appId}": ${err instanceof Error ? err.message : String(err)}`,
@@ -240,6 +231,7 @@ export async function buildModelParallel(
   function cleanupFile(filePath: string | undefined): void {
     if (!filePath) return;
     try { fs.unlinkSync(filePath); } catch (e) {
+      rethrowIfFatal(e);
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
         warn(`Failed to clean up temp file ${filePath}: ${(e as Error).message}`);
       }
@@ -285,8 +277,7 @@ export async function buildModelParallel(
       } catch (err) {
         cleanupFile(outputPath);
         if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
-        if (isProgrammingError(err)) throw err;
-        if (isSystemResourceError(err)) throw err;
+        rethrowIfFatal(err);
         throw new LLMCallError(
           `Provider error: ${err instanceof Error ? err.message : String(err)}`,
           { cause: err },
@@ -309,14 +300,12 @@ export async function buildModelParallel(
           }
         } catch (err: unknown) {
           if (err instanceof LLMOutputError) throw err;
-          if (isProgrammingError(err)) throw err;
-          if (isSystemResourceError(err)) throw err;
+          rethrowIfFatal(err);
           const errCode = (err as NodeJS.ErrnoException).code;
           if (errCode !== "ENOENT") {
-            throw new LLMCallError(
-              `System error reading agent output file: ${err instanceof Error ? err.message : String(err)}`,
-              { cause: err },
-            );
+            // System I/O errors (EACCES, EISDIR, etc.) should propagate,
+            // not fall back to deterministic seed — they indicate a system problem.
+            throw err;
           }
           if (!textOutput.trim()) {
             throw new LLMCallError(
@@ -410,15 +399,21 @@ export async function buildModelParallel(
   // Collect results — programming errors (rejected promises) must propagate,
   // not silently degrade to deterministic seeds.
   const results: AppBuildResult[] = [];
+  const rejections: unknown[] = [];
   for (let i = 0; i < settled.length; i++) {
     const outcome = settled[i];
     if (outcome.status === "fulfilled") {
       results.push(outcome.value);
     } else {
-      // This is an unexpected error that bypassed the inner catch block
-      // (e.g. TypeError, RangeError) — propagate it as a programming bug.
-      throw outcome.reason;
+      rejections.push(outcome.reason);
     }
+  }
+  if (rejections.length > 0) {
+    // Log additional rejections so they are not silently lost
+    for (let i = 1; i < rejections.length; i++) {
+      warn(`Additional app error (${i + 1}/${rejections.length}): ${rejections[i] instanceof Error ? (rejections[i] as Error).message : String(rejections[i])}`);
+    }
+    throw rejections[0];
   }
 
   const fallbackCount = results.filter((r) => r.fellBack).length;
@@ -450,8 +445,7 @@ export async function buildModelParallel(
   try {
     fullDeterministic = buildModel({ config, rawStructure });
   } catch (err) {
-    if (isProgrammingError(err)) throw err;
-    if (isSystemResourceError(err)) throw err;
+    rethrowIfFatal(err);
     throw new LLMCallError(
       `Failed to build deterministic model for cross-app relationships: ${err instanceof Error ? err.message : String(err)}`,
       { cause: err },
@@ -461,7 +455,7 @@ export async function buildModelParallel(
   const containerIds = new Set(merged.containers.map((c) => c.id));
   const componentIds = new Set(merged.components.map((c) => c.id));
   const existingRelKeys = new Set(
-    merged.relationships.map((r) => `${r.sourceId}->${r.targetId}`),
+    merged.relationships.map((r) => relKey(r.sourceId, r.targetId)),
   );
 
   // Cross-app container-level relationships
@@ -495,7 +489,7 @@ export async function buildModelParallel(
   }
 
   for (const rel of [...crossAppContainerRels, ...crossAppComponentRels]) {
-    const key = `${rel.sourceId}->${rel.targetId}`;
+    const key = relKey(rel.sourceId, rel.targetId);
     if (!existingRelKeys.has(key)) {
       existingRelKeys.add(key);
       merged.relationships.push(rel);
@@ -505,16 +499,12 @@ export async function buildModelParallel(
   // -- Step 6: Synthesis pass --
   onStatus?.("Running synthesis pass...");
   // Save pre-synthesis state so the catch block can fully rollback.
-  // Rollback replaces actors and externalSystems arrays wholesale,
+  // Rollback restores system name/description to config defaults,
+  // replaces actors and externalSystems arrays wholesale,
   // and restores relationship labels/technology from saved values.
   const preSynthActors = [...merged.actors];
   const preSynthExternalSystems = [...merged.externalSystems];
-  const preSynthRelState = new Map(
-    merged.relationships.map((r) => [
-      `${r.sourceId}->${r.targetId}`,
-      { label: r.label, technology: r.technology },
-    ]),
-  );
+  const preSynthRelationships = merged.relationships.map((r) => ({ ...r }));
   try {
     const crossAppRels = merged.relationships.filter((r) => {
       const srcContainer = containerIds.has(r.sourceId)
@@ -550,8 +540,7 @@ export async function buildModelParallel(
       );
     } catch (err) {
       if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       throw new LLMCallError(
         `Provider error during synthesis: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
@@ -618,7 +607,7 @@ export async function buildModelParallel(
     if (synthesis.relationships) {
       relUpdates = new Map();
       for (const rel of synthesis.relationships) {
-        relUpdates.set(`${rel.sourceId}->${rel.targetId}`, {
+        relUpdates.set(relKey(rel.sourceId, rel.targetId), {
           label: rel.label,
           technology: rel.technology,
         });
@@ -644,7 +633,7 @@ export async function buildModelParallel(
     }
     if (relUpdates) {
       for (const rel of merged.relationships) {
-        const key = `${rel.sourceId}->${rel.targetId}`;
+        const key = relKey(rel.sourceId, rel.targetId);
         const synthRel = relUpdates.get(key);
         if (synthRel && synthRel.label !== rel.label) {
           rel.label = synthRel.label;
@@ -662,34 +651,18 @@ export async function buildModelParallel(
         `actors and external systems to pre-synthesis state, ` +
         `and relationship labels to pre-synthesis values`,
       );
-      try {
-        merged.system.name = config.system.name;
-        merged.system.description = config.system.description;
-        merged.actors = preSynthActors;
-        merged.externalSystems = preSynthExternalSystems;
-        for (const rel of merged.relationships) {
-          const key = `${rel.sourceId}->${rel.targetId}`;
-          const original = preSynthRelState.get(key);
-          if (original !== undefined) {
-            rel.label = original.label;
-            if (original.technology !== undefined) {
-              rel.technology = original.technology;
-            } else {
-              delete rel.technology;
-            }
-          }
-        }
-      } catch (rollbackErr) {
-        warn(`Synthesis rollback failed: ${rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr)}`);
-        throw err; // Propagate original synthesis error, not the rollback failure
-      }
+      merged.system.name = config.system.name;
+      merged.system.description = config.system.description;
+      merged.actors = preSynthActors;
+      merged.externalSystems = preSynthExternalSystems;
+      merged.relationships = preSynthRelationships;
     } else {
       throw err;
     }
   }
 
   // Fallback: if system name/description are still empty (synthesis succeeded
-  // but omitted them, or synthesis was skipped), use config defaults.
+  // but omitted the system fields, or synthesis rolled back), use config defaults.
   if (!merged.system.name) merged.system.name = config.system.name;
   if (!merged.system.description) merged.system.description = config.system.description;
 

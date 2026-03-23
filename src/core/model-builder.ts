@@ -14,8 +14,8 @@ import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
 import { detectRole, detectExternalSystems, inferRelationshipLabel, inferExternalRelationshipLabel, inferComponentTech, type Role } from "./patterns.js";
 
 export interface BuildModelOptions {
-  config: Config;
-  rawStructure: RawStructure;
+  readonly config: Config;
+  readonly rawStructure: RawStructure;
 }
 
 export function buildModel({ config, rawStructure }: BuildModelOptions): ArchitectureModel {
@@ -418,7 +418,7 @@ function buildRelationships(
   const moduleRole = new Map<string, Role | undefined>();
   for (const app of apps) {
     for (const m of app.modules) {
-      moduleRole.set(m.id, detectRole(m.metadata["annotations"] ?? ""));
+      moduleRole.set(m.id, detectRole(String(m.metadata["annotations"] ?? "")));
     }
   }
 

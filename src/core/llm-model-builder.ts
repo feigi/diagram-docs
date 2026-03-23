@@ -82,6 +82,29 @@ export function isSystemResourceError(err: unknown): boolean {
   return typeof code === "string" && SYSTEM_ERROR_CODES.has(code);
 }
 
+/**
+ * Rethrow errors that indicate programming bugs or system resource exhaustion.
+ * Use in catch blocks to ensure these errors always propagate.
+ */
+export function rethrowIfFatal(err: unknown): void {
+  if (isProgrammingError(err)) throw err;
+  if (isSystemResourceError(err)) throw err;
+}
+
+/**
+ * Returns true for errors that indicate a recoverable LLM/output failure
+ * (provider errors, bad output). All YAML/Zod errors from LLM output are
+ * wrapped in LLMOutputError before reaching the outer catch; a raw
+ * YAMLParseError or ZodError escaping would indicate a missing wrapper
+ * and should propagate as a bug.
+ */
+export function isRecoverableLLMError(err: unknown): boolean {
+  return (
+    err instanceof LLMCallError ||
+    err instanceof LLMOutputError
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Async spawn helper
 // ---------------------------------------------------------------------------
@@ -164,7 +187,7 @@ function spawnWithStdin(
         if (onStderr) {
           onStderr(warning);
         } else {
-          try { process.stderr.write(`${warning}\n`); } catch { /* stderr may be unavailable */ }
+          try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
         }
         return;
       }
@@ -367,7 +390,7 @@ function spawnStreamJson(
         if (onProgress) {
           onProgress({ line: warning, final: true, kind: "thinking" });
         } else {
-          try { process.stderr.write(`${warning}\n`); } catch { /* stderr may be unavailable */ }
+          try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
         }
       }
       if (totalSyntaxErrors > 0) {
@@ -375,7 +398,7 @@ function spawnStreamJson(
         if (onProgress) {
           onProgress({ line: msg, final: true, kind: "thinking" });
         } else {
-          try { process.stderr.write(`${msg}\n`); } catch { /* stderr may be unavailable */ }
+          try { process.stderr.write(`${msg}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
         }
       }
       resolve(resultText);
@@ -391,7 +414,7 @@ function spawnStreamJson(
         if (onProgress) {
           onProgress({ line: warning, final: true, kind: "thinking" });
         } else {
-          try { process.stderr.write(`${warning}\n`); } catch { /* stderr may be unavailable */ }
+          try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
         }
         return;
       }
@@ -432,8 +455,7 @@ function commandExists(cmd: string): boolean {
     execFileSync("which", [cmd], { stdio: "pipe" });
     return true;
   } catch (err: unknown) {
-    if (isProgrammingError(err)) throw err;
-    if (isSystemResourceError(err)) throw err;
+    rethrowIfFatal(err);
     // `which` exiting non-zero means the command was not found — expected.
     if (err instanceof Error && "status" in err && typeof (err as { status: unknown }).status === "number") {
       return false;
@@ -458,8 +480,7 @@ const claudeCodeProvider: LLMProvider = {
     try {
       fs.writeFileSync(tmpFile, systemPrompt, "utf-8");
     } catch (err: unknown) {
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       const msg = err instanceof Error ? err.message : String(err);
       throw new LLMCallError(`Failed to write system prompt to temp file: ${msg}`, { cause: err });
     }
@@ -483,12 +504,13 @@ const claudeCodeProvider: LLMProvider = {
       try {
         fs.unlinkSync(tmpFile);
       } catch (e) {
+        rethrowIfFatal(e);
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
           const warning = `Failed to clean up temp file ${tmpFile}: ${(e as Error).message}`;
           if (onProgress) {
             onProgress({ line: warning, final: true, kind: "thinking" });
           } else {
-            try { process.stderr.write(`${warning}\n`); } catch { /* stderr unavailable */ }
+            try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
           }
         }
       }
@@ -506,8 +528,7 @@ const copilotProvider: LLMProvider = {
       execFileSync("gh", ["copilot", "--version"], { stdio: "pipe" });
       return true;
     } catch (err: unknown) {
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       // Non-zero exit means the copilot extension is not installed — expected.
       if (err instanceof Error && "status" in err && typeof (err as { status: unknown }).status === "number") {
         return false;
@@ -973,12 +994,12 @@ export function repairLLMYaml(yaml: string): RepairResult {
 // ---------------------------------------------------------------------------
 
 export interface BuildModelWithLLMOptions {
-  rawStructure: RawStructure;
-  config: Config;
-  configYaml?: string;
-  existingModelYaml?: string;
-  onStatus?: (status: string, providerName: string) => void;
-  onProgress?: (event: ProgressEvent) => void;
+  readonly rawStructure: RawStructure;
+  readonly config: Config;
+  readonly configYaml?: string;
+  readonly existingModelYaml?: string;
+  readonly onStatus?: (status: string, providerName: string) => void;
+  readonly onProgress?: (event: ProgressEvent) => void;
 }
 
 export async function buildModelWithLLM(
@@ -998,8 +1019,7 @@ export async function buildModelWithLLM(
     try {
       ({ buildModelParallel } = await import("./parallel-model-builder.js"));
     } catch (err) {
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       throw new LLMCallError(
         `Failed to load parallel model builder module: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
@@ -1016,8 +1036,7 @@ export async function buildModelWithLLM(
       });
     } catch (err) {
       if (err instanceof LLMCallError || err instanceof LLMOutputError || err instanceof LLMUnavailableError) throw err;
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       throw new LLMCallError(
         `Parallel model builder failed: ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
@@ -1033,8 +1052,7 @@ export async function buildModelWithLLM(
       const seed = buildModel({ config: options.config, rawStructure: options.rawStructure });
       existingModelYaml = stringifyYaml(seed, { lineWidth: 120 });
     } catch (err: unknown) {
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       const msg = err instanceof Error ? err.message : String(err);
       throw new LLMCallError(`Failed to generate deterministic seed for LLM: ${msg}`, { cause: err });
     }
@@ -1065,6 +1083,7 @@ export async function buildModelWithLLM(
   } catch (err) {
     if (outputPath) {
       try { fs.unlinkSync(outputPath); } catch (e) {
+        rethrowIfFatal(e);
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
           const warning = `Failed to clean up temp file ${outputPath}: ${(e as Error).message}`;
           emit(warning);
@@ -1094,8 +1113,7 @@ export async function buildModelWithLLM(
       }
     } catch (err: unknown) {
       if (err instanceof LLMOutputError) throw err;
-      if (isProgrammingError(err)) throw err;
-      if (isSystemResourceError(err)) throw err;
+      rethrowIfFatal(err);
       const errCode = (err as NodeJS.ErrnoException).code;
       const msg = err instanceof Error ? err.message : String(err);
       // Only ENOENT (file vanished between existsSync and readFileSync) is safe for fallback.
@@ -1117,6 +1135,7 @@ export async function buildModelWithLLM(
       rawOutput = textOutput;
     } finally {
       try { fs.unlinkSync(outputPath); } catch (e) {
+        rethrowIfFatal(e);
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
           const warning = `Failed to clean up temp file ${outputPath}: ${(e as Error).message}`;
           emit(warning);
