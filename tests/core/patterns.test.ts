@@ -138,7 +138,12 @@ describe("detectExternalSystems", () => {
     expect(result).toEqual([{ keyword: "sqlite", type: "Database", technology: "SQLite" }]);
   });
 
-  it("detects H2", () => {
+  it("detects H2 via h2database (primary Maven group ID keyword)", () => {
+    const result = detectExternalSystems(["com.h2database:h2"]);
+    expect(result).toEqual([{ keyword: "h2database", type: "Database", technology: "H2" }]);
+  });
+
+  it("detects H2 via bare h2 artifact name (secondary keyword)", () => {
     const result = detectExternalSystems(["h2"]);
     expect(result).toEqual([{ keyword: "h2", type: "Database", technology: "H2" }]);
   });

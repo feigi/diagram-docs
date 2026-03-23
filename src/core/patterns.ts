@@ -20,6 +20,10 @@ export interface DetectedExternalSystem {
  * First match wins, so order matters if patterns could overlap.
  */
 const ROLE_PATTERNS: Array<{ pattern: string; role: Role }> = [
+  // restcontroller and controller both map to "controller". restcontroller is a
+  // substring of controller, so this entry is unreachable in practice. Kept for
+  // documentation: it makes the intent explicit that Spring's @RestController is
+  // a first-class controller pattern.
   { pattern: "restcontroller", role: "controller" },
   { pattern: "controller", role: "controller" },
   { pattern: "resource", role: "controller" },
@@ -73,6 +77,10 @@ const EXTERNAL_SYSTEM_PATTERNS: Array<{
   { keyword: "mysql", type: "Database", technology: "MySQL" },
   { keyword: "oracle", type: "Database", technology: "Oracle" },
   { keyword: "sqlite", type: "Database", technology: "SQLite" },
+  // "h2database" matches the Maven group ID (com.h2database:h2) and is specific
+  // enough to avoid false positives. "h2" is kept as a secondary entry for
+  // build files that reference just the artifact name.
+  { keyword: "h2database", type: "Database", technology: "H2" },
   { keyword: "h2", type: "Database", technology: "H2" },
   // Message brokers
   { keyword: "kafka", type: "Message Broker", technology: "Apache Kafka" },
@@ -87,6 +95,9 @@ const EXTERNAL_SYSTEM_PATTERNS: Array<{
   { keyword: "elasticsearch", type: "Search Engine", technology: "Elasticsearch" },
   { keyword: "opensearch", type: "Search Engine", technology: "OpenSearch" },
   // Object storage
+  // "s3" is a short keyword with false-positive risk, but real deps are named
+  // like "aws-java-sdk-s3" or "software.amazon.awssdk:s3", so substring match
+  // is reliable in practice.
   { keyword: "s3", type: "Object Storage", technology: "S3" },
   { keyword: "minio", type: "Object Storage", technology: "S3" },
 ];
@@ -126,6 +137,9 @@ export function detectExternalSystems(depNames: string[]): DetectedExternalSyste
  * - controller source → "Delegates to"
  * - repository target → "Persists via"
  * - fallback → "Uses"
+ *
+ * Source role takes priority over target role when both match
+ * (e.g. controller → repository yields "Delegates to", not "Persists via").
  */
 export function inferRelationshipLabel(
   sourceRole: Role | undefined,
