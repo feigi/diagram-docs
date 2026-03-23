@@ -158,9 +158,9 @@ function filterModules(
 }
 
 interface ModuleGroup {
-  representative: ScannedModule;
-  moduleIds: string[];
-  displayName: string;
+  readonly representative: ScannedModule;
+  readonly moduleIds: string[];
+  readonly displayName: string;
 }
 
 const MAX_COMPONENTS = 20;

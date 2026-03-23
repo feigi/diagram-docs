@@ -51,7 +51,8 @@ interface AppBuildResult {
 
 /**
  * Split a multi-app RawStructure into one RawStructure per application.
- * Each slice preserves the app's internalImports for LLM context.
+ * Each slice contains the full ScannedApplication object, so fields like
+ * internalImports remain available for LLM context.
  */
 export function splitRawStructure(raw: RawStructure): RawStructure[] {
   return raw.applications.map((app) => ({
@@ -64,7 +65,8 @@ export function splitRawStructure(raw: RawStructure): RawStructure[] {
 
 /**
  * Merge partial ArchitectureModels (one per app) into a combined model.
- * - Concatenates containers, components, relationships
+ * - Concatenates containers and components
+ * - Deduplicates relationships by source→target pair (first wins)
  * - Deduplicates actors by id (keeps longer description)
  * - Deduplicates external systems by id (keeps longer description)
  * - System name/description left empty (filled by synthesis pass)
@@ -444,7 +446,17 @@ export async function buildModelParallel(
 
   // -- Step 5: Inject deterministic cross-app relationships --
   onStatus?.("Adding cross-app relationships...");
-  const fullDeterministic = buildModel({ config, rawStructure });
+  let fullDeterministic: ArchitectureModel;
+  try {
+    fullDeterministic = buildModel({ config, rawStructure });
+  } catch (err) {
+    if (isProgrammingError(err)) throw err;
+    if (isSystemResourceError(err)) throw err;
+    throw new LLMCallError(
+      `Failed to build deterministic model for cross-app relationships: ${err instanceof Error ? err.message : String(err)}`,
+      { cause: err },
+    );
+  }
 
   const containerIds = new Set(merged.containers.map((c) => c.id));
   const componentIds = new Set(merged.components.map((c) => c.id));
@@ -493,7 +505,8 @@ export async function buildModelParallel(
   // -- Step 6: Synthesis pass --
   onStatus?.("Running synthesis pass...");
   // Save pre-synthesis state so the catch block can fully rollback.
-  // Shallow copies: rollback works because synthesis replaces arrays wholesale.
+  // Rollback replaces actors and externalSystems arrays wholesale,
+  // and restores relationship labels/technology from saved values.
   const preSynthActors = [...merged.actors];
   const preSynthExternalSystems = [...merged.externalSystems];
   const preSynthRelState = new Map(

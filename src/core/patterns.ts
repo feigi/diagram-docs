@@ -18,8 +18,9 @@ export interface DetectedExternalSystem {
 // ---------------------------------------------------------------------------
 
 /**
- * Maps substring patterns (lowercased) to roles.
- * First match wins, so order matters if patterns could overlap.
+ * Maps patterns (lowercased) to roles. Each pattern is matched as a
+ * substring unless `exact: true`, in which case the full token must match.
+ * First match wins, so order matters when patterns could overlap.
  */
 const ROLE_PATTERNS: Array<{ pattern: string; role: Role; exact?: boolean }> = [
   // restcontroller and controller both map to "controller". "controller" is a
@@ -72,8 +73,9 @@ export function detectRole(annotations: string): Role | undefined {
 // ---------------------------------------------------------------------------
 
 /**
- * Maps substring keywords (lowercased) to external system descriptors.
- * keyword is the canonical keyword stored in DetectedExternalSystem.
+ * Maps keywords to external system descriptors. Matching is case-insensitive
+ * substring by default; entries with `boundaryRegex` use regex matching
+ * instead (e.g., to avoid false positives on short keywords like 's3').
  */
 const EXTERNAL_SYSTEM_PATTERNS: Array<{
   keyword: string;
@@ -164,7 +166,7 @@ export function inferRelationshipLabel(
 }
 
 /**
- * Infer a relationship label from a component to an external system.
+ * Return a relationship label appropriate for the given external system type.
  */
 const EXTERNAL_RELATIONSHIP_LABELS: Record<SystemType, string> = {
   "Database": "Reads/writes data in",

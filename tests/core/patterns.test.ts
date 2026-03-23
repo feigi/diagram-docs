@@ -6,7 +6,6 @@ import {
   inferExternalRelationshipLabel,
   inferComponentTech,
 } from "../../src/core/patterns.js";
-import type { Role } from "../../src/core/patterns.js";
 
 describe("detectRole", () => {
   it("returns undefined for empty annotations", () => {
