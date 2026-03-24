@@ -84,7 +84,7 @@ export function generateContextDiagram(model: ArchitectureModel): string {
     seenEdges.add(edgeKey);
 
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`));
+    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`, 40, 1), { "style.font-size": "13" });
   }
 
   return w.toString();

@@ -70,12 +70,18 @@ export class D2Writer {
     sourceId: string,
     targetId: string,
     label?: string,
+    props?: Record<string, string>,
   ): this {
     const prefix = this.pad();
     if (label) {
       this.lines.push(`${prefix}${sourceId} -> ${targetId}: ${this.quote(label)}`);
     } else {
       this.lines.push(`${prefix}${sourceId} -> ${targetId}`);
+    }
+    if (props) {
+      for (const [key, value] of Object.entries(props).sort(([a], [b]) => a.localeCompare(b))) {
+        this.lines.push(`${prefix}(${sourceId} -> ${targetId})[0].${key}: ${value}`);
+      }
     }
     return this;
   }

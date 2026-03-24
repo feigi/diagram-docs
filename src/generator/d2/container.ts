@@ -132,7 +132,7 @@ export function generateContainerDiagram(
   // Relationships
   for (const rel of resolvedRels) {
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(rel.sourceId, rel.targetId, wrapText(`${rel.label}${tech}`));
+    w.connection(rel.sourceId, rel.targetId, wrapText(`${rel.label}${tech}`, 40, 1), { "style.font-size": "13" });
   }
 
   return w.toString();
