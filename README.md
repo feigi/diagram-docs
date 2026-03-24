@@ -14,9 +14,9 @@ Source code  ──▶  diagram-docs scan   ──▶  raw-structure.json
 Model YAML   ──▶  diagram-docs generate ──▶  D2 diagrams + SVG/PNG
 ```
 
-`scan` reads code. `generate` writes diagrams. The agent sits in between — it reads the scan output, decides how to group modules into components, names things, identifies actors and external systems, and writes `architecture-model.yaml`. The tool never calls an LLM itself.
+`scan` reads code. `generate` writes diagrams. An LLM agent sits in between — it reads the scan output, decides how to group modules into components, names things, identifies actors and external systems, and writes `architecture-model.yaml`. The tool delegates to Claude Code or Copilot CLI for LLM calls.
 
-Alternatively, `model` produces a deterministic architecture model directly from scan output — no LLM needed. Use it as a starting point and refine from there.
+Alternatively, `model` (without `--llm`) or `generate --deterministic` produces a deterministic architecture model directly from scan output — no LLM needed. Use it as a starting point and refine from there.
 
 ## Quick start
 
@@ -84,13 +84,14 @@ Results are cached in `.diagram-docs/manifest.yaml` — unchanged files skip re-
 
 ### `diagram-docs model`
 
-Generate `architecture-model.yaml` deterministically from scan output, without an LLM.
+Generate `architecture-model.yaml` from scan output. Deterministic by default; use `--llm` for LLM-driven modeling.
 
 | Flag | Description |
 |------|-------------|
 | `-i, --input <path>` | Path to `raw-structure.json` (default: `.diagram-docs/raw-structure.json`) |
 | `-o, --output <path>` | Output file path (default: `architecture-model.yaml`) |
 | `-c, --config <path>` | Path to `diagram-docs.yaml` |
+| `--llm` | Use LLM to generate model (requires Claude Code or Copilot CLI) |
 
 The deterministic model builder:
 - Creates one container per scanned application (skipping shell parent projects like Gradle multi-module roots)
@@ -107,11 +108,14 @@ Generate D2 diagrams from an architecture model.
 | `-m, --model <path>` | Path to `architecture-model.yaml` |
 | `-c, --config <path>` | Path to `diagram-docs.yaml` |
 | `--submodules` | Generate per-application docs alongside root diagrams |
+| `--deterministic` | Use deterministic model builder (skip LLM) |
 
 Model resolution when `-m` is not provided:
 1. Look for `architecture-model.yaml` near the config file
 2. Auto-generate from `.diagram-docs/raw-structure.json` if it exists
 3. Auto-scan the source code, build a model, and generate diagrams
+
+Steps 2–3 use an LLM agent by default. Pass `--deterministic` to use the rule-based builder instead.
 
 This means `diagram-docs generate` works with zero setup — no config file, no prior scan needed.
 
@@ -129,8 +133,8 @@ system:
 scan:
   include: ["**"]
   exclude:
-    - "**/test/**"
-    - "**/tests/**"
+    - "**/*test*/**"
+    - "**/*test*"
     - "**/node_modules/**"
     - "**/build/**"
     - "**/dist/**"
@@ -162,6 +166,11 @@ output:
   format: svg          # svg | png
   theme: 0             # D2 theme ID
   layout: elk          # D2 layout engine
+
+llm:
+  provider: auto         # auto | claude-code | copilot
+  model: sonnet          # Model to use for LLM-driven modeling
+  concurrency: 4         # Max parallel LLM calls (1-16)
 
 submodules:
   enabled: true            # generate per-app docs
@@ -238,18 +247,21 @@ actors:
 externalSystems:
   - id: email-provider
     name: Email Provider
+    description: "Third-party email delivery service"
     technology: SMTP
 
 containers:
   - id: user-api
     applicationId: services-user-api    # links to ScannedApplication.id
     name: User API
+    description: "Manages user accounts and profiles"
     technology: Java / Spring Boot
 
 components:
   - id: user-controller
     containerId: user-api
     name: User Controller
+    description: "REST endpoints for user management"
     technology: Spring MVC
     moduleIds:
       - services-user-api-com-example-user
