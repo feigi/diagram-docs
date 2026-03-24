@@ -1,8 +1,8 @@
 # Loop Summary
 
 **Status:** Completed successfully
-**Iterations:** 9
-**Duration:** 1h 6m 33s
+**Iterations:** 1
+**Duration:** 8m 0s
 
 ## Tasks
 
@@ -14,4 +14,4 @@ _No events recorded._
 
 ## Final Commit
 
-2db5f61: fix: harden error handling, co-locate error classification, add readonly types
+3fe0282: fix: synthesis double-stop on recoverable error + wrap log dir setup in try-catch
