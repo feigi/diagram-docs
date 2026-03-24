@@ -243,7 +243,7 @@ export async function buildModelParallel(
       seeds.push(buildModel({ config, rawStructure: slices[i] }));
     } catch (err) {
       const appId = slices[i].applications[0].id;
-      progress?.stop(`Seed generation failed for ${appId}`);
+      progress?.stop(`Seed generation failed for ${appId}`, true);
       rethrowIfFatal(err);
       throw new LLMCallError(
         `Failed to generate deterministic seed for app "${appId}": ${err instanceof Error ? err.message : String(err)}`,
@@ -462,6 +462,9 @@ export async function buildModelParallel(
         );
         return { model: seed, fellBack: true };
       }
+      // Non-recoverable: still mark UI as failed so the app doesn't appear stuck
+      progress?.updateApp(app.id, "failed");
+      logger?.logFailed(err instanceof Error ? err.message : String(err), Date.now() - appStartTime);
       throw err;
     } finally {
       releaseSlot();
@@ -490,13 +493,13 @@ export async function buildModelParallel(
     for (let i = 1; i < rejections.length; i++) {
       warn(`Additional app error (${i + 1}/${rejections.length}): ${rejections[i] instanceof Error ? (rejections[i] as Error).message : String(rejections[i])}`);
     }
-    progress?.stop(`${results.filter(r => !r.fellBack).length}/${slices.length} apps modeled`);
+    progress?.stop(`${results.filter(r => !r.fellBack).length}/${slices.length} apps modeled`, true);
     throw rejections[0];
   }
 
   const fallbackCount = results.filter((r) => r.fellBack).length;
   if (fallbackCount === slices.length) {
-    progress?.stop(`0/${slices.length} apps modeled`);
+    progress?.stop(`0/${slices.length} apps modeled`, true);
     throw new LLMCallError(
       `All ${slices.length} per-app LLM calls failed. ` +
       `The result would be identical to --deterministic mode. ` +
