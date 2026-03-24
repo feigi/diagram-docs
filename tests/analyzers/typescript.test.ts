@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as path from "node:path";
 import { parseTypeScriptImports } from "../../src/analyzers/typescript/imports.js";
 import { extractTypeScriptModules } from "../../src/analyzers/typescript/modules.js";
+import { typescriptAnalyzer } from "../../src/analyzers/typescript/index.js";
 
 const FIXTURES = path.resolve(
   __dirname,
@@ -81,5 +82,67 @@ describe("TypeScript Module Discovery", () => {
     expect(routesModule!.exports).toContain("registerRoutes");
     expect(routesModule!.exports).toContain("usersRouter");
     expect(routesModule!.exports).toContain("User");
+  });
+});
+
+describe("TypeScript Analyzer", () => {
+  it("detects TypeScript build file patterns", () => {
+    expect(typescriptAnalyzer.buildFilePatterns).toContain("tsconfig.json");
+  });
+
+  it("analyzes a TypeScript application", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+
+    expect(result.language).toBe("typescript");
+    expect(result.buildFile).toBe("tsconfig.json");
+    expect(result.modules.length).toBeGreaterThan(0);
+
+    const routesModule = result.modules.find((m) => m.name === "routes");
+    expect(routesModule).toBeTruthy();
+    expect(routesModule!.files.length).toBeGreaterThan(0);
+  });
+
+  it("extracts external dependencies from package.json", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+
+    expect(result.externalDependencies.some((d) => d.name === "express")).toBe(true);
+    expect(result.externalDependencies.some((d) => d.name === "zod")).toBe(true);
+    // devDependencies should NOT appear
+    expect(result.externalDependencies.some((d) => d.name === "typescript")).toBe(false);
+  });
+
+  it("excludes file: deps from externalDependencies and writes internalImports", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+
+    // file: dep should not be in external deps
+    expect(result.externalDependencies.some((d) => d.name === "@monorepo/shared-lib")).toBe(false);
+
+    // Should have an internalImport for the file: dep
+    expect(result.internalImports.length).toBeGreaterThan(0);
+    expect(result.internalImports[0].targetPath).toContain("shared-lib");
+  });
+
+  it("sets publishedAs from package.json name", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+
+    expect(result.publishedAs).toBe("@monorepo/api-gateway");
+  });
+
+  it("detects Express framework in module metadata", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+
+    const routesModule = result.modules.find((m) => m.name === "routes");
+    expect(routesModule?.metadata["framework"]).toBe("Express");
+  });
+
+  it("classifies internal vs external imports", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+
+    const routesModule = result.modules.find((m) => m.name === "routes");
+    const externalImports = routesModule!.imports.filter((i) => i.isExternal);
+    const internalImports = routesModule!.imports.filter((i) => !i.isExternal);
+
+    expect(externalImports.some((i) => i.source === "express")).toBe(true);
+    expect(internalImports.some((i) => i.source === "../middleware/auth")).toBe(true);
   });
 });

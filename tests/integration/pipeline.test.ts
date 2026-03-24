@@ -29,10 +29,11 @@ describe("Integration: Scan → Generate pipeline", () => {
     const { config } = loadConfig(CONFIG_PATH);
     const apps = await discoverApplications(MONOREPO, config);
 
-    expect(apps.length).toBe(3);
+    expect(apps.length).toBe(4);
     expect(apps.some((a) => a.language === "java")).toBe(true);
     expect(apps.some((a) => a.language === "python")).toBe(true);
     expect(apps.some((a) => a.language === "c")).toBe(true);
+    expect(apps.some((a) => a.language === "typescript")).toBe(true);
   });
 
   it("scans all applications", async () => {
@@ -72,7 +73,7 @@ describe("Integration: Scan → Generate pipeline", () => {
       applications,
     };
 
-    expect(rawStructure.applications.length).toBe(3);
+    expect(rawStructure.applications.length).toBe(4);
 
     // Java app should have modules
     const javaApp = rawStructure.applications.find(
@@ -127,7 +128,7 @@ describe("Integration: Scan → Generate pipeline", () => {
     for (const app of rawStructure.applications) {
       expect(typeof app.id).toBe("string");
       expect(typeof app.path).toBe("string");
-      expect(["java", "python", "c"]).toContain(app.language);
+      expect(["java", "python", "c", "typescript"]).toContain(app.language);
       expect(Array.isArray(app.modules)).toBe(true);
       expect(Array.isArray(app.externalDependencies)).toBe(true);
       expect(Array.isArray(app.internalImports)).toBe(true);
