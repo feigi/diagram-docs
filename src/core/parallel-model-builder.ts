@@ -433,7 +433,7 @@ export async function buildModelParallel(
       try {
         const model = architectureModelSchema.parse(parsed) as ArchitectureModel;
         progress?.updateApp(app.id, "done");
-        await logger?.logDone(Date.now() - appStartTime);
+        logger?.logDone(Date.now() - appStartTime);
         return { model, fellBack: false };
       } catch (schemaErr) {
         throw new LLMOutputError(
@@ -447,7 +447,7 @@ export async function buildModelParallel(
       if (isRecoverableLLMError(err)) {
         const msg = err instanceof Error ? err.message : String(err);
         progress?.updateApp(slice.applications[0].id, "failed");
-        await logger?.logFailed(msg, Date.now() - appStartTime);
+        logger?.logFailed(msg, Date.now() - appStartTime);
         warn(
           `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic seed`,
         );
