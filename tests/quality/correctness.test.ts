@@ -50,6 +50,12 @@ const FIXTURES: Array<{
     expectedPath: path.resolve(QUALITY_FIXTURES, "c-cmake/expected.json"),
     analyzerId: "c",
   },
+  {
+    name: "typescript-express",
+    appPath: path.resolve(MONOREPO, "services/api-gateway"),
+    expectedPath: path.resolve(QUALITY_FIXTURES, "typescript-express/expected.json"),
+    analyzerId: "typescript",
+  },
 ];
 
 const defaultScanConfig = {

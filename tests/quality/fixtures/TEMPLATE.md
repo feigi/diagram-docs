@@ -11,7 +11,7 @@ This guide is designed for LLM-assisted fixture creation. Point an LLM at the so
 ```json
 {
   "$comment": "Ground truth for <path>. Hand-verified from source.",
-  "language": "java | python | c",
+  "language": "java | python | c | typescript",
   "modules": [
     {
       "name": "<package/module name as the analyzer sees it>",
