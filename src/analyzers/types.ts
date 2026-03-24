@@ -13,7 +13,7 @@ export interface ScannedApplication {
   id: string;
   path: string;
   name: string;
-  language: "java" | "python" | "c";
+  language: "java" | "python" | "c" | "typescript";
   buildFile: string;
   modules: ScannedModule[];
   externalDependencies: ExternalDep[];
