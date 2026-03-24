@@ -48,24 +48,26 @@ export class AgentLogger {
     }
   }
 
-  async logDone(elapsedMs: number): Promise<void> {
+  logDone(elapsedMs: number): void {
     this.buffer += `[${timestamp()}] DONE elapsed=${elapsedSeconds(elapsedMs)}\n`;
-    await this.flush();
+    this.flush();
   }
 
-  async logFailed(error: string, elapsedMs: number): Promise<void> {
+  logFailed(error: string, elapsedMs: number): void {
     this.buffer += `[${timestamp()}] FAILED elapsed=${elapsedSeconds(elapsedMs)} error=${error}\n`;
-    await this.flush();
+    this.flush();
   }
 
-  private flush(): Promise<void> {
-    if (!this.buffer) return Promise.resolve();
+  private flush(): void {
+    if (!this.buffer) return;
     const data = this.buffer;
     this.buffer = "";
-    return fs.promises.writeFile(this.logPath, data, { flag: "a" }).catch((err) => {
+    try {
+      fs.appendFileSync(this.logPath, data);
+    } catch (err) {
       try {
-        process.stderr.write(`Warning: failed to write agent log ${this.logPath}: ${err.message}\n`);
+        process.stderr.write(`Warning: failed to write agent log ${this.logPath}: ${err instanceof Error ? err.message : String(err)}\n`);
       } catch { /* stderr unavailable */ }
-    });
+    }
   }
 }
