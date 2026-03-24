@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import { loadConfig } from "../../config/loader.js";
 import { buildModel } from "../../core/model-builder.js";
+import { readManifest, writeManifest, createDefaultManifest } from "../../core/manifest.js";
 import {
   buildModelWithLLM,
   serializeModel,
@@ -47,6 +48,7 @@ export const modelCommand = new Command("model")
     );
 
     let yamlContent: string;
+    const scanChecksum = rawStructure.checksum;
 
     if (options.llm) {
       // Read config YAML for LLM context
@@ -144,5 +146,15 @@ export const modelCommand = new Command("model")
           `${model.externalSystems.length} external system(s), ` +
           `${model.relationships.length} relationship(s)`,
       );
+    }
+
+    // Record scan checksum so generate can detect stale models
+    if (scanChecksum) {
+      const manifest = readManifest(configDir) ?? createDefaultManifest();
+      manifest.lastModel = {
+        timestamp: new Date().toISOString(),
+        checksum: scanChecksum,
+      };
+      writeManifest(configDir, manifest);
     }
   });

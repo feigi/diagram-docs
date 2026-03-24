@@ -13,8 +13,8 @@ import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js"
 import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
 import type { Config } from "../../config/schema.js";
-import type { RawStructure } from "../../analyzers/types.js";
 import { runScan, ScanError } from "../../core/scan.js";
+import { readManifest, writeManifest, createDefaultManifest } from "../../core/manifest.js";
 import {
   buildModelWithLLM,
   serializeModel,
@@ -157,7 +157,10 @@ export const generateCommand = new Command("generate")
   });
 
 /**
- * Resolve model: explicit path > auto-locate > LLM or deterministic from scan.
+ * Resolve model: explicit path > scan + staleness check > rebuild.
+ *
+ * Always scans first (cheap — cached if source is unchanged) so we can
+ * detect when the model is stale relative to the current source code.
  */
 async function resolveModel(
   modelPath: string | undefined,
@@ -165,46 +168,66 @@ async function resolveModel(
   config: Config,
   deterministic?: boolean,
 ) {
-  // 1. Explicit path provided
+  // 1. Explicit path provided — trust the user, skip staleness check
   if (modelPath) {
     return loadModel(path.resolve(modelPath));
   }
 
-  // 2. Look for architecture-model.yaml near config
-  const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
-  if (fs.existsSync(autoModelPath)) {
-    console.error(`Using model: ${path.relative(process.cwd(), autoModelPath)}`);
-    return loadModel(autoModelPath);
-  }
-
-  // 3. Get raw structure (from cache or auto-scan)
-  let rawStructure: RawStructure;
-  const rawPath = path.resolve(configDir, ".diagram-docs/raw-structure.json");
-  if (fs.existsSync(rawPath)) {
-    console.error("No architecture-model.yaml found.");
-    rawStructure = JSON.parse(fs.readFileSync(rawPath, "utf-8"));
-  } else {
-    console.error("No model or scan data found. Running scan...");
-    try {
-      const result = await runScan({ rootDir: configDir, config });
-      rawStructure = result.rawStructure;
-      console.error("Scan complete.");
-    } catch (err) {
-      if (err instanceof ScanError) {
-        console.error(`Error: ${err.message}`);
-        process.exit(1);
-      }
-      throw err;
+  // 2. Always scan (returns from cache if source unchanged)
+  let scanResult;
+  try {
+    scanResult = await runScan({ rootDir: configDir, config });
+  } catch (err) {
+    if (err instanceof ScanError) {
+      console.error(`Error: ${err.message}`);
+      process.exit(1);
     }
+    throw err;
+  }
+  const { rawStructure } = scanResult;
+  const scanChecksum = rawStructure.checksum;
+
+  // 3. Check if existing model is still fresh
+  const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
+  const manifest = readManifest(configDir) ?? createDefaultManifest();
+
+  if (fs.existsSync(autoModelPath)) {
+    if (manifest.lastModel?.checksum === scanChecksum) {
+      console.error(`Using model: ${path.relative(process.cwd(), autoModelPath)} (up to date)`);
+      return loadModel(autoModelPath);
+    }
+    console.error("Source code changed since model was last built. Rebuilding model...");
   }
 
   // 4. Build model: LLM (default) or deterministic (--deterministic)
+  const model = await buildModelFromScan(rawStructure, configDir, config, deterministic);
+
+  // 5. Persist model and record scan checksum
+  fs.writeFileSync(autoModelPath, serializeModel(model), "utf-8");
+  manifest.lastModel = {
+    timestamp: new Date().toISOString(),
+    checksum: scanChecksum,
+  };
+  writeManifest(configDir, manifest);
+  console.error(`Model written to ${path.relative(process.cwd(), autoModelPath)}`);
+
+  return model;
+}
+
+/**
+ * Build an architecture model from scan output using deterministic or LLM mode.
+ */
+async function buildModelFromScan(
+  rawStructure: import("../../analyzers/types.js").RawStructure,
+  configDir: string,
+  config: Config,
+  deterministic?: boolean,
+) {
   if (deterministic) {
     console.error("Building model (deterministic)...");
     return buildModel({ config, rawStructure });
   }
 
-  // Read config YAML for LLM context (if it exists)
   const configPath = path.resolve(configDir, "diagram-docs.yaml");
   const configYaml = fs.existsSync(configPath)
     ? fs.readFileSync(configPath, "utf-8")
@@ -233,13 +256,6 @@ async function resolveModel(
           `${model.relationships.length} relationship(s)`,
       },
     ]);
-
-    // Persist to disk so subsequent runs skip LLM
-    fs.writeFileSync(autoModelPath, serializeModel(model), "utf-8");
-    console.error(
-      `Model written to ${path.relative(process.cwd(), autoModelPath)}`,
-    );
-
     return model;
   } catch (err) {
     if (err instanceof LLMUnavailableError) {
