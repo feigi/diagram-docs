@@ -181,8 +181,17 @@ export async function buildModelParallel(
   const manageOwnUI = !onStatus && !onProgress;
 
   if (manageOwnUI) {
-    fs.rmSync(logsDir, { recursive: true, force: true });
-    fs.mkdirSync(logsDir, { recursive: true });
+    try {
+      fs.rmSync(logsDir, { recursive: true, force: true });
+      fs.mkdirSync(logsDir, { recursive: true });
+    } catch (err) {
+      rethrowIfFatal(err);
+      throw new LLMCallError(
+        `Failed to create log directory "${logsDir}": ${err instanceof Error ? err.message : String(err)}. ` +
+        `Check filesystem permissions or remove the path if it is not a directory.`,
+        { cause: err },
+      );
+    }
 
     try {
       const gitignorePath = ".gitignore";
@@ -573,6 +582,7 @@ export async function buildModelParallel(
 
   // -- Step 6: Synthesis pass --
   const synthesisFrame = manageOwnUI ? createFrame("LLM Synthesis") : undefined;
+  let synthesisSucceeded = false;
   const synthesisOnStatus = manageOwnUI
     ? (status: string) => synthesisFrame!.update([
         { text: status, spinner: true },
@@ -729,6 +739,7 @@ export async function buildModelParallel(
         }
       }
     }
+    synthesisSucceeded = true;
   } catch (err) {
     if (isRecoverableLLMError(err)) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -749,7 +760,7 @@ export async function buildModelParallel(
     }
   }
 
-  if (synthesisFrame) {
+  if (synthesisFrame && synthesisSucceeded) {
     synthesisFrame.stop([{ text: "Synthesis complete" }]);
   }
 
