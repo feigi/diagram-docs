@@ -65,6 +65,8 @@ export class AgentLogger {
     try {
       fs.appendFileSync(this.logPath, data);
     } catch (err) {
+      // Restore buffer so data is not permanently lost if the write fails
+      this.buffer = data + this.buffer;
       try {
         process.stderr.write(`Warning: failed to write agent log ${this.logPath}: ${err instanceof Error ? err.message : String(err)}\n`);
       } catch { /* stderr unavailable */ }

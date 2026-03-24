@@ -23,7 +23,7 @@ export interface ParallelProgress {
   /** Overall status text (e.g. "Merging models...") */
   setStatus(text: string): void;
   /** Collapse to summary and release terminal */
-  stop(summary: string): void;
+  stop(summary: string, isError?: boolean): void;
 }
 
 interface AppEntry {
@@ -232,7 +232,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       render();
     },
 
-    stop(summary: string): void {
+    stop(summary: string, isError = false): void {
       if (stopped) return;
       stopped = true;
       stopTimer();
@@ -250,8 +250,9 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       const topFill = inner - titleStr.length - 1;
       const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
       const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
+      const icon = isError ? chalk.red("✗") : chalk.green("✓");
       const summaryRow = chalk.dim("│") + " " +
-        padRight(`${chalk.green("✓")} ${truncate(summary, inner - 8)}  ${chalk.dim(elapsed)}`, inner - 2) +
+        padRight(`${icon} ${truncate(summary, inner - 8)}  ${chalk.dim(elapsed)}`, inner - 2) +
         " " + chalk.dim("│");
 
       let output = "";
