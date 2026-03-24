@@ -1,54 +1,21 @@
 import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { stringify as stringifyYaml } from "yaml";
-
-const DEFAULT_CONFIG = {
-  system: {
-    name: "My System",
-    description: "Description for context diagram",
-  },
-  scan: {
-    include: ["**"],
-    exclude: [
-      "**/*test*/**",
-      "**/*test*",
-      "**/node_modules/**",
-      "**/build/**",
-      "**/dist/**",
-      "**/target/**",
-    ],
-  },
-  levels: {
-    context: true,
-    container: true,
-    component: false,
-  },
-  abstraction: {
-    granularity: "balanced",
-    excludePatterns: ["logging", "metrics", "middleware", "config", "utils"],
-  },
-  output: {
-    dir: "docs/architecture",
-    theme: 0,
-    layout: "elk",
-  },
-};
+import { findConfigFile, writeDefaultConfig } from "../../config/loader.js";
 
 export const initCommand = new Command("init")
   .description("Scaffold a diagram-docs.yaml config file")
   .option("-f, --force", "Overwrite existing config file")
   .action((options) => {
-    const configPath = path.join(process.cwd(), "diagram-docs.yaml");
+    const existing = findConfigFile(process.cwd());
 
-    if (fs.existsSync(configPath) && !options.force) {
+    if (existing && !options.force) {
       console.error(
         "diagram-docs.yaml already exists. Use --force to overwrite.",
       );
       process.exit(1);
     }
 
-    const yaml = stringifyYaml(DEFAULT_CONFIG, { lineWidth: 120 });
-    fs.writeFileSync(configPath, yaml, "utf-8");
-    console.log("Created diagram-docs.yaml");
+    const { configPath } = writeDefaultConfig(process.cwd());
+    console.log(`Created ${path.relative(process.cwd(), configPath)}`);
   });

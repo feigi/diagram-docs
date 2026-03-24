@@ -1,56 +1,68 @@
 # diagram-docs
 
-Generate [C4 architecture diagrams](https://c4model.com) in [D2](https://d2lang.com) from source code. Static analysis extracts code structure; an LLM agent provides the semantic reasoning.
-
-## How it works
-
-```
-Source code  ──▶  diagram-docs scan   ──▶  raw-structure.json
-                                                │
-                                          Agent reasons about
-                                          structure, writes model
-                                          (or use deterministic model command)
-                                                │
-Model YAML   ──▶  diagram-docs generate ──▶  D2 diagrams + SVG/PNG
-```
-
-`scan` reads code. `generate` writes diagrams. An LLM agent sits in between — it reads the scan output, decides how to group modules into components, names things, identifies actors and external systems, and writes `architecture-model.yaml`. The tool delegates to Claude Code or Copilot CLI for LLM calls.
-
-Alternatively, `model` (without `--llm`) or `generate --deterministic` produces a deterministic architecture model directly from scan output — no LLM needed. Use it as a starting point and refine from there.
+Generate [C4 architecture diagrams](https://c4model.com) in [D2](https://d2lang.com) from source code.
 
 ## Quick start
 
 ```bash
-npm install && npm run build
-```
-
-### Zero-config (simplest)
-
-Run `generate` in any project directory — it discovers source code, scans, builds a model, and generates diagrams automatically:
-
-```bash
+cd your-project
 diagram-docs generate
 ```
 
-### Step-by-step
+That's it. `generate` discovers source code, scans it, builds an architecture model, generates D2 diagrams, and renders SVG files. If no `diagram-docs.yaml` config exists, one is created with sensible defaults.
 
-For more control over each stage:
+Install the [D2 CLI](https://d2lang.com/releases/install) to get rendered SVG/PNG output. Without it, you still get `.d2` source files.
+
+For LLM-enhanced modeling (better descriptions, smarter component grouping), install [Claude Code](https://claude.ai/download) or [GitHub Copilot CLI](https://docs.github.com/en/copilot/github-copilot-in-the-cli). Without either, a deterministic rule-based model builder is used. You can also force deterministic mode explicitly:
 
 ```bash
-# Scaffold config
-diagram-docs init
-
-# Scan your codebase
-diagram-docs scan -o raw-structure.json
-
-# Generate a deterministic model (or write one by hand / via LLM agent)
-diagram-docs model -i raw-structure.json -o architecture-model.yaml
-
-# Generate diagrams
-diagram-docs generate --model architecture-model.yaml
+diagram-docs generate --deterministic
 ```
 
-If the [D2 CLI](https://d2lang.com/releases/install) is installed, `generate` also renders SVG or PNG files automatically.
+## How it works
+
+`generate` runs a three-phase pipeline:
+
+```
+1. Scan       Source code  ──▶  raw-structure.json
+                                       │
+2. Model      Static analysis (or LLM) reasons about
+              structure, groups modules into components
+                                       │
+3. Generate   architecture-model.yaml  ──▶  D2 diagrams + SVG/PNG
+```
+
+### Phase 1: Scan
+
+Static analysis reads your source code and produces `raw-structure.json` — a structured representation of applications, modules, imports, dependencies, and metadata (like Java annotations).
+
+Applications are discovered by build files (`pom.xml`, `build.gradle`, `pyproject.toml`, `CMakeLists.txt`, etc.). Results are cached by file checksum; unchanged files skip re-analysis.
+
+### Phase 2: Model
+
+The scan output is converted into `architecture-model.yaml` — the bridge between raw code structure and diagrams. This is where architectural decisions happen: how modules are grouped into components, what actors exist, which external systems are in play, and how things relate to each other.
+
+**Deterministic mode** (no LLM needed): A rule-based builder maps scan output directly. It creates one container per application, groups modules by package prefix, detects external systems from dependencies (PostgreSQL, Kafka, Redis, etc.), and infers actors from annotations (controllers → API consumer, listeners → upstream system). Output is correct but generic — descriptions are formulaic and relationship labels are pattern-matched.
+
+**LLM mode** (default when a CLI is available): The deterministic model is generated first as a "seed", then handed to an LLM agent to improve. The agent rewrites descriptions to be specific and meaningful, regroups components by architectural role (controller/service/repository), replaces generic "Uses" labels with descriptive verb phrases, and detects actors and external systems from code evidence. The tool shells out to Claude Code or Copilot CLI — it never calls an LLM API directly.
+
+For multi-app projects, per-app LLM calls run in parallel, then a synthesis step merges the results and refines cross-app relationships.
+
+The model file is written to disk and reused on subsequent runs. Delete it to regenerate.
+
+### Phase 3: Generate
+
+The architecture model is rendered as D2 diagrams at three C4 levels:
+
+| Level | File | What it shows |
+|-------|------|---------------|
+| L1 Context | `c1-context.d2` | System, actors, external systems |
+| L2 Container | `c2-container.d2` | Containers (applications) within the system |
+| L3 Component | `c3-component.d2` | Components within each container |
+
+Generated files go in `_generated/` subdirectories (overwritten each run). User-facing files are scaffolded once and never overwritten — they use D2 `@import` to merge with generated content. This means you can customize diagrams freely without losing changes on regeneration.
+
+If the D2 CLI is installed, diagrams are rendered to SVG or PNG. Rendering is skipped for files whose output is already up-to-date.
 
 ## Supported languages
 
@@ -60,74 +72,13 @@ If the [D2 CLI](https://d2lang.com/releases/install) is installed, `generate` al
 | Python | `pyproject.toml`, `setup.py`, `requirements.txt` | Modules, imports, framework detection (FastAPI, Flask, Django), dependencies, config files |
 | C | `CMakeLists.txt`, `Makefile` | Header/source structure, `#include` directives (system vs local), public API from header exports |
 
-## CLI reference
-
-### `diagram-docs init`
-
-Create a `diagram-docs.yaml` config file.
-
-| Flag | Description |
-|------|-------------|
-| `-f, --force` | Overwrite existing config |
-
-### `diagram-docs scan`
-
-Analyze source code and produce `raw-structure.json`.
-
-| Flag | Description |
-|------|-------------|
-| `-c, --config <path>` | Path to `diagram-docs.yaml` |
-| `-o, --output <path>` | Output file (default: stdout) |
-| `--force` | Skip cache, re-scan everything |
-
-Results are cached in `.diagram-docs/manifest.yaml` — unchanged files skip re-analysis. A post-scan pass matches `publishedAs` coordinates across applications for cross-app import resolution.
-
-### `diagram-docs model`
-
-Generate `architecture-model.yaml` from scan output. Deterministic by default; use `--llm` for LLM-driven modeling.
-
-| Flag | Description |
-|------|-------------|
-| `-i, --input <path>` | Path to `raw-structure.json` (default: `.diagram-docs/raw-structure.json`) |
-| `-o, --output <path>` | Output file path (default: `architecture-model.yaml`) |
-| `-c, --config <path>` | Path to `diagram-docs.yaml` |
-| `--llm` | Use LLM to generate model (requires Claude Code or Copilot CLI) |
-
-The deterministic model builder:
-- Creates one container per scanned application (skipping shell parent projects like Gradle multi-module roots)
-- Groups modules into components based on the configured `granularity` level
-- Promotes known dependencies (PostgreSQL, Redis, Kafka, etc.) to external systems
-- Derives cross-container relationships from import analysis
-
-### `diagram-docs generate`
-
-Generate D2 diagrams from an architecture model.
-
-| Flag | Description |
-|------|-------------|
-| `-m, --model <path>` | Path to `architecture-model.yaml` |
-| `-c, --config <path>` | Path to `diagram-docs.yaml` |
-| `--submodules` | Generate per-application docs alongside root diagrams |
-| `--deterministic` | Use deterministic model builder (skip LLM) |
-
-Model resolution when `-m` is not provided:
-1. Look for `architecture-model.yaml` near the config file
-2. Auto-generate from `.diagram-docs/raw-structure.json` if it exists
-3. Auto-scan the source code, build a model, and generate diagrams
-
-Steps 2–3 use an LLM agent by default. Pass `--deterministic` to use the rule-based builder instead.
-
-This means `diagram-docs generate` works with zero setup — no config file, no prior scan needed.
-
-Renders SVG/PNG via the D2 CLI if available. Validates generated D2 before rendering. Checks user-facing D2 files for stale references and prints drift warnings.
-
 ## Configuration
 
-A `diagram-docs.yaml` config file is optional. Without one, defaults are derived from the project directory name.
+Running `generate` without a config file creates a `diagram-docs.yaml` with defaults. Edit it to customize behavior:
 
 ```yaml
 system:
-  name: "My System"
+  name: "My System"           # Inferred from directory name if not set
   description: ""
 
 scan:
@@ -141,41 +92,41 @@ scan:
     - "**/target/**"
 
 levels:
-  context: true       # L1 — system + actors + external systems
-  container: true      # L2 — containers within the system
-  component: true      # L3 — components within each container
+  context: true                # L1 — system + actors + external systems
+  container: true              # L2 — containers within the system
+  component: true              # L3 — components within each container
 
 abstraction:
-  granularity: balanced   # detailed | balanced | overview
-  excludePatterns:        # cross-cutting concerns to omit
+  granularity: balanced        # detailed | balanced | overview
+  excludePatterns:             # cross-cutting concerns to omit
     - logging
     - metrics
     - middleware
     - config
     - utils
 
-externalSystems:              # declare known external systems
+externalSystems:               # declare known external systems
   - name: PostgreSQL
     technology: SQL
-    usedBy: [user-api]        # container IDs that use this system
+    usedBy: [user-api]         # container IDs that use this system
   - name: Redis
     technology: Cache
 
 output:
   dir: docs/architecture
-  format: svg          # svg | png
-  theme: 0             # D2 theme ID
-  layout: elk          # D2 layout engine
+  format: svg                  # svg | png
+  theme: 0                     # D2 theme ID
+  layout: elk                  # D2 layout engine
 
 llm:
-  provider: auto         # auto | claude-code | copilot
-  model: sonnet          # Model to use for LLM-driven modeling
-  concurrency: 4         # Max parallel LLM calls (1-16)
+  provider: auto               # auto | claude-code | copilot
+  model: sonnet                # Model to use for LLM-driven modeling
+  concurrency: 4               # Max parallel LLM calls (1-16)
 
 submodules:
-  enabled: true            # generate per-app docs
-  docsDir: docs            # docs folder within each app
-  overrides:               # per-app overrides
+  enabled: true                # generate per-app docs alongside root diagrams
+  docsDir: docs                # docs folder within each app
+  overrides:                   # per-app overrides
     some-app:
       docsDir: documentation
       exclude: false
@@ -191,7 +142,7 @@ submodules:
 
 ### External systems
 
-The `externalSystems` config lets you declare infrastructure dependencies that should appear on the context diagram. Each entry specifies a `name`, optional `technology`, and optional `usedBy` list of container IDs to create relationships automatically.
+The `externalSystems` config declares infrastructure dependencies that appear on diagrams. Dependencies like PostgreSQL, Kafka, and Redis are also auto-detected from build files — config entries take precedence and let you specify `usedBy` relationships explicitly.
 
 ## Output structure
 
@@ -210,9 +161,7 @@ docs/architecture/
   styles.d2
 ```
 
-Diagram filenames are prefixed with their C4 level (`c1-`, `c2-`, `c3-`) for easy identification.
-
-Generated files are deterministic and sorted by ID. User-facing files are scaffolded once and never overwritten — customize them freely. D2 `@import` merges your changes with generated content. Container diagrams include drill-down links to component diagrams when L3 is enabled.
+Container diagrams include drill-down links to component diagrams when L3 is enabled. All generated output is deterministic and sorted by ID for stable diffs.
 
 ### Submodule docs
 
@@ -227,11 +176,9 @@ When submodules are enabled, each application also gets its own docs:
   styles.d2
 ```
 
-Submodule docs include relative links back to the root system diagrams.
-
 ## Architecture model
 
-The bridge between scan output and diagrams. Can be written by the `model` command, by hand, or by an LLM agent reading `raw-structure.json`.
+The `architecture-model.yaml` is the bridge between scan output and diagrams. It's generated automatically but designed to be human-editable:
 
 ```yaml
 version: 1
@@ -273,7 +220,46 @@ relationships:
     technology: HTTPS
 ```
 
+Edit this file to refine names, descriptions, and relationships. Delete it to regenerate from scratch on the next `generate` run.
+
 JSON schemas for both `raw-structure.json` and `architecture-model.yaml` are in `src/schemas/`.
+
+## Individual commands
+
+`generate` runs the full pipeline, but each phase is also available as a standalone command for debugging or fine-grained control:
+
+| Command | Purpose |
+|---------|---------|
+| `diagram-docs init` | Create a `diagram-docs.yaml` config (also happens automatically on `generate`) |
+| `diagram-docs scan` | Run static analysis only, output `raw-structure.json` for inspection |
+| `diagram-docs model` | Generate `architecture-model.yaml` from scan output (use `--llm` for LLM mode) |
+| `diagram-docs generate` | Full pipeline: scan → model → diagrams → render |
+
+### `diagram-docs scan`
+
+| Flag | Description |
+|------|-------------|
+| `-c, --config <path>` | Path to `diagram-docs.yaml` |
+| `-o, --output <path>` | Output file (default: stdout) |
+| `--force` | Skip cache, re-scan everything |
+
+### `diagram-docs model`
+
+| Flag | Description |
+|------|-------------|
+| `-i, --input <path>` | Path to `raw-structure.json` (default: `.diagram-docs/raw-structure.json`) |
+| `-o, --output <path>` | Output file path (default: `architecture-model.yaml`) |
+| `-c, --config <path>` | Path to `diagram-docs.yaml` |
+| `--llm` | Use LLM to generate model (requires Claude Code or Copilot CLI) |
+
+### `diagram-docs generate`
+
+| Flag | Description |
+|------|-------------|
+| `-m, --model <path>` | Path to `architecture-model.yaml` |
+| `-c, --config <path>` | Path to `diagram-docs.yaml` |
+| `--submodules` | Generate per-application docs alongside root diagrams |
+| `--deterministic` | Use deterministic model builder (skip LLM) |
 
 ## Quality checks
 
