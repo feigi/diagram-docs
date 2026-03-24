@@ -25,8 +25,8 @@ export function stripAnsi(str: string): string {
 }
 
 export function truncate(text: string, maxLen: number): string {
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen - 1) + "…";
+  if (stripAnsi(text).length <= maxLen) return text;
+  return stripAnsi(text).slice(0, maxLen - 1) + "…";
 }
 
 export function padRight(text: string, width: number): string {
