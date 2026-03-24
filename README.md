@@ -56,8 +56,8 @@ If the [D2 CLI](https://d2lang.com/releases/install) is installed, `generate` al
 
 | Language | Build files | What's extracted |
 |----------|------------|------------------|
-| Java | `pom.xml`, `build.gradle`, `build.gradle.kts` | Packages, imports, Spring annotations (`@Controller`, `@Service`, `@Repository`, `@Component`, `@Configuration`, `@Entity`), Maven/Gradle dependencies, multi-module subprojects, `publishedAs` coordinates for cross-app matching |
-| Python | `pyproject.toml`, `setup.py`, `requirements.txt` | Modules, imports, framework detection (FastAPI, Flask, Django), dependencies |
+| Java | `pom.xml`, `build.gradle`, `build.gradle.kts` | Packages, imports, class-level annotations (e.g. Spring stereotypes), Maven/Gradle dependencies, multi-module subprojects, `publishedAs` coordinates for cross-app matching, config/resource files |
+| Python | `pyproject.toml`, `setup.py`, `requirements.txt` | Modules, imports, framework detection (FastAPI, Flask, Django), dependencies, config files |
 | C | `CMakeLists.txt`, `Makefile` | Header/source structure, `#include` directives (system vs local), public API from header exports |
 
 ## CLI reference
