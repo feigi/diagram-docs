@@ -198,8 +198,11 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     updateApp(appId: string, state: AppState): void {
       const entry = apps.find((a) => a.id === appId);
       if (!entry) {
+        const warning = `Warning: updateApp called with unknown appId "${appId}"`;
         if (!isTTY) {
-          printLine(`Warning: updateApp called with unknown appId "${appId}"`);
+          printLine(warning);
+        } else {
+          try { process.stderr.write(`\n${warning}\n`); } catch { /* best-effort */ }
         }
         return;
       }
@@ -259,7 +262,12 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       output += "\x1b[J";
       output += "\x1b[?25h";
 
-      process.stderr.write(output);
+      try {
+        process.stderr.write(output);
+      } finally {
+        // Ensure cursor is restored even if the write partially fails
+        try { process.stderr.write("\x1b[?25h"); } catch { /* best-effort */ }
+      }
     },
   };
 }
