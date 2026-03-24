@@ -1,0 +1,34 @@
+{
+  "$comment": "Ground truth for services/api-gateway. Hand-verified from source.",
+  "language": "typescript",
+  "modules": [
+    {
+      "name": "api-gateway",
+      "exports": ["app"]
+    },
+    {
+      "name": "routes",
+      "exports": ["registerRoutes", "usersRouter", "User"]
+    },
+    {
+      "name": "middleware",
+      "exports": ["authenticate", "AUTH_HEADER"]
+    }
+  ],
+  "imports": [
+    { "source": "express", "inModule": "api-gateway", "isExternal": true },
+    { "source": "./routes/index", "inModule": "api-gateway", "isExternal": false },
+    { "source": "express", "inModule": "routes", "isExternal": true },
+    { "source": "./users", "inModule": "routes", "isExternal": false },
+    { "source": "express", "inModule": "middleware", "isExternal": true },
+    { "source": "zod", "inModule": "routes", "isExternal": true },
+    { "source": "../middleware/auth", "inModule": "routes", "isExternal": false }
+  ],
+  "externalDependencies": [
+    { "name": "express" },
+    { "name": "zod" }
+  ],
+  "metadata": {
+    "routes": { "framework": "Express" }
+  }
+}
