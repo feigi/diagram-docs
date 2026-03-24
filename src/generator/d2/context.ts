@@ -43,32 +43,45 @@ export function generateContextDiagram(model: ArchitectureModel): string {
   if (model.externalSystems.length > 0) w.blank();
 
   // Relationships (only context-level: between actors, system, and external systems)
+  // Include actors, external systems, containers, and components — the latter two
+  // are all mapped to "system" so that any relationship reaching an external system
+  // (even from a deeply nested component) surfaces at the context level.
+  const actorIds = new Set(model.actors.map((a) => a.id));
+  const externalIds = new Set(model.externalSystems.map((e) => e.id));
+  const containerIds = new Set(model.containers.map((c) => c.id));
+  const componentIds = new Set((model.components ?? []).map((c) => c.id));
+  const internalIds = new Set([...containerIds, ...componentIds]);
+
   const contextIds = new Set([
-    ...model.actors.map((a) => a.id),
+    ...actorIds,
     "system",
-    ...model.externalSystems.map((e) => e.id),
-    // Also include container IDs mapped to "system"
-    ...model.containers.map((c) => c.id),
+    ...externalIds,
+    ...containerIds,
+    ...componentIds,
   ]);
 
   const contextRels = model.relationships.filter((r) => {
-    const sourceIsContext =
-      contextIds.has(r.sourceId) || model.containers.some((c) => c.id === r.sourceId);
-    const targetIsContext =
-      contextIds.has(r.targetId) || model.containers.some((c) => c.id === r.targetId);
-    return sourceIsContext && targetIsContext;
+    return contextIds.has(r.sourceId) && contextIds.has(r.targetId);
   });
 
+  // Deduplicate: multiple component→external relationships collapse into one system→external edge
+  const seenEdges = new Set<string>();
+
   for (const rel of sortRelationships(contextRels)) {
-    // Map container refs to system
-    const sourceId = model.containers.some((c) => c.id === rel.sourceId)
+    // Map container and component refs to system
+    const sourceId = internalIds.has(rel.sourceId)
       ? sysId
       : toD2Id(rel.sourceId);
-    const targetId = model.containers.some((c) => c.id === rel.targetId)
+    const targetId = internalIds.has(rel.targetId)
       ? sysId
       : toD2Id(rel.targetId);
 
     if (sourceId === targetId) continue; // Skip self-refs at context level
+
+    // Skip duplicate edges (component-level rels can collapse into the same system→external edge)
+    const edgeKey = `${sourceId}->${targetId}`;
+    if (seenEdges.has(edgeKey)) continue;
+    seenEdges.add(edgeKey);
 
     const tech = rel.technology ? ` [${rel.technology}]` : "";
     w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`));

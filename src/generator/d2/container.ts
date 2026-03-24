@@ -17,6 +17,61 @@ export function generateContainerDiagram(
   model: ArchitectureModel,
   options?: ContainerDiagramOptions,
 ): string {
+  // --- Pre-compute relationships so we know which containers are connected ---
+  const sysId = toD2Id("system");
+  const containerIds = new Set(model.containers.map((c) => c.id));
+  const componentToContainer = new Map<string, string>();
+  for (const comp of model.components ?? []) {
+    componentToContainer.set(comp.id, comp.containerId);
+  }
+
+  const allIds = new Set([
+    ...model.actors.map((a) => a.id),
+    ...model.containers.map((c) => c.id),
+    ...model.externalSystems.map((e) => e.id),
+    ...(model.components ?? []).map((c) => c.id),
+  ]);
+
+  // Resolve a relationship endpoint: component → parent container, then qualify
+  const resolveId = (id: string): string => {
+    const mapped = componentToContainer.get(id) ?? id;
+    return containerIds.has(mapped)
+      ? `${sysId}.${toD2Id(mapped)}`
+      : toD2Id(mapped);
+  };
+
+  const candidateRels = model.relationships.filter(
+    (r) => allIds.has(r.sourceId) && allIds.has(r.targetId),
+  );
+
+  // Build deduplicated edge list and collect connected container IDs
+  const seenEdges = new Set<string>();
+  const connectedContainerIds = new Set<string>();
+  interface ResolvedRel { sourceId: string; targetId: string; label: string; technology?: string }
+  const resolvedRels: ResolvedRel[] = [];
+
+  for (const rel of sortRelationships(candidateRels)) {
+    const sourceId = resolveId(rel.sourceId);
+    const targetId = resolveId(rel.targetId);
+
+    if (sourceId === targetId) continue;
+
+    const edgeKey = `${sourceId}->${targetId}`;
+    if (seenEdges.has(edgeKey)) continue;
+    seenEdges.add(edgeKey);
+
+    resolvedRels.push({ sourceId, targetId, label: rel.label, technology: rel.technology });
+
+    // Track which containers participate in at least one edge
+    for (const container of model.containers) {
+      const qualifiedId = `${sysId}.${toD2Id(container.id)}`;
+      if (sourceId === qualifiedId || targetId === qualifiedId) {
+        connectedContainerIds.add(container.id);
+      }
+    }
+  }
+
+  // --- Now emit the diagram, skipping dangling containers ---
   const w = new D2Writer();
 
   w.comment("C4 Container Diagram (Level 2)");
@@ -33,13 +88,14 @@ export function generateContainerDiagram(
 
   if (model.actors.length > 0) w.blank();
 
-  // System boundary with containers inside
-  const sysId = toD2Id("system");
+  // System boundary with containers inside (only those with at least one relationship)
   w.container(sysId, `${model.system.name}\\n[Software System]`, () => {
     w.raw("class: system-boundary");
     w.blank();
 
     for (const container of sortById(model.containers)) {
+      if (!connectedContainerIds.has(container.id)) continue;
+
       const id = toD2Id(container.id);
       const props: Record<string, string> = { "class": "container" };
 
@@ -74,27 +130,9 @@ export function generateContainerDiagram(
   if (model.externalSystems.length > 0) w.blank();
 
   // Relationships
-  const containerIds = new Set(model.containers.map((c) => c.id));
-  const allIds = new Set([
-    ...model.actors.map((a) => a.id),
-    ...model.containers.map((c) => c.id),
-    ...model.externalSystems.map((e) => e.id),
-  ]);
-
-  const containerRels = model.relationships.filter(
-    (r) => allIds.has(r.sourceId) && allIds.has(r.targetId),
-  );
-
-  for (const rel of sortRelationships(containerRels)) {
-    const sourceId = containerIds.has(rel.sourceId)
-      ? `${sysId}.${toD2Id(rel.sourceId)}`
-      : toD2Id(rel.sourceId);
-    const targetId = containerIds.has(rel.targetId)
-      ? `${sysId}.${toD2Id(rel.targetId)}`
-      : toD2Id(rel.targetId);
-
+  for (const rel of resolvedRels) {
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`));
+    w.connection(rel.sourceId, rel.targetId, wrapText(`${rel.label}${tech}`));
   }
 
   return w.toString();
