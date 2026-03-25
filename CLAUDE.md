@@ -15,7 +15,7 @@ The tool never calls an LLM itself. The agent sits between scan and generate, re
 ## Commands
 
 ```bash
-npm run build              # Compile TypeScript (tsc → dist/)
+npm run prepare            # Compile TypeScript (tsc → dist/)
 npm run dev -- <cmd>       # Run without building (tsx)
 npm test                   # All tests (vitest)
 npm run typecheck          # Type check only
