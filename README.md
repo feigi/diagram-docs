@@ -8,10 +8,24 @@ Point it at a codebase, get context, container, and component diagrams. No manua
 
 ```bash
 cd your-project
-npx diagram-docs generate
+npx github:feigi/diagram-docs generate
 ```
 
 This discovers source code, scans it, builds an architecture model, and generates D2 diagrams. A `diagram-docs.yaml` config is created automatically if one doesn't exist.
+
+If you prefer using `npx diagram-docs ...`, install from GitHub first:
+
+```bash
+npm install --save-dev github:feigi/diagram-docs
+npx diagram-docs generate
+```
+
+Or install globally so `diagram-docs` is available anywhere without `npx`:
+
+```bash
+npm install --global github:feigi/diagram-docs
+diagram-docs generate
+```
 
 To render diagrams to SVG or PNG, install the [D2 CLI](https://d2lang.com/releases/install). Without it you still get `.d2` source files.
 
@@ -20,7 +34,7 @@ To render diagrams to SVG or PNG, install the [D2 CLI](https://d2lang.com/releas
 By default, if [Claude Code](https://claude.ai/download) or [GitHub Copilot CLI](https://docs.github.com/en/copilot/github-copilot-in-the-cli) is installed, diagram-docs uses it to produce richer descriptions, smarter component grouping, and more meaningful relationship labels. Without either, a deterministic rule-based builder is used. You can force deterministic mode:
 
 ```bash
-npx diagram-docs generate --deterministic
+diagram-docs generate --deterministic
 ```
 
 ## How it works
@@ -196,12 +210,12 @@ Delete this file to regenerate from scratch on the next run.
 `generate` runs the full pipeline. Each phase is also available standalone:
 
 ```bash
-npx diagram-docs init                    # Create config
-npx diagram-docs scan                    # Scan only → raw-structure.json
-npx diagram-docs model                   # Build model → architecture-model.yaml
-npx diagram-docs model --llm             # Build model with LLM refinement
-npx diagram-docs generate                # Full pipeline
-npx diagram-docs generate --deterministic  # Full pipeline, no LLM
+diagram-docs init                    # Create config
+diagram-docs scan                    # Scan only → raw-structure.json
+diagram-docs model                   # Build model → architecture-model.yaml
+diagram-docs model --llm             # Build model with LLM refinement
+diagram-docs generate                # Full pipeline
+diagram-docs generate --deterministic  # Full pipeline, no LLM
 ```
 
 ### Flags
