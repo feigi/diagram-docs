@@ -518,6 +518,25 @@ const claudeCodeProvider: LLMProvider = {
   },
 };
 
+/** Patterns in `gh copilot` stderr that are diagnostic noise, not errors. */
+const COPILOT_STDERR_NOISE = [
+  /^Total usage est:/,
+  /^API time spent:/,
+  /^Total session time:/,
+  /^Total code changes:/,
+  /^Breakdown by AI model:/,
+  /^claude-/,
+  /^gpt-/,
+  /^Only built-in servers are available/,
+  /Third-party MCP servers are disabled/,
+  /^Warning: EPIPE writing to gh stdin/,
+  /^Warning: child process \(gh\) did not consume full stdin/,
+];
+
+function isCopilotStderrNoise(line: string): boolean {
+  return COPILOT_STDERR_NOISE.some((re) => re.test(line));
+}
+
 const copilotProvider: LLMProvider = {
   name: "GitHub Copilot CLI",
   supportsTools: false,
@@ -544,7 +563,11 @@ const copilotProvider: LLMProvider = {
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
     return spawnWithStdin(
       "gh", ["copilot", "-p", "-"], combinedPrompt, 900_000,
-      onProgress ? (line) => onProgress({ line, final: true, kind: "output" }) : undefined,
+      onProgress ? (line) => {
+        if (!isCopilotStderrNoise(line)) {
+          onProgress({ line, final: true, kind: "output" });
+        }
+      } : undefined,
     );
   },
 };

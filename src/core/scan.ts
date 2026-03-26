@@ -73,7 +73,15 @@ export function matchCrossAppCoordinates(
 
 export async function runScan({ rootDir, config, force }: ScanOptions): Promise<ScanResult> {
   // Discover applications
-  const discovered = await discoverApplications(rootDir, config);
+  console.error("Discovering applications...");
+  const discovered = await discoverApplications(rootDir, config, {
+    onSearching: (language, pattern) => {
+      console.error(`  Searching: ${language} (${pattern})`);
+    },
+    onFound: (app) => {
+      console.error(`  Found: ${app.path} (${app.buildFile})`);
+    },
+  });
 
   if (discovered.length === 0) {
     throw new ScanError("No applications discovered. Check your scan.include patterns.");
@@ -91,6 +99,7 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
     include: config.scan.include,
     abstraction: config.abstraction,
   });
+  console.error("Computing checksum...");
   const checksum = await computeChecksum(
     rootDir,
     discovered.map((d) => d.path),
@@ -122,13 +131,15 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
 
   const applications: ScannedApplication[] = [];
   const rootPrefix = slugify(rootDir);
-  for (const app of discovered) {
+  const total = discovered.length;
+  for (let i = 0; i < total; i++) {
+    const app = discovered[i];
     const analyzer = getAnalyzer(app.analyzerId);
     if (!analyzer) {
       console.error(`No analyzer found for ${app.analyzerId}`);
       continue;
     }
-    console.error(`Analyzing ${app.path}...`);
+    console.error(`Analyzing (${i + 1}/${total}): ${app.path}`);
     const result = await analyzer.analyze(
       path.resolve(rootDir, app.path),
       scanConfig,
