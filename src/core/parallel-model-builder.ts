@@ -229,17 +229,17 @@ export async function buildModelParallel(
     progress.setApps(appIds);
   }
 
-  // -- Step 2: Build per-app deterministic seeds --
-  const seeds: ArchitectureModel[] = [];
+  // -- Step 2: Build per-app deterministic anchors --
+  const anchors: ArchitectureModel[] = [];
   for (let i = 0; i < slices.length; i++) {
     try {
-      seeds.push(buildModel({ config, rawStructure: slices[i] }));
+      anchors.push(buildModel({ config, rawStructure: slices[i] }));
     } catch (err) {
       const appId = slices[i].applications[0].id;
-      progress?.stop(`Seed generation failed for ${appId}`, true);
+      progress?.stop(`Anchor generation failed for ${appId}`, true);
       rethrowIfFatal(err);
       throw new LLMCallError(
-        `Failed to generate deterministic seed for app "${appId}": ${err instanceof Error ? err.message : String(err)}`,
+        `Failed to generate deterministic anchor for app "${appId}": ${err instanceof Error ? err.message : String(err)}`,
         { cause: err },
       );
     }
@@ -279,7 +279,7 @@ export async function buildModelParallel(
 
   async function buildOneApp(
     slice: RawStructure,
-    seed: ArchitectureModel,
+    anchor: ArchitectureModel,
     index: number,
   ): Promise<AppBuildResult> {
     await acquireSlot();
@@ -316,7 +316,7 @@ export async function buildModelParallel(
         onStatus?.(`Modeling app ${index + 1}/${slices.length}: ${app.id}`);
       }
 
-      const seedYaml = stringifyYaml(seed, { lineWidth: 120 });
+      const anchorYaml = stringifyYaml(anchor, { lineWidth: 120 });
       const outputPath = provider.supportsTools
         ? path.join(
             os.tmpdir(),
@@ -328,7 +328,7 @@ export async function buildModelParallel(
       const userMessage = buildPerAppUserMessage({
         app,
         configYaml,
-        seedYaml,
+        anchorYaml,
         outputPath,
       });
 
@@ -372,7 +372,7 @@ export async function buildModelParallel(
           const errCode = (err as NodeJS.ErrnoException).code;
           if (errCode !== "ENOENT") {
             // System I/O errors (EACCES, EISDIR, etc.) should propagate,
-            // not fall back to deterministic seed — they indicate a system problem.
+            // not fall back to deterministic anchor — they indicate a system problem.
             throw err;
           }
           if (!textOutput.trim()) {
@@ -451,9 +451,9 @@ export async function buildModelParallel(
         progress?.updateApp(slice.applications[0].id, "failed");
         logger?.logFailed(msg, Date.now() - appStartTime);
         warn(
-          `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic seed`,
+          `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic anchor`,
         );
-        return { model: seed, fellBack: true };
+        return { model: anchor, fellBack: true };
       }
       // Non-recoverable: still mark UI as failed so the app doesn't appear stuck
       progress?.updateApp(app.id, "failed");
@@ -465,12 +465,12 @@ export async function buildModelParallel(
   }
 
   const partialPromises = slices.map((slice, i) =>
-    buildOneApp(slice, seeds[i], i),
+    buildOneApp(slice, anchors[i], i),
   );
   const settled = await Promise.allSettled(partialPromises);
 
   // Collect results — programming errors (rejected promises) must propagate,
-  // not silently degrade to deterministic seeds.
+  // not silently degrade to deterministic anchors.
   const results: AppBuildResult[] = [];
   const rejections: unknown[] = [];
   for (let i = 0; i < settled.length; i++) {

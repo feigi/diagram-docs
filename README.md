@@ -46,7 +46,7 @@ Source code  ──▶  .diagram-docs/raw-structure.json  ──▶  architectur
 
 **Scan** — Static analysis reads source code and produces `.diagram-docs/raw-structure.json`: applications, modules, imports, dependencies, annotations. Applications are discovered by build files (`pom.xml`, `build.gradle`, `pyproject.toml`, `CMakeLists.txt`, etc.). Results are cached by checksum; unchanged files are skipped.
 
-**Model** — Scan output is converted into `architecture-model.yaml`. In deterministic mode, a rule-based builder maps modules to components, detects external systems from dependencies, and infers actors from annotations. In LLM mode, the deterministic model is generated first as a seed, then refined by an LLM agent for better descriptions, grouping, and relationship labels. The tool shells out to Claude Code or Copilot CLI — it never calls an LLM API directly.
+**Model** — Scan output is converted into `architecture-model.yaml`. In deterministic mode, a rule-based builder maps modules to components, detects external systems from dependencies, and infers actors from annotations. In LLM mode, the deterministic model is generated first as an anchor, then refined by an LLM agent for better descriptions, grouping, and relationship labels. The tool shells out to Claude Code or Copilot CLI — it never calls an LLM API directly.
 
 **Generate** — The architecture model is rendered as D2 diagrams at three C4 levels:
 

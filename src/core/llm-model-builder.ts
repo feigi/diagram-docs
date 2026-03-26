@@ -715,7 +715,7 @@ relationships:
 - Components: what this grouping handles. Reference specific domain concerns.
 - Don't be generic. "handles user-related operations" is worthless. "manages user registration, authentication, and profile management" is useful.
 
-### Seed Mode (when deterministic seed is provided)
+### Anchor Mode (when deterministic anchor is provided)
 A machine-generated scaffold is provided. IDs and module mappings are already correct. Your job:
 - Rewrite all descriptions to be specific and meaningful (remove generic "X module" placeholders).
 - Regroup components by architectural role (Controller, Service, Repository, Entity, etc.) rather than the 1:1 module mapping. Aim for 5-15 components per container.
@@ -764,7 +764,7 @@ export function buildUserMessage(options: {
   rawStructure: RawStructure;
   configYaml?: string;
   existingModelYaml?: string;
-  isSeedMode?: boolean;
+  isAnchorMode?: boolean;
   outputPath?: string;
 }): string {
   const parts: string[] = [];
@@ -778,8 +778,8 @@ export function buildUserMessage(options: {
   }
 
   if (options.existingModelYaml) {
-    const label = options.isSeedMode
-      ? "Deterministic seed (seed mode — reshape freely)"
+    const label = options.isAnchorMode
+      ? "Deterministic anchor (anchor mode — reshape freely)"
       : "Existing architecture-model.yaml (update mode — preserve manual edits)";
     parts.push(`\n\n## ${label}\n`);
     parts.push(options.existingModelYaml);
@@ -816,7 +816,7 @@ You are modeling a SINGLE APPLICATION within a larger multi-app system.
 export function buildPerAppUserMessage(options: {
   app: ScannedApplication;
   configYaml?: string;
-  seedYaml: string;
+  anchorYaml: string;
   outputPath?: string;
 }): string {
   // Build single-app raw structure summary (same format as summarizeForLLM but for one app)
@@ -851,8 +851,8 @@ export function buildPerAppUserMessage(options: {
     parts.push(options.configYaml);
   }
 
-  parts.push(`\n\n## Deterministic seed (seed mode — reshape freely)\n`);
-  parts.push(options.seedYaml);
+  parts.push(`\n\n## Deterministic anchor (anchor mode — reshape freely)\n`);
+  parts.push(options.anchorYaml);
 
   if (options.outputPath) {
     parts.push(
@@ -1032,9 +1032,9 @@ export async function buildModelWithLLM(
   const resolvedProvider = resolveProvider(options.config);
   const emit = (status: string) => options.onStatus?.(status, resolvedProvider.name);
 
-  // Parallel path: seed mode dispatches per-app LLM calls concurrently (even for a single app)
-  const isSeedMode = !options.existingModelYaml?.trim();
-  if (isSeedMode) {
+  // Parallel path: anchor mode dispatches per-app LLM calls concurrently (even for a single app)
+  const isAnchorMode = !options.existingModelYaml?.trim();
+  if (isAnchorMode) {
     // Dynamic import is separated from the call so module resolution
     // errors are not accidentally wrapped as LLMCallError.
     let buildModelParallel: typeof import("./parallel-model-builder.js")["buildModelParallel"];
@@ -1071,14 +1071,14 @@ export async function buildModelWithLLM(
   // 2. Build prompt — tool-using providers write to a temp file and self-validate
   emit("Building prompt...");
   let existingModelYaml = options.existingModelYaml;
-  if (isSeedMode) {
+  if (isAnchorMode) {
     try {
-      const seed = buildModel({ config: options.config, rawStructure: options.rawStructure });
-      existingModelYaml = stringifyYaml(seed, { lineWidth: 120 });
+      const anchor = buildModel({ config: options.config, rawStructure: options.rawStructure });
+      existingModelYaml = stringifyYaml(anchor, { lineWidth: 120 });
     } catch (err: unknown) {
       rethrowIfFatal(err);
       const msg = err instanceof Error ? err.message : String(err);
-      throw new LLMCallError(`Failed to generate deterministic seed for LLM: ${msg}`, { cause: err });
+      throw new LLMCallError(`Failed to generate deterministic anchor for LLM: ${msg}`, { cause: err });
     }
   }
 
@@ -1090,7 +1090,7 @@ export async function buildModelWithLLM(
     rawStructure: options.rawStructure,
     configYaml: options.configYaml,
     existingModelYaml,
-    isSeedMode,
+    isAnchorMode,
     outputPath,
   });
 
