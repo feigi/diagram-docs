@@ -2,7 +2,7 @@ import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { loadConfig } from "../../config/loader.js";
+import { loadConfig, updateConfigLLM } from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
 import { buildModel } from "../../core/model-builder.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
@@ -23,6 +23,7 @@ import {
   LLMOutputError,
 } from "../../core/llm-model-builder.js";
 import { createFrame } from "../frame.js";
+import { promptLLMSetup } from "../interactive-setup.js";
 
 export const generateCommand = new Command("generate")
   .description("Generate D2 diagrams from an architecture model")
@@ -31,7 +32,17 @@ export const generateCommand = new Command("generate")
   .option("--submodules", "Generate per-folder docs for each application")
   .option("--deterministic", "Use deterministic model builder (skip LLM)")
   .action(async (options) => {
-    const { config, configDir } = loadConfig(options.config);
+    let { config, configDir, configCreated } = loadConfig(options.config);
+
+    // Interactive LLM setup when config was just created and not deterministic
+    if (configCreated && !options.deterministic) {
+      const setup = await promptLLMSetup();
+      if (setup) {
+        const configPath = path.resolve(configDir, "diagram-docs.yaml");
+        config = updateConfigLLM(configPath, setup.provider, setup.model);
+      }
+    }
+
     const model = await resolveModel(options.model, configDir, config, options.deterministic);
 
     const outputDir = path.resolve(configDir, config.output.dir);
