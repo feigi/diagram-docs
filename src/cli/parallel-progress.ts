@@ -43,6 +43,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
   let prevTotalRows = 0;
   let firstRender = true;
   let stopped = false;
+  let viewportStart = 0;
 
   function overallElapsed(): string {
     return formatElapsed(Date.now() - startTime);
@@ -98,22 +99,10 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     const termRows = process.stderr.rows || 24;
     const maxAppRows = Math.max(3, termRows - 6);
 
-    // Partition: active/recent first, then queued
-    const active = apps.filter((a) => a.state !== "queued");
-    const queued = apps.filter((a) => a.state === "queued");
-    let visibleApps: AppEntry[];
-    let hiddenCount = 0;
-
-    if (active.length + queued.length <= maxAppRows) {
-      visibleApps = [...active, ...queued];
-    } else if (active.length >= maxAppRows) {
-      visibleApps = active.slice(0, maxAppRows - 1);
-      hiddenCount = apps.length - visibleApps.length;
-    } else {
-      const queuedSlots = maxAppRows - active.length - 1;
-      visibleApps = [...active, ...queued.slice(0, Math.max(0, queuedSlots))];
-      hiddenCount = apps.length - visibleApps.length;
-    }
+    // Scrolling viewport: viewportStart advances as apps complete
+    const visibleApps = apps.slice(viewportStart, viewportStart + maxAppRows);
+    const hiddenAbove = viewportStart;
+    const hiddenBelow = Math.max(0, apps.length - viewportStart - maxAppRows);
 
     const appRows = visibleApps.map((app) => {
       const icon = stateIcon(app.state);
@@ -136,8 +125,11 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       return row(`  ${leftPart}`);
     });
 
-    if (hiddenCount > 0) {
-      appRows.push(row(chalk.dim(`  … and ${hiddenCount} more queued`)));
+    if (hiddenAbove > 0) {
+      appRows.unshift(row(chalk.dim(`  … ${hiddenAbove} above`)));
+    }
+    if (hiddenBelow > 0) {
+      appRows.push(row(chalk.dim(`  … and ${hiddenBelow} more queued`)));
     }
 
     const rows = [top, headerRow, modelRow, ...appRows, bottom];
@@ -181,6 +173,17 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     }
   }
 
+  function advanceViewport(maxAppRows: number): void {
+    const firstActive = apps.findIndex(
+      (a) => a.state !== "done" && a.state !== "failed"
+    );
+    const newStart =
+      firstActive === -1
+        ? Math.max(0, apps.length - maxAppRows)
+        : Math.max(0, firstActive - 2);
+    viewportStart = Math.max(viewportStart, newStart);
+  }
+
   return {
     setApps(appIds: string[]): void {
       apps.length = 0;
@@ -214,6 +217,11 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
         entry.elapsed = Date.now() - entry.startTime;
       }
       entry.state = state;
+
+      if (state === "done" || state === "failed") {
+        const termRows = process.stderr.rows || 24;
+        advanceViewport(Math.max(3, termRows - 6));
+      }
 
       if (!isTTY) {
         const elapsedStr = entry.elapsed != null ? ` (${formatElapsed(entry.elapsed)})` : "";
