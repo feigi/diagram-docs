@@ -104,14 +104,43 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     // Blank separator
     const blankRow = chalk.dim("│") + " ".repeat(inner) + chalk.dim("│");
 
-    // App rows — limit to terminal height
+    // App rows — limit to terminal height.
+    // Scroll indicators are counted within the budget so the frame
+    // height stays constant regardless of scroll position.
     const termRows = process.stderr.rows || 24;
     const maxAppRows = Math.max(3, termRows - 6);
 
-    // Scrolling viewport: viewportStart advances as apps complete
-    const visibleApps = apps.slice(viewportStart, viewportStart + maxAppRows);
+    const totalApps = apps.length;
+    const needsScrolling = totalApps > maxAppRows;
+    let displayCount: number;
+    let showAbove: boolean;
+    let showBelow: boolean;
+
+    if (!needsScrolling) {
+      displayCount = totalApps;
+      showAbove = false;
+      showBelow = false;
+    } else {
+      showAbove = viewportStart > 0;
+      if (!showAbove) {
+        displayCount = maxAppRows - 1;
+        showBelow = true;
+      } else {
+        const remaining = totalApps - viewportStart;
+        if (remaining <= maxAppRows - 1) {
+          displayCount = remaining;
+          showBelow = false;
+        } else {
+          displayCount = maxAppRows - 2;
+          showBelow = true;
+        }
+      }
+    }
+
+    // Scrolling viewport
+    const visibleApps = apps.slice(viewportStart, viewportStart + displayCount);
     const hiddenAbove = viewportStart;
-    const hiddenBelow = Math.max(0, apps.length - viewportStart - maxAppRows);
+    const hiddenBelow = Math.max(0, totalApps - viewportStart - displayCount);
 
     const appRows = visibleApps.map((app) => {
       const icon = stateIcon(app.state);
@@ -134,10 +163,10 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       return row(`  ${leftPart}`);
     });
 
-    if (hiddenAbove > 0) {
+    if (showAbove) {
       appRows.unshift(row(chalk.dim(`  … ${hiddenAbove} above`)));
     }
-    if (hiddenBelow > 0) {
+    if (showBelow) {
       appRows.push(row(chalk.dim(`  … and ${hiddenBelow} more queued`)));
     }
 
@@ -214,7 +243,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
         render();
       } else if (btn === 65) {
         // Scroll down — show later apps
-        const maxStart = Math.max(0, apps.length - maxAppRows);
+        const maxStart = Math.max(0, apps.length - maxAppRows + 1);
         viewportStart = Math.min(maxStart, viewportStart + SCROLL_STEP);
         // Re-enable auto-advance when scrolled to the bottom region
         if (viewportStart >= maxStart) {
@@ -260,14 +289,15 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
 
   function advanceViewport(maxAppRows: number): void {
     if (userScrolled) return; // don't override manual scroll position
+    const maxStart = Math.max(0, apps.length - maxAppRows + 1);
     const firstActive = apps.findIndex(
       (a) => a.state !== "done" && a.state !== "failed"
     );
     const newStart =
       firstActive === -1
-        ? Math.max(0, apps.length - maxAppRows)
+        ? maxStart
         : Math.max(0, firstActive - 2);
-    viewportStart = Math.max(viewportStart, newStart);
+    viewportStart = Math.min(maxStart, Math.max(viewportStart, newStart));
   }
 
   return {
