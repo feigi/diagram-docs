@@ -84,6 +84,7 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
   id: "typescript",
   name: "TypeScript",
   buildFilePatterns: ["tsconfig.json"],
+  defaultExcludes: ["**/node_modules/**", "**/dist/**"],
 
   async analyze(
     appPath: string,

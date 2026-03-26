@@ -15,6 +15,7 @@ export const cAnalyzer: LanguageAnalyzer = {
   id: "c",
   name: "C",
   buildFilePatterns: ["CMakeLists.txt", "Makefile"],
+  defaultExcludes: [],
 
   async analyze(
     appPath: string,

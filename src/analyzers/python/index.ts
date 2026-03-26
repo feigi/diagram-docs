@@ -60,6 +60,21 @@ export const pythonAnalyzer: LanguageAnalyzer = {
   id: "python",
   name: "Python",
   buildFilePatterns: ["pyproject.toml", "setup.py", "requirements.txt"],
+  defaultExcludes: [
+    "**/venv/**",
+    "**/.venv/**",
+    "**/env/**",
+    "**/.env/**",
+    "**/virtualenv/**",
+    "**/.tox/**",
+    "**/.nox/**",
+    "**/__pypackages__/**",
+    "**/site-packages/**",
+    "**/__pycache__/**",
+    "**/.pytest_cache/**",
+    "**/.mypy_cache/**",
+    "**/.ruff_cache/**",
+  ],
 
   async analyze(
     appPath: string,

@@ -11,9 +11,10 @@ import {
   writeManifest,
   createDefaultManifest,
 } from "./manifest.js";
-import { getAnalyzer } from "../analyzers/registry.js";
+import { getRegistry, getAnalyzer } from "../analyzers/registry.js";
 import { slugify } from "./slugify.js";
 import { SPINNER_FRAMES, SPINNER_INTERVAL } from "../cli/terminal-utils.js";
+import { computeEffectiveExcludes } from "../config/loader.js";
 import type { Config } from "../config/schema.js";
 import type { RawStructure, ScannedApplication } from "../analyzers/types.js";
 
@@ -73,9 +74,16 @@ export function matchCrossAppCoordinates(
 }
 
 export async function runScan({ rootDir, config, force }: ScanOptions): Promise<ScanResult> {
+  // Compute effective excludes from config + all analyzer defaults
+  const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
+  const effectiveConfig: Config = {
+    ...config,
+    scan: { ...config.scan, exclude: effectiveExcludes },
+  };
+
   // Discover applications
   console.error("Discovering applications...");
-  const discovered = await discoverApplications(rootDir, config, {
+  const discovered = await discoverApplications(rootDir, effectiveConfig, {
     onSearching: (language, pattern) => {
       console.error(`  Searching: ${language} (${pattern})`);
     },
@@ -96,9 +104,9 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
   // Check cache — include scan-relevant config so config changes invalidate it
   const manifest = readManifest(rootDir) ?? createDefaultManifest();
   const configFingerprint = JSON.stringify({
-    exclude: config.scan.exclude,
-    include: config.scan.include,
-    abstraction: config.abstraction,
+    exclude: effectiveExcludes,
+    include: effectiveConfig.scan.include,
+    abstraction: effectiveConfig.abstraction,
   });
   let spinnerIdx = 0;
   const isTTY = process.stderr.isTTY;
@@ -112,7 +120,7 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
   const checksum = await computeChecksum(
     rootDir,
     discovered.map((d) => d.path),
-    config.scan.exclude,
+    effectiveExcludes,
     configFingerprint,
   );
   if (spinnerTimer) {
@@ -138,8 +146,8 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
 
   // Run analyzers
   const scanConfig = {
-    exclude: config.scan.exclude,
-    abstraction: config.abstraction,
+    exclude: effectiveExcludes,
+    abstraction: effectiveConfig.abstraction,
   };
 
   const applications: ScannedApplication[] = [];
