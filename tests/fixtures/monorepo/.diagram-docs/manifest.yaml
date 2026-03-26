@@ -1,0 +1,9 @@
+version: 1
+rawStructure: ./raw-structure.json
+model: ./architecture-model.yaml
+lastScan:
+  timestamp: 2026-03-24T18:36:05.893Z
+  checksum: sha256:f0c12d67446d662e1afc3fb74a9aa9a9f65d1c8a3f61c0278dabf63c3374f368
+lastModel:
+  timestamp: 2026-03-24T18:36:05.897Z
+  checksum: sha256:f0c12d67446d662e1afc3fb74a9aa9a9f65d1c8a3f61c0278dabf63c3374f368

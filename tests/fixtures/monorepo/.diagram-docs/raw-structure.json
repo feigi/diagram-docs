@@ -1,0 +1,303 @@
+{
+  "version": 1,
+  "scannedAt": "2026-03-24T18:36:05.893Z",
+  "checksum": "sha256:f0c12d67446d662e1afc3fb74a9aa9a9f65d1c8a3f61c0278dabf63c3374f368",
+  "applications": [
+    {
+      "id": "libs-mathlib",
+      "path": "libs/mathlib",
+      "name": "mathlib",
+      "language": "c",
+      "buildFile": "CMakeLists.txt",
+      "modules": [
+        {
+          "id": "libs-mathlib-src",
+          "path": "src",
+          "name": "src",
+          "files": [
+            "src/math.c"
+          ],
+          "exports": [],
+          "imports": [
+            {
+              "source": "math_ops.h",
+              "isExternal": false
+            },
+            {
+              "source": "stdio.h",
+              "isExternal": true
+            }
+          ],
+          "metadata": {}
+        },
+        {
+          "id": "libs-mathlib-include",
+          "path": "include",
+          "name": "include",
+          "files": [
+            "include/math_ops.h"
+          ],
+          "exports": [
+            "math_ops"
+          ],
+          "imports": [],
+          "metadata": {}
+        }
+      ],
+      "externalDependencies": [],
+      "internalImports": []
+    },
+    {
+      "id": "services-api-gateway",
+      "path": "services/api-gateway",
+      "name": "@monorepo/api-gateway",
+      "language": "typescript",
+      "buildFile": "tsconfig.json",
+      "modules": [
+        {
+          "id": "services-api-gateway",
+          "path": ".",
+          "name": "api-gateway",
+          "files": [
+            "index.ts"
+          ],
+          "exports": [
+            "app"
+          ],
+          "imports": [
+            {
+              "source": "express",
+              "isExternal": true
+            },
+            {
+              "source": "./routes/index",
+              "isExternal": false
+            }
+          ],
+          "metadata": {
+            "framework": "Express"
+          }
+        },
+        {
+          "id": "services-api-gateway-routes",
+          "path": "routes",
+          "name": "routes",
+          "files": [
+            "routes/users.ts",
+            "routes/index.ts"
+          ],
+          "exports": [
+            "usersRouter",
+            "User",
+            "registerRoutes"
+          ],
+          "imports": [
+            {
+              "source": "express",
+              "isExternal": true
+            },
+            {
+              "source": "zod",
+              "isExternal": true
+            },
+            {
+              "source": "../middleware/auth",
+              "isExternal": false
+            },
+            {
+              "source": "./users",
+              "isExternal": false
+            }
+          ],
+          "metadata": {
+            "framework": "Express"
+          }
+        },
+        {
+          "id": "services-api-gateway-middleware",
+          "path": "middleware",
+          "name": "middleware",
+          "files": [
+            "middleware/auth.ts"
+          ],
+          "exports": [
+            "authenticate",
+            "AUTH_HEADER"
+          ],
+          "imports": [
+            {
+              "source": "express",
+              "isExternal": true
+            }
+          ],
+          "metadata": {
+            "framework": "Express"
+          }
+        }
+      ],
+      "externalDependencies": [
+        {
+          "name": "express",
+          "version": "4.18.0"
+        },
+        {
+          "name": "zod",
+          "version": "3.22.0"
+        }
+      ],
+      "internalImports": [
+        {
+          "sourceModuleId": "users-chris-dev-diagram-docs-tests-fixtures-monorepo-services-api-gateway",
+          "targetApplicationId": "libs-shared-lib",
+          "targetPath": "../../libs/shared-lib"
+        }
+      ],
+      "publishedAs": "@monorepo/api-gateway",
+      "configFiles": [
+        {
+          "path": "tsconfig.json",
+          "content": "{\n  \"compilerOptions\": {\n    \"target\": \"ES2022\",\n    \"module\": \"node16\",\n    \"rootDir\": \"src\",\n    \"outDir\": \"dist\",\n    \"strict\": true\n  },\n  \"include\": [\"src\"]\n}\n"
+        },
+        {
+          "path": "package.json",
+          "content": "{\n  \"name\": \"@monorepo/api-gateway\",\n  \"version\": \"1.0.0\",\n  \"dependencies\": {\n    \"express\": \"^4.18.0\",\n    \"zod\": \"^3.22.0\",\n    \"@monorepo/shared-lib\": \"file:../../libs/shared-lib\"\n  },\n  \"devDependencies\": {\n    \"typescript\": \"^5.0.0\",\n    \"@types/express\": \"^4.17.0\"\n  }\n}\n"
+        }
+      ]
+    },
+    {
+      "id": "services-order-service",
+      "path": "services/order-service",
+      "name": "order-service",
+      "language": "python",
+      "buildFile": "pyproject.toml",
+      "modules": [
+        {
+          "id": "services-order-service-orders",
+          "path": "orders",
+          "name": "orders",
+          "files": [
+            "orders/models.py",
+            "orders/db.py",
+            "orders/api.py",
+            "orders/__init__.py"
+          ],
+          "exports": [
+            "Order",
+            "OrderHandler"
+          ],
+          "imports": [
+            {
+              "source": "sqlalchemy",
+              "isExternal": true
+            },
+            {
+              "source": "sqlalchemy.ext.declarative",
+              "isExternal": true
+            },
+            {
+              "source": "fastapi",
+              "isExternal": true
+            },
+            {
+              "source": "orders.models",
+              "isExternal": false
+            },
+            {
+              "source": "orders.db",
+              "isExternal": false
+            }
+          ],
+          "metadata": {
+            "framework": "fastapi"
+          }
+        }
+      ],
+      "externalDependencies": [
+        {
+          "name": "fastapi"
+        },
+        {
+          "name": "sqlalchemy"
+        },
+        {
+          "name": "httpx"
+        }
+      ],
+      "internalImports": [],
+      "configFiles": [
+        {
+          "path": "pyproject.toml",
+          "content": "[project]\nname = \"order-service\"\nversion = \"0.1.0\"\ndependencies = [\n    \"fastapi\",\n    \"sqlalchemy\",\n    \"httpx\",\n]\n"
+        }
+      ]
+    },
+    {
+      "id": "services-user-api",
+      "path": "services/user-api",
+      "name": "user-api",
+      "language": "java",
+      "buildFile": "pom.xml",
+      "modules": [
+        {
+          "id": "services-user-api-com-example-user",
+          "path": "com/example/user",
+          "name": "com.example.user",
+          "files": [
+            "com/example/user/UserController.java"
+          ],
+          "exports": [
+            "UserController"
+          ],
+          "imports": [
+            {
+              "source": "com.example.repo.UserRepository",
+              "isExternal": false
+            },
+            {
+              "source": "org.springframework.web.bind.annotation.RestController",
+              "isExternal": true
+            },
+            {
+              "source": "org.springframework.web.bind.annotation.GetMapping",
+              "isExternal": true
+            }
+          ],
+          "metadata": {
+            "annotations": "RestController"
+          }
+        },
+        {
+          "id": "services-user-api-com-example-repo",
+          "path": "com/example/repo",
+          "name": "com.example.repo",
+          "files": [
+            "com/example/repo/UserRepository.java"
+          ],
+          "exports": [
+            "UserRepository"
+          ],
+          "imports": [
+            {
+              "source": "org.springframework.stereotype.Repository",
+              "isExternal": true
+            }
+          ],
+          "metadata": {
+            "annotations": "Repository"
+          }
+        }
+      ],
+      "externalDependencies": [
+        {
+          "name": "org.springframework.boot:spring-boot-starter-web",
+          "version": "3.2.0"
+        },
+        {
+          "name": "org.postgresql:postgresql",
+          "version": "42.7.0"
+        }
+      ],
+      "internalImports": []
+    }
+  ]
+}
