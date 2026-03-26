@@ -2,7 +2,7 @@ import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { loadConfig, updateConfigLLM } from "../../config/loader.js";
+import { loadConfig, writeDefaultConfig, updateConfigLLM } from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
 import { buildModel } from "../../core/model-builder.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
@@ -34,12 +34,20 @@ export const generateCommand = new Command("generate")
   .action(async (options) => {
     let { config, configDir, configCreated } = loadConfig(options.config);
 
-    // Interactive LLM setup when config was just created and not deterministic
-    if (configCreated && !options.deterministic) {
-      const setup = await promptLLMSetup();
-      if (setup) {
-        const configPath = path.resolve(configDir, "diagram-docs.yaml");
-        config = updateConfigLLM(configPath, setup.provider, setup.model);
+    // Interactive LLM setup when config was just created and not deterministic.
+    // The config is only in memory at this point — write to disk only after
+    // the user completes the interactive prompt (or skips it).
+    if (configCreated) {
+      if (!options.deterministic) {
+        const setup = await promptLLMSetup();
+        const { configPath } = writeDefaultConfig(configDir);
+        console.error(`Created ${path.relative(process.cwd(), configPath)}`);
+        if (setup) {
+          config = updateConfigLLM(configPath, setup.provider, setup.model);
+        }
+      } else {
+        const { configPath } = writeDefaultConfig(configDir);
+        console.error(`Created ${path.relative(process.cwd(), configPath)}`);
       }
     }
 

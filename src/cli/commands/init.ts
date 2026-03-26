@@ -1,5 +1,4 @@
 import { Command } from "commander";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { findConfigFile, writeDefaultConfig, updateConfigLLM } from "../../config/loader.js";
 import { promptLLMSetup } from "../interactive-setup.js";
@@ -17,11 +16,14 @@ export const initCommand = new Command("init")
       process.exit(1);
     }
 
-    const { configPath } = writeDefaultConfig(process.cwd());
-    console.log(`Created ${path.relative(process.cwd(), configPath)}`);
-
+    // Prompt for LLM setup BEFORE writing anything to disk
     const setup = await promptLLMSetup();
+
+    const { configPath } = writeDefaultConfig(process.cwd());
+
     if (setup) {
       updateConfigLLM(configPath, setup.provider, setup.model);
     }
+
+    console.log(`Created ${path.relative(process.cwd(), configPath)}`);
   });

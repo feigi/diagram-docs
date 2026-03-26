@@ -78,8 +78,8 @@ describe("loadConfig configCreated flag", () => {
   it("returns configCreated=true when no config exists", () => {
     const result = loadConfig();
     expect(result.configCreated).toBe(true);
-    // Config file should now exist
-    expect(fs.existsSync(path.join(tmpDir, "diagram-docs.yaml"))).toBe(true);
+    // Config should NOT be written to disk yet (deferred until after prompt)
+    expect(fs.existsSync(path.join(tmpDir, "diagram-docs.yaml"))).toBe(false);
   });
 
   it("returns configCreated=false when config already exists", () => {
