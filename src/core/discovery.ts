@@ -10,9 +10,17 @@ export interface DiscoveredApp {
   analyzerId: string;
 }
 
+export interface DiscoveryProgress {
+  /** Called when starting to search for a language's build files. */
+  onSearching: (language: string, pattern: string) => void;
+  /** Called each time a new app folder is found. */
+  onFound: (app: DiscoveredApp) => void;
+}
+
 export async function discoverApplications(
   rootDir: string,
   config: Config,
+  progress?: DiscoveryProgress,
 ): Promise<DiscoveredApp[]> {
   const registry = getRegistry();
   const discovered: DiscoveredApp[] = [];
@@ -20,6 +28,7 @@ export async function discoverApplications(
 
   for (const analyzer of registry) {
     for (const pattern of analyzer.buildFilePatterns) {
+      progress?.onSearching(analyzer.id, pattern);
       const includePatterns = config.scan.include.map((inc) =>
         path.join(inc, "**", pattern),
       );
@@ -41,12 +50,14 @@ export async function discoverApplications(
           if (seenPaths.has(absAppDir)) continue;
           seenPaths.add(absAppDir);
 
-          discovered.push({
+          const found: DiscoveredApp = {
             path: appDir === "." ? "." : appDir,
             buildFile: path.basename(match),
             language: analyzer.id,
             analyzerId: analyzer.id,
-          });
+          };
+          progress?.onFound(found);
+          discovered.push(found);
         }
       }
     }
