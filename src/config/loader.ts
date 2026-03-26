@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { configSchema, type Config } from "./schema.js";
 import { humanizeName } from "../core/humanize.js";
+import type { LanguageAnalyzer } from "../analyzers/types.js";
 
 const CONFIG_FILENAMES = ["diagram-docs.yaml", "diagram-docs.yml"];
 
@@ -29,14 +30,6 @@ export function writeDefaultConfig(dir: string): { config: Config; configPath: s
     },
     scan: {
       include: ["**"],
-      exclude: [
-        "**/*test*/**",
-        "**/*test*",
-        "**/node_modules/**",
-        "**/build/**",
-        "**/dist/**",
-        "**/target/**",
-      ],
     },
     levels: {
       context: true,
@@ -104,4 +97,26 @@ export function updateConfigLLM(
   parsed.llm = { ...parsed.llm, provider, model };
   fs.writeFileSync(configPath, stringifyYaml(parsed, { lineWidth: 120 }), "utf-8");
   return configSchema.parse(parsed);
+}
+
+/**
+ * Compute effective exclude patterns by merging:
+ *   1. User config `scan.exclude` (includes Zod defaults if unset)
+ *   2. `defaultExcludes` from all registered analyzers
+ * Then subtract any patterns listed in `scan.forceInclude`.
+ */
+export function computeEffectiveExcludes(
+  config: Config,
+  analyzers: LanguageAnalyzer[],
+): string[] {
+  const combined = new Set(config.scan.exclude);
+
+  for (const analyzer of analyzers) {
+    for (const pattern of analyzer.defaultExcludes ?? []) {
+      combined.add(pattern);
+    }
+  }
+
+  const forceInclude = new Set(config.scan.forceInclude);
+  return [...combined].filter((p) => !forceInclude.has(p));
 }

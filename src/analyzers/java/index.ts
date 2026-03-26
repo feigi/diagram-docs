@@ -44,6 +44,7 @@ export const javaAnalyzer: LanguageAnalyzer = {
   id: "java",
   name: "Java",
   buildFilePatterns: ["pom.xml", "build.gradle", "build.gradle.kts"],
+  defaultExcludes: ["**/target/**", "**/.gradle/**"],
 
   async analyze(appPath: string, config: ScanConfig): Promise<ScannedApplication> {
     const appId = slugify(appPath);

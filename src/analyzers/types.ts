@@ -97,5 +97,7 @@ export interface LanguageAnalyzer {
   id: string;
   name: string;
   buildFilePatterns: string[];
+  /** Glob patterns for directories/files that should be excluded when this language is detected. */
+  defaultExcludes?: string[];
   analyze(appPath: string, config: ScanConfig): Promise<ScannedApplication>;
 }

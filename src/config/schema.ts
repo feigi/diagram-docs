@@ -16,25 +16,10 @@ export const configSchema = z.object({
         .default([
           "**/*test*/**",
           "**/*test*",
-          "**/node_modules/**",
           "**/build/**",
-          "**/dist/**",
-          "**/target/**",
-          // Python environments and caches
-          "**/venv/**",
-          "**/.venv/**",
-          "**/env/**",
-          "**/.env/**",
-          "**/virtualenv/**",
-          "**/.tox/**",
-          "**/.nox/**",
-          "**/__pypackages__/**",
-          "**/site-packages/**",
-          "**/__pycache__/**",
-          "**/.pytest_cache/**",
-          "**/.mypy_cache/**",
-          "**/.ruff_cache/**",
         ]),
+      /** Patterns that override built-in excludes, forcing matched paths to be scanned. */
+      forceInclude: z.array(z.string()).default([]),
     })
     .default({}),
 
