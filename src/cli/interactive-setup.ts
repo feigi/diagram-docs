@@ -36,47 +36,83 @@ const PROVIDERS: ProviderInfo[] = [
 // -------------------------------------------------------------------------
 
 /**
- * Attempt to list available models by running `<cli> model list`.
- * Returns model identifiers on success, null on failure.
+ * Parse model identifiers from `claude model list` output.
+ * Exported for testing.
  */
-function queryModelsFromCLI(cliCommand: string): string[] | null {
+export function parseClaudeModelListOutput(output: string): string[] {
+  const models: string[] = [];
+  for (const line of output.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    // Skip header/decoration lines
+    if (/^[-=─┌┐└┘│┤├┬┴┼╔╗╚╝║╠╣╦╩╬]+$/.test(trimmed)) continue;
+    if (/^(available|models?|id|name)\b/i.test(trimmed)) continue;
+
+    const token = trimmed.split(/\s+/)[0];
+    if (token && /^[a-zA-Z0-9]/.test(token)) {
+      models.push(token);
+    }
+  }
+  return models;
+}
+
+/**
+ * Parse model identifiers from `copilot help config` output.
+ * The `model:` section lists each supported model as `- "model-id"`.
+ * Exported for testing.
+ */
+export function parseCopilotHelpConfigOutput(output: string): string[] {
+  const models: string[] = [];
+  let inModelSection = false;
+
+  for (const line of output.split("\n")) {
+    if (/^\s*`model`:/.test(line)) {
+      inModelSection = true;
+      continue;
+    }
+
+    if (inModelSection) {
+      const match = line.match(/^\s*-\s*"([^"]+)"/);
+      if (match) {
+        models.push(match[1]);
+      } else if (/^\s*`\w+`:/.test(line)) {
+        break;
+      }
+    }
+  }
+
+  return models;
+}
+
+function queryClaudeModels(): string[] {
   try {
-    const output = execFileSync(cliCommand, ["model", "list"], {
+    const output = execFileSync("claude", ["model", "list"], {
       stdio: ["pipe", "pipe", "pipe"],
       timeout: 15_000,
       encoding: "utf-8",
     });
-
-    const models: string[] = [];
-    for (const line of output.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      // Skip header/decoration lines
-      if (/^[-=─┌┐└┘│┤├┬┴┼╔╗╚╝║╠╣╦╩╬]+$/.test(trimmed)) continue;
-      if (/^(available|models?|id|name)\b/i.test(trimmed)) continue;
-
-      // Extract the first whitespace-delimited token as the model ID.
-      // CLI output may include descriptions or table columns after the ID.
-      const token = trimmed.split(/\s+/)[0];
-      if (token && /^[a-zA-Z0-9]/.test(token)) {
-        models.push(token);
-      }
-    }
-
-    return models.length > 0 ? models : null;
+    return parseClaudeModelListOutput(output);
   } catch {
-    return null;
+    return [];
   }
 }
 
-const FALLBACK_MODELS: Record<string, string[]> = {
-  "claude-code": ["sonnet", "haiku", "opus"],
-  copilot: ["claude-sonnet-4", "gpt-4.1", "o4-mini"],
-};
+function queryCopilotModels(): string[] {
+  try {
+    const output = execFileSync("copilot", ["help", "config"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      timeout: 15_000,
+      encoding: "utf-8",
+    });
+    return parseCopilotHelpConfigOutput(output);
+  } catch {
+    return [];
+  }
+}
 
-function getModelsForProvider(provider: ProviderInfo): string[] {
-  const queried = queryModelsFromCLI(provider.cliCommand);
-  return queried ?? FALLBACK_MODELS[provider.id] ?? [];
+/** Visible for testing. */
+export function queryModelsForProvider(provider: ProviderInfo): string[] {
+  return provider.id === "copilot" ? queryCopilotModels() : queryClaudeModels();
 }
 
 // -------------------------------------------------------------------------
@@ -160,11 +196,18 @@ export async function promptLLMSetup(): Promise<LLMSetup | null> {
     }
 
     // Query models
-    const models = getModelsForProvider(provider);
+    const models = queryModelsForProvider(provider);
 
     let model: string;
     if (models.length === 0) {
-      model = FALLBACK_MODELS[provider.id]?.[0] ?? "sonnet";
+      process.stderr.write(
+        chalk.yellow(
+          `\n  Could not discover models for ${provider.label}.\n` +
+            `  Please enter a model identifier manually.\n`,
+        ),
+      );
+      const answer = await question(rl, `${chalk.cyan("model>")} `);
+      model = answer.trim() || "sonnet";
     } else if (models.length === 1) {
       model = models[0];
       process.stderr.write(`  Model: ${chalk.bold(model)}\n`);
