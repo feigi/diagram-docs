@@ -233,68 +233,13 @@ async function buildModelFromScan(
     ? fs.readFileSync(configPath, "utf-8")
     : undefined;
 
-  const isParallel = rawStructure.applications.length > 1;
-
-  if (isParallel) {
-    // Multi-app: let the parallel builder manage its own progress UI
-    try {
-      const model = await buildModelWithLLM({
-        rawStructure,
-        config,
-        configYaml,
-      });
-      return model;
-    } catch (err) {
-      if (err instanceof LLMUnavailableError) {
-        console.error(`\n${err.message}`);
-        process.exit(1);
-      }
-      if (err instanceof LLMCallError) {
-        console.error(
-          `\nError: ${err.message}\n\n` +
-            "To retry, check your CLI installation and authentication.\n" +
-            "Or use the deterministic builder:\n" +
-            "  diagram-docs generate --deterministic",
-        );
-        console.error("  Per-app agent logs may be available in .diagram-docs/logs/");
-        process.exit(1);
-      }
-      if (err instanceof LLMOutputError) {
-        console.error(
-          `\nError: ${err.message}\n\n` +
-            "The LLM produced output that could not be parsed as a valid model.\n" +
-            "Try again, or use the deterministic builder:\n" +
-            "  diagram-docs generate --deterministic",
-        );
-        process.exit(1);
-      }
-      throw err;
-    }
-  }
-
-  const frame = createFrame("LLM Agent");
+  // Parallel builder manages its own UI for all app counts
   try {
     const model = await buildModelWithLLM({
       rawStructure,
       config,
       configYaml,
-      onStatus(status) {
-        frame.update([
-          { text: status, spinner: true },
-          { text: `Model: ${config.llm.model}` },
-        ]);
-      },
-      onProgress({ line, final: done, kind }) {
-        frame.log(line, done, kind);
-      },
     });
-    frame.stop([
-      {
-        text: `${model.containers.length} container(s), ` +
-          `${model.components.length} component(s), ` +
-          `${model.relationships.length} relationship(s)`,
-      },
-    ]);
     return model;
   } catch (err) {
     if (err instanceof LLMUnavailableError) {
@@ -308,6 +253,7 @@ async function buildModelFromScan(
           "Or use the deterministic builder:\n" +
           "  diagram-docs generate --deterministic",
       );
+      console.error("  Per-app agent logs may be available in .diagram-docs/logs/");
       process.exit(1);
     }
     if (err instanceof LLMOutputError) {

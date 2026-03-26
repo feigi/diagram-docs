@@ -216,13 +216,6 @@ export async function buildModelParallel(
     }
   };
 
-  if (rawStructure.applications.length < 2) {
-    throw new LLMCallError(
-      `Parallel model building requires at least 2 applications but received ${rawStructure.applications.length}. ` +
-      `Single-app structures should use the standard model builder.`,
-    );
-  }
-
   const progress = manageOwnUI
     ? createParallelProgress(config.llm.model)
     : undefined;
