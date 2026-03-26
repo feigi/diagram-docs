@@ -512,7 +512,7 @@ describe("buildModelParallel", () => {
     expect(result.externalSystems[0].id).toBe("postgresql");
   });
 
-  it("falls back to deterministic seed when a per-app call fails", async () => {
+  it("falls back to deterministic anchor when a per-app call fails", async () => {
     const raw = makeRawStructure([
       makeApp("svc-a", {
         modules: [
@@ -601,12 +601,12 @@ describe("buildModelParallel", () => {
       onStatus: (s) => statuses.push(s),
     });
 
-    // Should still produce a valid model — svc-a falls back to deterministic seed
+    // Should still produce a valid model — svc-a falls back to deterministic anchor
     expect(result.containers).toHaveLength(2);
     expect(result.containers.map((c) => c.id).sort()).toEqual(["svc-a", "svc-b"]);
 
     // Should have logged a fallback message for svc-a
-    const fallbackMsg = statuses.find((s) => s.includes("deterministic seed"));
+    const fallbackMsg = statuses.find((s) => s.includes("deterministic anchor"));
     expect(fallbackMsg).toBeDefined();
 
     // Should have logged partial fallback warning
@@ -1004,7 +1004,7 @@ describe("buildModelParallel", () => {
 
     const config = makeConfig();
 
-    // Programming errors must propagate — NOT silently degrade to deterministic seeds
+    // Programming errors must propagate — NOT silently degrade to deterministic anchors
     await expect(
       buildModelParallel({
         rawStructure: raw,
@@ -1074,7 +1074,7 @@ describe("buildModelParallel", () => {
 
     const config = makeConfig();
 
-    // System resource errors must propagate — NOT silently degrade to deterministic seeds
+    // System resource errors must propagate — NOT silently degrade to deterministic anchors
     await expect(
       buildModelParallel({
         rawStructure: raw,
@@ -1293,7 +1293,7 @@ describe("buildModelParallel", () => {
     expect(result.externalSystems[0].id).toBe("postgres");
   });
 
-  it("falls back to deterministic seed when per-app LLM returns invalid YAML", async () => {
+  it("falls back to deterministic anchor when per-app LLM returns invalid YAML", async () => {
     const raw = makeRawStructure([
       makeApp("svc-a", {
         modules: [
@@ -1365,14 +1365,14 @@ describe("buildModelParallel", () => {
       onStatus: (s) => statuses.push(s),
     });
 
-    // svc-a should fall back to deterministic seed, svc-b from LLM
+    // svc-a should fall back to deterministic anchor, svc-b from LLM
     expect(result.containers).toHaveLength(2);
     // Should have logged a fallback warning
-    const fallbackMsg = statuses.find((s) => s.includes("svc-a") && s.includes("deterministic seed"));
+    const fallbackMsg = statuses.find((s) => s.includes("svc-a") && s.includes("deterministic anchor"));
     expect(fallbackMsg).toBeDefined();
   });
 
-  it("falls back to deterministic seed when per-app LLM returns schema-invalid YAML", async () => {
+  it("falls back to deterministic anchor when per-app LLM returns schema-invalid YAML", async () => {
     const raw = makeRawStructure([
       makeApp("svc-a", {
         modules: [
@@ -1445,9 +1445,9 @@ describe("buildModelParallel", () => {
       onStatus: (s) => statuses.push(s),
     });
 
-    // svc-a should fall back to deterministic seed
+    // svc-a should fall back to deterministic anchor
     expect(result.containers).toHaveLength(2);
-    const fallbackMsg = statuses.find((s) => s.includes("svc-a") && s.includes("deterministic seed"));
+    const fallbackMsg = statuses.find((s) => s.includes("svc-a") && s.includes("deterministic anchor"));
     expect(fallbackMsg).toBeDefined();
   });
 

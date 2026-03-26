@@ -63,11 +63,11 @@ export const modelCommand = new Command("model")
         ? fs.readFileSync(outputPath, "utf-8")
         : undefined;
 
-      const isSeedMode = !existingModelYaml?.trim();
+      const isAnchorMode = !existingModelYaml?.trim();
 
       try {
-        if (isSeedMode) {
-          // Seed mode: parallel builder manages its own UI for all app counts
+        if (isAnchorMode) {
+          // Anchor mode: parallel builder manages its own UI for all app counts
           const model = await buildModelWithLLM({
             rawStructure,
             config,
