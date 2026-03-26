@@ -40,13 +40,13 @@ diagram-docs generate --deterministic
 ## How it works
 
 ```
-Source code  ──▶  raw-structure.json  ──▶  architecture-model.yaml  ──▶  D2 diagrams
-               Scan                     Model                        Generate
+Source code  ──▶  .diagram-docs/raw-structure.json  ──▶  .diagram-docs/architecture-model.yaml  ──▶  D2 diagrams
+               Scan                                   Model                                      Generate
 ```
 
-**Scan** — Static analysis reads source code and produces `raw-structure.json`: applications, modules, imports, dependencies, annotations. Applications are discovered by build files (`pom.xml`, `build.gradle`, `pyproject.toml`, `CMakeLists.txt`, etc.). Results are cached by checksum; unchanged files are skipped.
+**Scan** — Static analysis reads source code and produces `.diagram-docs/raw-structure.json`: applications, modules, imports, dependencies, annotations. Applications are discovered by build files (`pom.xml`, `build.gradle`, `pyproject.toml`, `CMakeLists.txt`, etc.). Results are cached by checksum; unchanged files are skipped.
 
-**Model** — Scan output is converted into `architecture-model.yaml`. In deterministic mode, a rule-based builder maps modules to components, detects external systems from dependencies, and infers actors from annotations. In LLM mode, the deterministic model is generated first as a seed, then refined by an LLM agent for better descriptions, grouping, and relationship labels. The tool shells out to Claude Code or Copilot CLI — it never calls an LLM API directly.
+**Model** — Scan output is converted into `.diagram-docs/architecture-model.yaml`. In deterministic mode, a rule-based builder maps modules to components, detects external systems from dependencies, and infers actors from annotations. In LLM mode, the deterministic model is generated first as a seed, then refined by an LLM agent for better descriptions, grouping, and relationship labels. The tool shells out to Claude Code or Copilot CLI — it never calls an LLM API directly.
 
 **Generate** — The architecture model is rendered as D2 diagrams at three C4 levels:
 
@@ -68,6 +68,11 @@ Source code  ──▶  raw-structure.json  ──▶  architecture-model.yaml  
 ## Output structure
 
 ```
+.diagram-docs/
+  manifest.yaml              # Checksums for incremental builds
+  raw-structure.json         # Scan output
+  architecture-model.yaml    # Architecture model — edit to refine diagrams
+
 docs/architecture/
   c1-context.d2              # User-facing — scaffolded once, never overwritten
   c2-container.d2
@@ -81,6 +86,8 @@ docs/architecture/
       _generated/
         c3-component.d2
 ```
+
+All output should be checked into version control. The `manifest.yaml` checksums enable incremental builds — without it, CI will re-scan and rebuild everything on each run.
 
 User-facing files use D2 `@import` to pull in generated content. Edit them freely — your changes survive regeneration. Generated files in `_generated/` are overwritten on every run.
 
@@ -165,7 +172,7 @@ Dependencies like PostgreSQL, Kafka, and Redis are auto-detected from build file
 
 ## Architecture model
 
-`architecture-model.yaml` bridges scan output and diagrams. It's generated automatically but designed to be edited:
+`.diagram-docs/architecture-model.yaml` bridges scan output and diagrams. It's generated automatically but designed to be edited:
 
 ```yaml
 version: 1
@@ -211,8 +218,8 @@ Delete this file to regenerate from scratch on the next run.
 
 ```bash
 diagram-docs init                    # Create config
-diagram-docs scan                    # Scan only → raw-structure.json
-diagram-docs model                   # Build model → architecture-model.yaml
+diagram-docs scan                    # Scan only → .diagram-docs/raw-structure.json
+diagram-docs model                   # Build model → .diagram-docs/architecture-model.yaml
 diagram-docs model --llm             # Build model with LLM refinement
 diagram-docs generate                # Full pipeline
 diagram-docs generate --deterministic  # Full pipeline, no LLM

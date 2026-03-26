@@ -188,7 +188,7 @@ async function resolveModel(
   const scanChecksum = rawStructure.checksum;
 
   // 3. Check if existing model is still fresh
-  const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
+  const autoModelPath = path.resolve(configDir, ".diagram-docs", "architecture-model.yaml");
   const manifest = readManifest(configDir) ?? createDefaultManifest();
 
   if (fs.existsSync(autoModelPath)) {

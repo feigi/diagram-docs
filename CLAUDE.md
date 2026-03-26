@@ -6,8 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 diagram-docs is a TypeScript CLI that generates C4 architecture diagrams in D2 format from source code. It implements a three-phase pipeline:
 
-1. **Scan** — Static analysis extracts code structure → `raw-structure.json`
-2. **Model** — Deterministic or LLM-agent-driven conversion → `architecture-model.yaml`
+1. **Scan** — Static analysis extracts code structure → `.diagram-docs/raw-structure.json`
+2. **Model** — Deterministic or LLM-agent-driven conversion → `.diagram-docs/architecture-model.yaml`
 3. **Generate** — Produces D2 diagrams (context/container/component levels) → `docs/architecture/`
 
 The tool never calls an LLM itself. The agent sits between scan and generate, reading scan output and writing the architecture model.
