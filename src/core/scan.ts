@@ -13,6 +13,7 @@ import {
 } from "./manifest.js";
 import { getAnalyzer } from "../analyzers/registry.js";
 import { slugify } from "./slugify.js";
+import { SPINNER_FRAMES, SPINNER_INTERVAL } from "../cli/terminal-utils.js";
 import type { Config } from "../config/schema.js";
 import type { RawStructure, ScannedApplication } from "../analyzers/types.js";
 
@@ -100,12 +101,25 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
     abstraction: config.abstraction,
   });
   console.error("Computing checksum...");
+  let spinnerIdx = 0;
+  const isTTY = process.stderr.isTTY;
+  const spinnerTimer = isTTY
+    ? setInterval(() => {
+        process.stderr.write(
+          `\r${SPINNER_FRAMES[spinnerIdx++ % SPINNER_FRAMES.length]} Computing checksum...`,
+        );
+      }, SPINNER_INTERVAL)
+    : undefined;
   const checksum = await computeChecksum(
     rootDir,
     discovered.map((d) => d.path),
     config.scan.exclude,
     configFingerprint,
   );
+  if (spinnerTimer) {
+    clearInterval(spinnerTimer);
+    process.stderr.write("\r✔ Checksum computed\n");
+  }
 
   if (
     !force &&
