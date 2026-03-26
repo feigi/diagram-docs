@@ -18,12 +18,11 @@ export function findConfigFile(startDir: string): string | null {
 }
 
 /**
- * Write a default diagram-docs.yaml to the given directory.
- * Returns the written config and file path.
+ * Build default config values in memory without writing to disk.
  */
-export function writeDefaultConfig(dir: string): { config: Config; configPath: string } {
+export function buildDefaultConfig(dir: string): { config: Config; configPath: string; defaults: Record<string, unknown> } {
   const dirName = path.basename(dir);
-  const defaults = {
+  const defaults: Record<string, unknown> = {
     system: {
       name: humanizeName(dirName),
       description: "",
@@ -48,8 +47,17 @@ export function writeDefaultConfig(dir: string): { config: Config; configPath: s
   };
 
   const configPath = path.join(dir, "diagram-docs.yaml");
-  fs.writeFileSync(configPath, stringifyYaml(defaults, { lineWidth: 120 }), "utf-8");
   const config = configSchema.parse(defaults);
+  return { config, configPath, defaults };
+}
+
+/**
+ * Write a default diagram-docs.yaml to the given directory.
+ * Returns the written config and file path.
+ */
+export function writeDefaultConfig(dir: string): { config: Config; configPath: string } {
+  const { config, configPath, defaults } = buildDefaultConfig(dir);
+  fs.writeFileSync(configPath, stringifyYaml(defaults, { lineWidth: 120 }), "utf-8");
   return { config, configPath };
 }
 
@@ -63,8 +71,7 @@ export function loadConfig(configPath?: string): {
 
   if (!resolvedPath) {
     const cwd = process.cwd();
-    const { config, configPath: writtenPath } = writeDefaultConfig(cwd);
-    console.error(`Created ${path.relative(cwd, writtenPath)}`);
+    const { config } = buildDefaultConfig(cwd);
     return {
       config,
       configDir: cwd,
