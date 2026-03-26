@@ -57,6 +57,10 @@ describe("isSystemResourceError", () => {
     return err;
   }
 
+  it("returns true for E2BIG", () => {
+    expect(isSystemResourceError(makeErrnoError("E2BIG"))).toBe(true);
+  });
+
   it("returns true for ENOMEM", () => {
     expect(isSystemResourceError(makeErrnoError("ENOMEM"))).toBe(true);
   });
@@ -99,6 +103,12 @@ describe("rethrowIfFatal", () => {
   it("rethrows system resource errors", () => {
     const err = new Error("ENOMEM") as NodeJS.ErrnoException;
     err.code = "ENOMEM";
+    expect(() => rethrowIfFatal(err)).toThrow(err);
+  });
+
+  it("rethrows E2BIG (argument list too long)", () => {
+    const err = new Error("E2BIG") as NodeJS.ErrnoException;
+    err.code = "E2BIG";
     expect(() => rethrowIfFatal(err)).toThrow(err);
   });
 
