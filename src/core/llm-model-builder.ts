@@ -518,57 +518,194 @@ const claudeCodeProvider: LLMProvider = {
   },
 };
 
-/** Patterns in `gh copilot` stderr that are diagnostic noise, not errors. */
-const COPILOT_STDERR_NOISE = [
-  /^Total usage est:/,
-  /^API time spent:/,
-  /^Total session time:/,
-  /^Total code changes:/,
-  /^Breakdown by AI model:/,
-  /^claude-/,
-  /^gpt-/,
-  /^Only built-in servers are available/,
-  /Third-party MCP servers are disabled/,
-  /^Warning: EPIPE writing to gh stdin/,
-  /^Warning: child process \(gh\) did not consume full stdin/,
-];
+// ---------------------------------------------------------------------------
+// Copilot CLI JSONL spawn helper
+// ---------------------------------------------------------------------------
 
-function isCopilotStderrNoise(line: string): boolean {
-  return COPILOT_STDERR_NOISE.some((re) => re.test(line));
+/**
+ * Spawn the standalone Copilot CLI in non-interactive mode with JSONL output.
+ *
+ * The prompt is passed as the `-p` argument (copilot does not read from stdin).
+ * JSONL events are parsed from stdout to extract assistant content and report
+ * progress.  The full response text is returned on successful exit.
+ */
+function spawnCopilotJsonl(
+  prompt: string,
+  model: string,
+  timeoutMs: number,
+  onProgress?: (event: ProgressEvent) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const args = [
+      "-p", prompt,
+      "--output-format", "json",
+      "--allow-all-tools",
+      "--model", model,
+    ];
+    const child = spawn("copilot", args, { stdio: ["pipe", "pipe", "pipe"] });
+
+    let resultText = "";
+    let stdoutBuf = "";
+    const errChunks: Buffer[] = [];
+    let settled = false;
+    let syntaxErrors = 0;
+    let totalSyntaxErrors = 0;
+    let firstBadLine = "";
+
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGTERM");
+      reject(new LLMCallError(
+        `copilot timed out after ${timeoutMs / 1000}s` +
+          (resultText ? ` (${resultText.length} chars of partial output were received)` : ""),
+      ));
+    }, timeoutMs);
+
+    child.stdout.on("data", (chunk) => {
+      if (settled) return;
+      stdoutBuf += chunk.toString();
+      const lines = stdoutBuf.split("\n");
+      stdoutBuf = lines.pop() ?? "";
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        try {
+          const event = JSON.parse(line);
+          // Skip ephemeral setup events (session warnings, MCP status, etc.)
+          if (event.ephemeral) continue;
+
+          // Assistant message — contains the response content and optional reasoning
+          if (event.type === "assistant.message" && event.data) {
+            const content = event.data.content;
+            if (typeof content === "string" && content) {
+              resultText = content;
+              if (onProgress) {
+                const contentLines = content.trimEnd().split("\n");
+                const lastLine = contentLines[contentLines.length - 1]?.trim();
+                if (lastLine) onProgress({ line: lastLine, final: true, kind: "output" });
+              }
+            }
+            // Report reasoning / thinking text as progress
+            const reasoning = event.data.reasoningText;
+            if (typeof reasoning === "string" && reasoning && onProgress) {
+              const reasonLines = reasoning.trimEnd().split("\n");
+              const lastLine = reasonLines[reasonLines.length - 1]?.trim();
+              if (lastLine) onProgress({ line: lastLine, final: true, kind: "thinking" });
+            }
+          }
+
+          // Turn lifecycle — report start/end as progress
+          if (event.type === "assistant.turn_start" && onProgress) {
+            const turnId = event.data?.turnId;
+            if (turnId && Number(turnId) > 0) {
+              onProgress({ line: `Turn ${turnId} started`, final: true, kind: "thinking" });
+            }
+          }
+
+          syntaxErrors = 0;
+        } catch (err) {
+          if (!(err instanceof SyntaxError)) {
+            settled = true;
+            clearTimeout(timer);
+            const msg = err instanceof Error ? err.message : String(err);
+            reject(new LLMCallError(
+              `Unexpected error parsing copilot output: ${msg}\nOffending line: ${line.slice(0, 200)}`,
+            ));
+            try { child.kill("SIGTERM"); } catch { /* best-effort */ }
+            return;
+          }
+          syntaxErrors++;
+          totalSyntaxErrors++;
+          if (totalSyntaxErrors === 1) firstBadLine = line;
+          if (totalSyntaxErrors === 1 || totalSyntaxErrors === 10 || totalSyntaxErrors === 50) {
+            const warn = `Warning: ${totalSyntaxErrors} unparseable JSON line(s) from copilot so far`;
+            if (onProgress) {
+              onProgress({ line: warn, final: true, kind: "thinking" });
+            } else {
+              try { process.stderr.write(`${warn}\n`); } catch { /* best-effort */ }
+            }
+          }
+          if (syntaxErrors >= 100 || totalSyntaxErrors >= 500) {
+            settled = true;
+            clearTimeout(timer);
+            reject(new LLMCallError(
+              `copilot produced ${totalSyntaxErrors} unparseable JSON lines ` +
+                `(${syntaxErrors} consecutive) — aborting. ` +
+                `First bad line: ${firstBadLine.slice(0, 200)}`,
+            ));
+            try { child.kill("SIGTERM"); } catch { /* best-effort */ }
+            return;
+          }
+        }
+      }
+    });
+
+    child.stderr.on("data", (chunk) => errChunks.push(chunk));
+
+    child.on("error", (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(new LLMCallError(`Failed to spawn copilot: ${err.message}`));
+    });
+
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      if (settled) return;
+      settled = true;
+      if (code !== 0) {
+        const stderr = Buffer.concat(errChunks).toString().trim();
+        const context = resultText
+          ? ` (${resultText.length} chars of partial output were received)`
+          : "";
+        reject(
+          new LLMCallError(
+            `copilot exited with code ${code}: ${stderr || "(no output)"}${context}`,
+          ),
+        );
+        return;
+      }
+      if (!resultText && totalSyntaxErrors > 0) {
+        reject(
+          new LLMCallError(
+            `copilot produced ${totalSyntaxErrors} unparseable JSON line(s) and no usable output. ` +
+              `First bad line: ${firstBadLine.slice(0, 200)}`,
+          ),
+        );
+        return;
+      }
+      if (!resultText) {
+        reject(new LLMCallError("copilot exited successfully but produced no output"));
+        return;
+      }
+      if (totalSyntaxErrors > 0) {
+        const msg = `Warning: ${totalSyntaxErrors} unparseable JSON line(s) from copilot were skipped`;
+        if (onProgress) {
+          onProgress({ line: msg, final: true, kind: "thinking" });
+        } else {
+          try { process.stderr.write(`${msg}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
+        }
+      }
+      resolve(resultText);
+    });
+
+    // Close stdin immediately — copilot reads prompt from -p argument, not stdin.
+    child.stdin.end();
+  });
 }
 
 const copilotProvider: LLMProvider = {
   name: "GitHub Copilot CLI",
-  supportsTools: false,
+  supportsTools: true,
 
   isAvailable() {
-    if (!commandExists("gh")) return false;
-    try {
-      execFileSync("gh", ["copilot", "--version"], { stdio: "pipe" });
-      return true;
-    } catch (err: unknown) {
-      rethrowIfFatal(err);
-      // Non-zero exit means the copilot extension is not installed — expected.
-      if (err instanceof Error && "status" in err && typeof (err as { status: unknown }).status === "number") {
-        return false;
-      }
-      const msg = err instanceof Error ? err.message : String(err);
-      throw new LLMCallError(`Failed to check copilot availability: ${msg}`, { cause: err });
-    }
+    return commandExists("copilot");
   },
 
-  async generate(systemPrompt, userMessage, _model, onProgress) {
-    // Copilot CLI doesn't support --system-prompt or streaming, so combine into one prompt.
-    // Pass via stdin to avoid OS argument length limits on large codebases.
+  async generate(systemPrompt, userMessage, model, onProgress) {
+    // Copilot CLI has no --system-prompt-file, so combine into one prompt.
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
-    return spawnWithStdin(
-      "gh", ["copilot", "-p", "-"], combinedPrompt, 900_000,
-      onProgress ? (line) => {
-        if (!isCopilotStderrNoise(line)) {
-          onProgress({ line, final: true, kind: "output" });
-        }
-      } : undefined,
-    );
+    return spawnCopilotJsonl(combinedPrompt, model, 900_000, onProgress);
   },
 };
 
@@ -609,7 +746,7 @@ export function resolveProvider(config: Config): LLMProvider {
       "No LLM provider found.\n\n" +
         "To generate a high-quality architecture model, install one of:\n" +
         "  - Claude Code CLI:    https://claude.ai/download\n" +
-        "  - GitHub Copilot CLI: gh extension install github/gh-copilot\n\n" +
+        "  - GitHub Copilot CLI: https://docs.github.com/copilot/how-tos/copilot-cli\n\n" +
         "Or use the deterministic builder:\n" +
         "  diagram-docs generate --deterministic",
     );
