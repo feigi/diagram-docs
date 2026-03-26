@@ -27,7 +27,7 @@ export const modelCommand = new Command("model")
   .option(
     "-o, --output <path>",
     "Output path",
-    ".diagram-docs/architecture-model.yaml",
+    "architecture-model.yaml",
   )
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
   .option("--llm", "Use LLM to generate model (requires Claude Code or Copilot CLI)")
