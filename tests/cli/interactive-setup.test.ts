@@ -8,6 +8,10 @@ import { parse as parseYaml } from "yaml";
 // and verify the config-writing helpers directly.
 
 import { writeDefaultConfig, updateConfigLLM, loadConfig } from "../../src/config/loader.js";
+import {
+  parseCopilotHelpConfigOutput,
+  parseClaudeModelListOutput,
+} from "../../src/cli/interactive-setup.js";
 
 describe("updateConfigLLM", () => {
   let tmpDir: string;
@@ -57,6 +61,63 @@ describe("updateConfigLLM", () => {
     const onDisk = parseYaml(fs.readFileSync(configPath, "utf-8"));
     expect(onDisk.llm.provider).toBe("copilot");
     expect(onDisk.llm.model).toBe("gpt-4.1");
+  });
+});
+
+describe("parseCopilotHelpConfigOutput", () => {
+  it("extracts model IDs from the model config section", () => {
+    const output = [
+      "Configuration Settings:",
+      "",
+      "  `allowed_urls`: list of URLs ...",
+      "",
+      '  `model`: AI model to use for Copilot CLI; can be changed with /model.',
+      '    - "claude-sonnet-4.6"',
+      '    - "gpt-5.2"',
+      '    - "gpt-4.1"',
+      "",
+      "  `mouse`: whether to enable mouse support; defaults to `true`.",
+    ].join("\n");
+
+    expect(parseCopilotHelpConfigOutput(output)).toEqual([
+      "claude-sonnet-4.6",
+      "gpt-5.2",
+      "gpt-4.1",
+    ]);
+  });
+
+  it("stops collecting at the next config key", () => {
+    const output = [
+      '  `model`: AI model to use.',
+      '    - "gpt-5.2"',
+      '    - "gpt-4.1"',
+      "  `mouse`: whether to enable mouse.",
+      '    - "not-a-model"',
+    ].join("\n");
+
+    expect(parseCopilotHelpConfigOutput(output)).toEqual(["gpt-5.2", "gpt-4.1"]);
+  });
+
+  it("returns empty array when no model section exists", () => {
+    expect(parseCopilotHelpConfigOutput("  `mouse`: foo\n")).toEqual([]);
+  });
+});
+
+describe("parseClaudeModelListOutput", () => {
+  it("extracts model IDs skipping headers and decorations", () => {
+    const output = [
+      "Available Models",
+      "──────────────────",
+      "sonnet    Claude Sonnet",
+      "haiku     Claude Haiku",
+      "opus      Claude Opus",
+    ].join("\n");
+
+    expect(parseClaudeModelListOutput(output)).toEqual(["sonnet", "haiku", "opus"]);
+  });
+
+  it("returns empty array for empty output", () => {
+    expect(parseClaudeModelListOutput("")).toEqual([]);
   });
 });
 
