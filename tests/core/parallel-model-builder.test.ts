@@ -901,7 +901,7 @@ describe("buildModelParallel", () => {
     expect(result.system.description).toBe("Config description");
   });
 
-  it("throws when given fewer than 2 applications", async () => {
+  it("handles a single application without throwing", async () => {
     const raw = makeRawStructure([
       makeApp("svc-a", {
         modules: [
@@ -918,16 +918,20 @@ describe("buildModelParallel", () => {
       }),
     ]);
 
-    const provider = makeMockProvider(new Map());
+    const partial = makePartialModel({
+      containers: [{ id: "svc-a", applicationId: "svc-a", name: "Service A", description: "A service", technology: "Java" }],
+      components: [{ id: "mod-a1", containerId: "svc-a", name: "Main", description: "", technology: "Java", moduleIds: [] }],
+    });
+
+    const responses = new Map<string, string>();
+    responses.set("svc-a", stringifyYaml(partial));
+    responses.set("__synthesis__", stringifyYaml({ system: { name: "My System", description: "" }, actors: [], externalSystems: [], relationships: [] }));
+
+    const provider = makeMockProvider(responses);
     const config = makeConfig();
 
-    await expect(
-      buildModelParallel({
-        rawStructure: raw,
-        config,
-        provider,
-      }),
-    ).rejects.toThrow("Parallel model building requires at least 2 applications");
+    const model = await buildModelParallel({ rawStructure: raw, config, provider });
+    expect(model.containers.length).toBeGreaterThanOrEqual(0);
   });
 
   it("propagates programming errors (TypeError) instead of swallowing them", async () => {

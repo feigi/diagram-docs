@@ -64,12 +64,10 @@ export const modelCommand = new Command("model")
         : undefined;
 
       const isSeedMode = !existingModelYaml?.trim();
-      const isParallel = isSeedMode && rawStructure.applications.length > 1;
 
-      let singleAppFrame: ReturnType<typeof createFrame> | undefined;
       try {
-        if (isParallel) {
-          // Multi-app: parallel builder manages its own UI internally
+        if (isSeedMode) {
+          // Seed mode: parallel builder manages its own UI for all app counts
           const model = await buildModelWithLLM({
             rawStructure,
             config,
@@ -81,8 +79,8 @@ export const modelCommand = new Command("model")
           fs.writeFileSync(outputPath, yamlContent, "utf-8");
           console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
         } else {
-          // Single-app / update: use Frame as before
-          const frame = singleAppFrame = createFrame("LLM Agent");
+          // Update mode: use Frame for the single iterative LLM call
+          const frame = createFrame("LLM Agent");
           const model = await buildModelWithLLM({
             rawStructure,
             config,
@@ -116,13 +114,8 @@ export const modelCommand = new Command("model")
           err instanceof LLMCallError ||
           err instanceof LLMOutputError
         ) {
-          singleAppFrame?.stop([{ text: `Error: ${err.message}` }]);
-          if (!singleAppFrame) {
-            console.error(`Error: ${err.message}`);
-          }
-          if (isParallel) {
-            console.error("  Per-app agent logs may be available in .diagram-docs/logs/");
-          }
+          console.error(`Error: ${err.message}`);
+          console.error("  Per-app agent logs may be available in .diagram-docs/logs/");
           process.exit(1);
         }
         throw err;

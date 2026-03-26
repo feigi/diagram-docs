@@ -1032,10 +1032,9 @@ export async function buildModelWithLLM(
   const resolvedProvider = resolveProvider(options.config);
   const emit = (status: string) => options.onStatus?.(status, resolvedProvider.name);
 
-  // Parallel path: multi-app seed mode dispatches per-app LLM calls concurrently
+  // Parallel path: seed mode dispatches per-app LLM calls concurrently (even for a single app)
   const isSeedMode = !options.existingModelYaml?.trim();
-  const apps = options.rawStructure.applications;
-  if (isSeedMode && apps.length > 1) {
+  if (isSeedMode) {
     // Dynamic import is separated from the call so module resolution
     // errors are not accidentally wrapped as LLMCallError.
     let buildModelParallel: typeof import("./parallel-model-builder.js")["buildModelParallel"];
