@@ -450,7 +450,7 @@ export interface LLMProvider {
   ): Promise<string>;
 }
 
-function commandExists(cmd: string): boolean {
+export function commandExists(cmd: string): boolean {
   try {
     execFileSync("which", [cmd], { stdio: "pipe" });
     return true;

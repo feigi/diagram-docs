@@ -2,7 +2,7 @@ import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
-import { loadConfig } from "../../config/loader.js";
+import { loadConfig, updateConfigLLM } from "../../config/loader.js";
 import { buildModel } from "../../core/model-builder.js";
 import { readManifest, writeManifest, createDefaultManifest } from "../../core/manifest.js";
 import {
@@ -14,6 +14,7 @@ import {
 } from "../../core/llm-model-builder.js";
 import { createFrame } from "../frame.js";
 import type { RawStructure } from "../../analyzers/types.js";
+import { promptLLMSetup } from "../interactive-setup.js";
 
 export const modelCommand = new Command("model")
   .description(
@@ -32,7 +33,16 @@ export const modelCommand = new Command("model")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
   .option("--llm", "Use LLM to generate model (requires Claude Code or Copilot CLI)")
   .action(async (options) => {
-    const { config, configDir } = loadConfig(options.config);
+    let { config, configDir, configCreated } = loadConfig(options.config);
+
+    // Interactive LLM setup when config was just created and using LLM mode
+    if (configCreated && options.llm) {
+      const setup = await promptLLMSetup();
+      if (setup) {
+        const cfgPath = path.resolve(configDir, "diagram-docs.yaml");
+        config = updateConfigLLM(cfgPath, setup.provider, setup.model);
+      }
+    }
 
     const inputPath = path.resolve(options.input);
     if (!fs.existsSync(inputPath)) {

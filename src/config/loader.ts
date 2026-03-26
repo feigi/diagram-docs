@@ -63,6 +63,8 @@ export function writeDefaultConfig(dir: string): { config: Config; configPath: s
 export function loadConfig(configPath?: string): {
   config: Config;
   configDir: string;
+  /** True when diagram-docs.yaml was just created because none existed. */
+  configCreated: boolean;
 } {
   const resolvedPath = configPath ?? findConfigFile(process.cwd());
 
@@ -73,6 +75,7 @@ export function loadConfig(configPath?: string): {
     return {
       config,
       configDir: cwd,
+      configCreated: true,
     };
   }
 
@@ -83,5 +86,22 @@ export function loadConfig(configPath?: string): {
   return {
     config,
     configDir: path.dirname(path.resolve(resolvedPath)),
+    configCreated: false,
   };
+}
+
+/**
+ * Patch the llm section of an existing diagram-docs.yaml on disk and return
+ * the re-parsed config.  Preserves all other YAML content and comments.
+ */
+export function updateConfigLLM(
+  configPath: string,
+  provider: string,
+  model: string,
+): Config {
+  const raw = fs.readFileSync(configPath, "utf-8");
+  const parsed = parseYaml(raw) ?? {};
+  parsed.llm = { ...parsed.llm, provider, model };
+  fs.writeFileSync(configPath, stringifyYaml(parsed, { lineWidth: 120 }), "utf-8");
+  return configSchema.parse(parsed);
 }
