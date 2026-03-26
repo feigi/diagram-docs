@@ -4,6 +4,7 @@
  * Falls back to one-line-per-transition when stderr is not a TTY.
  */
 import chalk from "chalk";
+import { constants as osConstants } from "node:os";
 import {
   SPINNER_FRAMES,
   SPINNER_INTERVAL,
@@ -35,6 +36,7 @@ interface AppEntry {
 
 export function createParallelProgress(llmModel: string): ParallelProgress {
   const isTTY = process.stderr.isTTY;
+  const stdinTTY = process.stdin.isTTY;
   const startTime = Date.now();
   const apps: AppEntry[] = [];
   let statusText = "";
@@ -44,6 +46,13 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
   let firstRender = true;
   let stopped = false;
   let viewportStart = 0;
+  let userScrolled = false; // true while user has scrolled away from auto-advance position
+
+  // Mouse capture state
+  const SCROLL_STEP = 3;
+  let stdinListener: ((data: Buffer) => void) | null = null;
+  let wasRawMode = false;
+  let signalHandled = false;
 
   function overallElapsed(): string {
     return formatElapsed(Date.now() - startTime);
@@ -153,12 +162,89 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
   }
 
   function emergencyRestore() {
-    try { process.stderr.write("\x1b[?25h"); } catch { /* best-effort during exit */ }
+    try { process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h"); } catch { /* best-effort during exit */ }
+    if (stdinTTY) {
+      try { process.stdin.setRawMode(false); } catch { /* best-effort during exit */ }
+    }
+  }
+
+  function handleSignal(signal: NodeJS.Signals) {
+    if (signalHandled) return;
+    signalHandled = true;
+    process.removeListener("exit", emergencyRestore);
+    emergencyRestore();
+    const sigNum = osConstants.signals[signal] ?? 2;
+    process.exit(128 + sigNum);
+  }
+
+  function enableMouse(): void {
+    if (!stdinTTY || stdinListener) return;
+    wasRawMode = process.stdin.isRaw;
+    process.stdin.setRawMode(true);
+    process.stdin.resume();
+    try {
+      process.stderr.write("\x1b[?1000h\x1b[?1006h");
+    } catch {
+      try { process.stdin.setRawMode(wasRawMode); } catch { /* best-effort */ }
+      return;
+    }
+    process.on("exit", emergencyRestore);
+    process.on("SIGINT", handleSignal);
+    process.on("SIGTERM", handleSignal);
+    stdinListener = (data: Buffer) => {
+      const str = data.toString();
+      if (str.includes("\x03")) {
+        if (signalHandled) return;
+        signalHandled = true;
+        process.removeListener("exit", emergencyRestore);
+        emergencyRestore();
+        process.exit(128 + (osConstants.signals.SIGINT ?? 2));
+        return;
+      }
+      // SGR mouse: \x1b[<btn;col;rowM  (64=wheel up, 65=wheel down)
+      const match = str.match(/\x1b\[<(\d+);\d+;\d+[Mm]/);
+      if (!match) return;
+      const btn = parseInt(match[1], 10);
+      const termRows = process.stderr.rows || 24;
+      const maxAppRows = Math.max(3, termRows - 6);
+      if (btn === 64) {
+        // Scroll up — show earlier apps
+        viewportStart = Math.max(0, viewportStart - SCROLL_STEP);
+        userScrolled = true;
+        render();
+      } else if (btn === 65) {
+        // Scroll down — show later apps
+        const maxStart = Math.max(0, apps.length - maxAppRows);
+        viewportStart = Math.min(maxStart, viewportStart + SCROLL_STEP);
+        // Re-enable auto-advance when scrolled to the bottom region
+        if (viewportStart >= maxStart) {
+          userScrolled = false;
+        }
+        render();
+      }
+    };
+    process.stdin.on("data", stdinListener);
+  }
+
+  function disableMouse(): void {
+    process.removeListener("exit", emergencyRestore);
+    process.removeListener("SIGINT", handleSignal);
+    process.removeListener("SIGTERM", handleSignal);
+    signalHandled = false;
+    if (stdinListener) {
+      process.stdin.removeListener("data", stdinListener);
+      stdinListener = null;
+    }
+    if (stdinTTY) {
+      try { process.stderr.write("\x1b[?1000l\x1b[?1006l"); } catch { /* stderr may be unavailable */ }
+      try { process.stdin.setRawMode(wasRawMode); } catch { /* stdin may be unavailable */ }
+      process.stdin.unref();
+    }
   }
 
   function startTimer(): void {
     if (timer || !isTTY) return;
-    process.on("exit", emergencyRestore);
+    enableMouse();
     timer = setInterval(() => {
       spinnerIdx++;
       render();
@@ -169,11 +255,11 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     if (timer) {
       clearInterval(timer);
       timer = null;
-      process.removeListener("exit", emergencyRestore);
     }
   }
 
   function advanceViewport(maxAppRows: number): void {
+    if (userScrolled) return; // don't override manual scroll position
     const firstActive = apps.findIndex(
       (a) => a.state !== "done" && a.state !== "failed"
     );
@@ -244,6 +330,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       if (stopped) return;
       stopped = true;
       stopTimer();
+      disableMouse();
 
       const elapsed = overallElapsed();
 
