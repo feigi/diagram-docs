@@ -43,7 +43,6 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
   let prevTotalRows = 0;
   let firstRender = true;
   let stopped = false;
-  const MAX_APP_ID_LEN = 28;
 
   function overallElapsed(): string {
     return formatElapsed(Date.now() - startTime);
@@ -71,6 +70,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
 
     const frameWidth = getFrameWidth();
     const inner = frameWidth - 2;
+    const MAX_APP_ID_LEN = Math.min(60, Math.max(32, inner - 50));
 
     function row(content: string): string {
       return chalk.dim("│") + " " + padRight(content, inner - 2) + " " + chalk.dim("│");
