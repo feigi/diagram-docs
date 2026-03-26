@@ -70,7 +70,7 @@ export function isProgrammingError(err: unknown): boolean {
 }
 
 /** System-level error codes that indicate resource exhaustion, not LLM issues. */
-const SYSTEM_ERROR_CODES = new Set(["ENOMEM", "ENOSPC", "EMFILE", "ENFILE"]);
+const SYSTEM_ERROR_CODES = new Set(["ENOMEM", "ENOSPC", "EMFILE", "ENFILE", "E2BIG"]);
 
 /**
  * Returns true for OS-level resource errors that should propagate rather
@@ -525,22 +525,47 @@ const claudeCodeProvider: LLMProvider = {
 /**
  * Spawn the standalone Copilot CLI in non-interactive mode with JSONL output.
  *
- * The prompt is passed as the `-p` argument (copilot does not read from stdin).
+ * For small prompts the prompt is passed as the `-p` argument. For large
+ * prompts (above COPILOT_MAX_INLINE_PROMPT_BYTES) the combined prompt is
+ * written to a temp file and the file path is passed instead, with
+ * --allow-all-paths so copilot can read it. This avoids E2BIG when the
+ * argument list exceeds the OS ARG_MAX limit (~256 KB).
+ *
  * JSONL events are parsed from stdout to extract assistant content and report
- * progress.  The full response text is returned on successful exit.
+ * progress. The full response text is returned on successful exit.
  */
+
+/** Max bytes to pass inline via -p before falling back to a temp file. */
+const COPILOT_MAX_INLINE_PROMPT_BYTES = 200_000;
+
 function spawnCopilotJsonl(
   prompt: string,
   model: string,
   timeoutMs: number,
   onProgress?: (event: ProgressEvent) => void,
 ): Promise<string> {
-  return new Promise((resolve, reject) => {
+  // For large prompts, write to a temp file and pass the path via -p so we
+  // don't exceed the OS ARG_MAX limit (E2BIG).
+  let tmpFile: string | undefined;
+  if (Buffer.byteLength(prompt, "utf8") > COPILOT_MAX_INLINE_PROMPT_BYTES) {
+    tmpFile = path.join(os.tmpdir(), `diagram-docs-copilot-prompt-${Date.now()}.txt`);
+    try {
+      fs.writeFileSync(tmpFile, prompt, "utf-8");
+    } catch (err: unknown) {
+      rethrowIfFatal(err);
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new LLMCallError(`Failed to write copilot prompt to temp file: ${msg}`, { cause: err });
+    }
+  }
+
+  const promptArg = tmpFile ?? prompt;
+  return new Promise<string>((resolve, reject) => {
     const args = [
-      "-p", prompt,
+      "-p", promptArg,
       "--output-format", "json",
       "--allow-all-tools",
       "--model", model,
+      ...(tmpFile ? ["--allow-all-paths"] : []),
     ];
     const child = spawn("copilot", args, { stdio: ["pipe", "pipe", "pipe"] });
 
@@ -691,6 +716,23 @@ function spawnCopilotJsonl(
 
     // Close stdin immediately — copilot reads prompt from -p argument, not stdin.
     child.stdin.end();
+  }).finally(() => {
+    // Clean up the temp file if one was created for large prompts.
+    if (tmpFile) {
+      try {
+        fs.unlinkSync(tmpFile);
+      } catch (e) {
+        rethrowIfFatal(e);
+        if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
+          const warning = `Failed to clean up copilot temp file ${tmpFile}: ${(e as Error).message}`;
+          if (onProgress) {
+            onProgress({ line: warning, final: true, kind: "thinking" });
+          } else {
+            try { process.stderr.write(`${warning}\n`); } catch (e2) { if (isProgrammingError(e2)) throw e2; }
+          }
+        }
+      }
+    }
   });
 }
 
