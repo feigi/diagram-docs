@@ -224,9 +224,9 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     },
 
     setStatus(text: string): void {
-      statusText = text;
+      statusText = text.replace(/[\r\n]+/g, " ").trim();
       if (!isTTY) {
-        printLine(text);
+        printLine(statusText);
         return;
       }
       render();
