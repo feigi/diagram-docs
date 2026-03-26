@@ -38,10 +38,16 @@ export async function computeChecksum(
       nodir: true,
     });
 
-    for (const file of files.sort()) {
+    const sortedFiles = files.sort();
+    for (let i = 0; i < sortedFiles.length; i++) {
+      const file = sortedFiles[i];
       const content = fs.readFileSync(path.join(fullPath, file), "utf-8");
       hash.update(`${appPath}/${file}\n`);
       hash.update(content);
+      // Yield to the event loop periodically so the spinner keeps animating.
+      if (i % 50 === 49) {
+        await new Promise((resolve) => setImmediate(resolve));
+      }
     }
   }
 
