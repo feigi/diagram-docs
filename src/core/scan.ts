@@ -100,7 +100,6 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
     include: config.scan.include,
     abstraction: config.abstraction,
   });
-  console.error("Computing checksum...");
   let spinnerIdx = 0;
   const isTTY = process.stderr.isTTY;
   const spinnerTimer = isTTY
