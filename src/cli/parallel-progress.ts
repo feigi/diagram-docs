@@ -140,7 +140,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       appRows.push(row(chalk.dim(`  … and ${hiddenCount} more queued`)));
     }
 
-    const rows = [top, headerRow, modelRow, blankRow, ...appRows, bottom];
+    const rows = [top, headerRow, modelRow, ...appRows, bottom];
     const totalRows = rows.length;
 
     let output = "";
