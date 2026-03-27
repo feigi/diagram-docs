@@ -48,14 +48,17 @@ export function generateSubmoduleDocs(
     }
 
     const d2Files: string[] = [];
+    let changed = false;
 
     // Generate component diagram (only when enabled)
     if (config.levels.component) {
       const d2 = generateComponentDiagram(model, container.id);
-      writeIfChanged(path.join(generatedDir, "c3-component.d2"), d2);
+      if (writeIfChanged(path.join(generatedDir, "c3-component.d2"), d2))
+        changed = true;
 
       // Styles
-      writeIfChanged(path.join(outputDir, "styles.d2"), STYLES_D2);
+      if (writeIfChanged(path.join(outputDir, "styles.d2"), STYLES_D2))
+        changed = true;
 
       // Scaffold user-facing c3-component.d2 (create once, never overwrite)
       const userD2Path = path.join(outputDir, "c3-component.d2");
@@ -89,10 +92,13 @@ export function generateSubmoduleDocs(
       "# Architecture Model Fragment — auto-generated, do not edit\n" +
       "# This is a subset of the root model scoped to this application.\n\n" +
       stringifyYaml(fragment(model, container.id), { lineWidth: 120 });
-    writeIfChanged(
-      path.join(outputDir, "architecture-model.yaml"),
-      fragmentContent,
-    );
+    if (
+      writeIfChanged(
+        path.join(outputDir, "architecture-model.yaml"),
+        fragmentContent,
+      )
+    )
+      changed = true;
 
     results.push({
       containerId: container.id,
@@ -101,7 +107,9 @@ export function generateSubmoduleDocs(
       d2Files,
     });
 
-    console.error(`Generated: ${path.relative(repoRoot, outputDir)}/`);
+    if (changed) {
+      console.error(`Generated: ${path.relative(repoRoot, outputDir)}/`);
+    }
   }
 
   return results;
@@ -111,10 +119,11 @@ function fragment(model: ArchitectureModel, containerId: string) {
   return extractFragment(model, containerId);
 }
 
-function writeIfChanged(filePath: string, content: string): void {
+function writeIfChanged(filePath: string, content: string): boolean {
   if (fs.existsSync(filePath)) {
     const existing = fs.readFileSync(filePath, "utf-8");
-    if (existing === content) return;
+    if (existing === content) return false;
   }
   fs.writeFileSync(filePath, content, "utf-8");
+  return true;
 }

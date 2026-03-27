@@ -44,6 +44,8 @@ export const configSchema = z.object({
       theme: z.number().default(0),
       layout: z.string().default("elk"),
       format: z.enum(["svg", "png"]).default("svg"),
+      /** Timeout in seconds for rendering a single D2 file to SVG/PNG. */
+      renderTimeout: z.number().int().min(10).default(120),
     })
     .default({}),
 
