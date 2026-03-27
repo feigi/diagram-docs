@@ -77,6 +77,14 @@ describe("TypeScript Imports Parser", () => {
   });
 });
 
+describe("TypeScript Imports Parser - error handling", () => {
+  it("throws on missing file", () => {
+    expect(() =>
+      parseTypeScriptImports("/nonexistent/path/file.ts"),
+    ).toThrow();
+  });
+});
+
 describe("TypeScript Module Discovery", () => {
   it("discovers modules from tsconfig source roots", async () => {
     const modules = await extractTypeScriptModules(FIXTURES, defaultConfig.exclude);
