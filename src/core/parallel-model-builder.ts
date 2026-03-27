@@ -171,6 +171,8 @@ export interface ParallelBuildOptions {
   readonly provider: LLMProvider;
   readonly onStatus?: (status: string) => void;
   readonly onProgress?: (event: ProgressEvent) => void;
+  /** Pre-built models for unchanged containers — skips LLM for these. */
+  readonly cachedModels?: Map<string, ArchitectureModel>;
 }
 
 /**
@@ -497,9 +499,25 @@ export async function buildModelParallel(
     }
   }
 
-  const partialPromises = slices.map((slice, i) =>
-    buildOneApp(slice, anchors[i], i),
-  );
+  const cachedModels = options.cachedModels ?? new Map();
+
+  const partialPromises = slices.map((slice, i) => {
+    const appId = slice.applications[0].id;
+    const cached = cachedModels.get(appId);
+
+    if (cached) {
+      if (progress) {
+        progress.updateApp(appId, "done");
+      }
+      onStatus?.(`Cached: ${appId}`);
+      return Promise.resolve({
+        model: cached,
+        fellBack: false,
+      } as AppBuildResult);
+    }
+
+    return buildOneApp(slice, anchors[i], i);
+  });
   const settled = await Promise.allSettled(partialPromises);
 
   // Collect results — programming errors (rejected promises) must propagate,

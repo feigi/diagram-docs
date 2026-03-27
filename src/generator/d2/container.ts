@@ -136,13 +136,13 @@ export function generateContainerDiagram(
   for (const ext of sortById(model.externalSystems)) {
     const id = toD2Id(ext.id);
     const tech = ext.technology ? `\\n[${ext.technology}]` : "";
-    w.shape(
-      id,
-      `${ext.name}\\n\\n[External System]${tech}\\n${wrapText(ext.description)}`,
-      {
-        class: "external-system",
-      },
-    );
+    const isLibrary = ext.tags?.includes("library");
+    const label = isLibrary
+      ? `${ext.name}\\n\\n[Library]${tech}\\n${wrapText(ext.description)}`
+      : `${ext.name}\\n\\n[External System]${tech}\\n${wrapText(ext.description)}`;
+    const className = isLibrary ? "library" : "external-system";
+
+    w.shape(id, label, { class: className });
   }
 
   if (model.externalSystems.length > 0) w.blank();

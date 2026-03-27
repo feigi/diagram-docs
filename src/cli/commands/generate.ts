@@ -9,6 +9,18 @@ import {
 } from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
 import { buildModel } from "../../core/model-builder.js";
+import { discoverApplications } from "../../core/discovery.js";
+import {
+  readProjectCache,
+  writeProjectModel,
+} from "../../core/per-project-cache.js";
+import {
+  readManifestV2,
+  writeManifestV2,
+  createDefaultManifestV2,
+} from "../../core/manifest.js";
+import { runScanAll } from "../../core/scan.js";
+import { slugify } from "../../core/slugify.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
@@ -17,7 +29,6 @@ import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js"
 import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
 import type { Config } from "../../config/schema.js";
-import { runScan, ScanError } from "../../core/scan.js";
 import {
   readManifest,
   writeManifest,
@@ -205,54 +216,140 @@ async function resolveModel(
   config: Config,
   deterministic?: boolean,
 ) {
-  // 1. Explicit path provided — trust the user, skip staleness check
+  // 1. Explicit path — trust the user
   if (modelPath) {
     return loadModel(path.resolve(modelPath));
   }
 
-  // 2. Always scan (returns from cache if source unchanged)
-  let scanResult;
-  try {
-    scanResult = await runScan({ rootDir: configDir, config });
-  } catch (err) {
-    if (err instanceof ScanError) {
-      console.error(`Error: ${err.message}`);
-      process.exit(1);
-    }
-    throw err;
+  // 2. Discover and classify projects
+  const discovered = await discoverApplications(configDir, config, {
+    onSearching: (language, pattern) => {
+      console.error(`  Searching: ${language} (${pattern})`);
+    },
+    onFound: (app) => {
+      console.error(`  Found: ${app.path} (${app.type}: ${app.buildFile})`);
+    },
+  });
+
+  if (discovered.length === 0) {
+    console.error("No applications discovered.");
+    process.exit(1);
   }
-  const { rawStructure } = scanResult;
-  const scanChecksum = rawStructure.checksum;
 
-  // 3. Check if existing model is still fresh
+  const containers = discovered.filter((d) => d.type === "container");
+  const libraries = discovered.filter((d) => d.type === "library");
+
+  // 3. Per-project scan with caching
+  const { rawStructure, projectResults, staleProjects } = await runScanAll({
+    rootDir: configDir,
+    config,
+    projects: discovered,
+  });
+
+  const staleContainers = staleProjects.filter((p) => p.type === "container");
+
+  // 4. If nothing changed, reuse existing model
   const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
-  const manifest = readManifest(configDir) ?? createDefaultManifest();
 
-  if (fs.existsSync(autoModelPath)) {
-    if (manifest.lastModel?.checksum === scanChecksum) {
-      console.error(
-        `Using model: ${path.relative(process.cwd(), autoModelPath)} (up to date)`,
-      );
-      return loadModel(autoModelPath);
-    }
+  if (staleContainers.length === 0 && fs.existsSync(autoModelPath)) {
     console.error(
-      "Source code changed since model was last built. Rebuilding model...",
+      `Using model: ${path.relative(process.cwd(), autoModelPath)} (all containers cached)`,
+    );
+    return loadModel(autoModelPath);
+  }
+
+  if (staleContainers.length > 0) {
+    console.error(
+      `${staleContainers.length} container(s) changed: ${staleContainers.map((c) => c.path).join(", ")}`,
     );
   }
 
-  // 4. Build model: LLM (default) or deterministic (--deterministic)
+  // 5. Collect cached models for unchanged containers
+  const cachedModels = new Map<
+    string,
+    import("../../analyzers/types.js").ArchitectureModel
+  >();
+  for (const result of projectResults) {
+    if (result.project.type !== "container") continue;
+    if (result.fromCache) {
+      const cache = readProjectCache(
+        path.resolve(configDir, result.project.path),
+      );
+      if (cache?.model) {
+        const appId = result.scan.applications[0]?.id;
+        if (appId) cachedModels.set(appId, cache.model);
+      }
+    }
+  }
+
+  const libraryMeta = libraries.map((lib) => ({
+    id: lib.path,
+    name: path.basename(lib.path),
+    language: lib.language,
+    path: lib.path,
+  }));
+
+  // 6. Build model
   const model = await buildModelFromScan(
     rawStructure,
     configDir,
     config,
     deterministic,
+    cachedModels,
+    libraryMeta,
   );
 
-  // 5. Persist model and record scan checksum
+  // 7. Cache per-container model fragments
+  for (const container of containers) {
+    const containerId = slugify(container.path);
+    if (cachedModels.has(containerId)) continue;
+
+    const containerModel: import("../../analyzers/types.js").ArchitectureModel =
+      {
+        version: 1,
+        system: model.system,
+        actors: [],
+        externalSystems: [],
+        containers: model.containers.filter((c) => c.id === containerId),
+        components: model.components.filter(
+          (c) => c.containerId === containerId,
+        ),
+        relationships: model.relationships.filter(
+          (r) =>
+            model.components.some(
+              (c) =>
+                c.containerId === containerId &&
+                (c.id === r.sourceId || c.id === r.targetId),
+            ) ||
+            r.sourceId === containerId ||
+            r.targetId === containerId,
+        ),
+      };
+
+    writeProjectModel(path.resolve(configDir, container.path), containerModel);
+  }
+
+  // 8. Update root manifest
+  const manifestV2 = readManifestV2(configDir) ?? createDefaultManifestV2();
+  for (const proj of discovered) {
+    const id = slugify(proj.path);
+    manifestV2.projects[id] = {
+      type: proj.type,
+      path: proj.path,
+      language: proj.language,
+    };
+  }
+  if (staleContainers.length > 0) {
+    manifestV2.synthesis = { timestamp: new Date().toISOString() };
+  }
+  writeManifestV2(configDir, manifestV2);
+
+  // 9. Persist combined model
   fs.writeFileSync(autoModelPath, serializeModel(model), "utf-8");
+  const manifest = readManifest(configDir) ?? createDefaultManifest();
   manifest.lastModel = {
     timestamp: new Date().toISOString(),
-    checksum: scanChecksum,
+    checksum: rawStructure.checksum,
   };
   writeManifest(configDir, manifest);
   console.error(
@@ -270,10 +367,20 @@ async function buildModelFromScan(
   configDir: string,
   config: Config,
   deterministic?: boolean,
+  cachedModels?: Map<
+    string,
+    import("../../analyzers/types.js").ArchitectureModel
+  >,
+  libraries?: Array<{
+    id: string;
+    name: string;
+    language: string;
+    path: string;
+  }>,
 ) {
   if (deterministic) {
     console.error("Building model (deterministic)...");
-    return buildModel({ config, rawStructure });
+    return buildModel({ config, rawStructure, libraries });
   }
 
   const configPath = path.resolve(configDir, "diagram-docs.yaml");
@@ -287,6 +394,8 @@ async function buildModelFromScan(
       rawStructure,
       config,
       configYaml,
+      cachedModels,
+      libraries,
     });
     return model;
   } catch (err) {

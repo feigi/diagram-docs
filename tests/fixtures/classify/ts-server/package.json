@@ -1,0 +1,8 @@
+{
+  "name": "@monorepo/api",
+  "version": "1.0.0",
+  "scripts": {
+    "start": "node dist/server.js",
+    "dev": "tsx src/server.ts"
+  }
+}
