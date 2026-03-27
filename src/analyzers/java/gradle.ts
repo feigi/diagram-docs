@@ -17,9 +17,10 @@ export function parseSettingsGradle(appPath: string): GradleSettings | null {
   try {
     content = fs.readFileSync(settingsFile, "utf-8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EACCES") {
       process.stderr.write(
-        `Warning: settings file not found during Gradle scan, skipping: ${settingsFile}\n`,
+        `Warning: settings file not readable during Gradle scan, skipping: ${settingsFile}\n`,
       );
       return null;
     }
@@ -91,9 +92,10 @@ export function parseGradleDependencies(
   try {
     content = fs.readFileSync(buildFilePath, "utf-8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EACCES") {
       process.stderr.write(
-        `Warning: build file not found during Gradle scan, skipping: ${buildFilePath}\n`,
+        `Warning: build file not readable during Gradle scan, skipping: ${buildFilePath}\n`,
       );
       return { group: null, projectDeps: [], mavenDeps: [] };
     }

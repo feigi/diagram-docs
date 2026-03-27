@@ -54,4 +54,8 @@ describe("C Includes Parser", () => {
       includes.find((i) => i.path === "stdio.h" && i.isSystem),
     ).toBeTruthy();
   });
+
+  it("throws for a non-existent file", () => {
+    expect(() => parseCIncludes("/nonexistent/path/file.c")).toThrow();
+  });
 });

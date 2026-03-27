@@ -42,14 +42,19 @@ export const cAnalyzer: LanguageAnalyzer = {
 
       for (const file of allFiles) {
         const fullPath = path.join(appPath, file);
-        if (!fs.existsSync(fullPath)) {
-          process.stderr.write(
-            `Warning: source file not found during C scan, skipping: ${fullPath}\n`,
-          );
-          continue;
+        let includes: ReturnType<typeof parseCIncludes>;
+        try {
+          includes = parseCIncludes(fullPath);
+        } catch (err) {
+          const code = (err as NodeJS.ErrnoException).code;
+          if (code === "ENOENT" || code === "EACCES") {
+            process.stderr.write(
+              `Warning: source file not readable during C scan, skipping: ${fullPath}\n`,
+            );
+            continue;
+          }
+          throw err;
         }
-
-        const includes = parseCIncludes(fullPath);
         for (const inc of includes) {
           const isLocal =
             allLocalHeaders.has(inc.path) ||

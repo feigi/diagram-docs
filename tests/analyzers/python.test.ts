@@ -72,4 +72,9 @@ describe("Python Imports Parser", () => {
     expect(imports.some((i) => i.source === "orders.models")).toBe(true);
     expect(imports.some((i) => i.source === "orders.db")).toBe(true);
   });
+
+  it("returns [] for a non-existent file", () => {
+    const result = parsePythonImports("/nonexistent/path/module.py");
+    expect(result).toEqual([]);
+  });
 });
