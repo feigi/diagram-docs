@@ -24,6 +24,11 @@ describe("ParallelProgress", () => {
   beforeEach(() => {
     vi.stubGlobal("process", {
       ...process,
+      on: process.on.bind(process),
+      off: process.off.bind(process),
+      addListener: process.addListener.bind(process),
+      removeListener: process.removeListener.bind(process),
+      exit: process.exit.bind(process),
       stderr: { ...process.stderr, isTTY: false, write: process.stderr.write },
     });
   });
