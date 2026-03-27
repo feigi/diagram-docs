@@ -2,28 +2,32 @@ import * as path from "node:path";
 import { glob } from "glob";
 import { getRegistry } from "../analyzers/registry.js";
 import type { Config } from "../config/schema.js";
+import type { ProjectType } from "../analyzers/types.js";
+import { classifyProject } from "./classify.js";
 
-export interface DiscoveredApp {
+/** @deprecated Use DiscoveredProject instead */
+export type DiscoveredApp = DiscoveredProject;
+
+export interface DiscoveredProject {
   path: string;
   buildFile: string;
   language: string;
   analyzerId: string;
+  type: ProjectType;
 }
 
 export interface DiscoveryProgress {
-  /** Called when starting to search for a language's build files. */
   onSearching: (language: string, pattern: string) => void;
-  /** Called each time a new app folder is found. */
-  onFound: (app: DiscoveredApp) => void;
+  onFound: (app: DiscoveredProject) => void;
 }
 
 export async function discoverApplications(
   rootDir: string,
   config: Config,
   progress?: DiscoveryProgress,
-): Promise<DiscoveredApp[]> {
+): Promise<DiscoveredProject[]> {
   const registry = getRegistry();
-  const discovered: DiscoveredApp[] = [];
+  const discovered: DiscoveredProject[] = [];
   const seenPaths = new Set<string>();
 
   for (const analyzer of registry) {
@@ -33,7 +37,6 @@ export async function discoverApplications(
         path.join(inc, "**", pattern),
       );
 
-      // Also check root level
       includePatterns.push(pattern);
 
       for (const includePattern of includePatterns) {
@@ -50,12 +53,16 @@ export async function discoverApplications(
           if (seenPaths.has(absAppDir)) continue;
           seenPaths.add(absAppDir);
 
-          const found: DiscoveredApp = {
+          const base = {
             path: appDir === "." ? "." : appDir,
             buildFile: path.basename(match),
             language: analyzer.id,
             analyzerId: analyzer.id,
           };
+
+          const type = classifyProject(base, absAppDir, config.type);
+
+          const found: DiscoveredProject = { ...base, type };
           progress?.onFound(found);
           discovered.push(found);
         }
