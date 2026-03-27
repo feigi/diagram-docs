@@ -5,8 +5,10 @@ export interface TypeScriptImportInfo {
   isRelative: boolean;
 }
 
-// import ... from "source"  /  import type ... from "source"  (including multi-line)
-const STATIC_IMPORT = /^\s*import\s+(?:type\s+)?(?:[\s\S]*?)\s+from\s+["']([^"']+)["']/gm;
+// import ... from "source"  /  import type ... from "source"  (including multi-line braces)
+// Uses {[^}]*} for destructured imports (bounded by closing brace, safe across newlines)
+// and [^\n]*? for default/namespace/type-alias imports (bounded by newline)
+const STATIC_IMPORT = /^\s*import\s+(?:type\s+)?(?:\{[^}]*\}|[^\n]*?)\s+from\s+["']([^"']+)["']/gm;
 
 // import("source")
 const DYNAMIC_IMPORT = /import\(\s*["']([^"']+)["']\s*\)/g;
