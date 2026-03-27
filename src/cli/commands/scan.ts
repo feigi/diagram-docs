@@ -1,10 +1,39 @@
 import { Command } from "commander";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { loadConfig } from "../../config/loader.js";
-import { runScan, ScanError } from "../../core/scan.js";
+import {
+  runScan,
+  ScanError,
+  runProjectScan,
+  runScanAll,
+} from "../../core/scan.js";
+import { discoverApplications } from "../../core/discovery.js";
+import { getRegistry } from "../../analyzers/registry.js";
 
 // Re-export for backward compatibility with existing tests
 export { matchCrossAppCoordinates } from "../../core/scan.js";
+
+/**
+ * Detect if the given directory is a project directory (has a build file).
+ * Returns the matching DiscoveredProject-like info, or null if not a project dir.
+ */
+function detectBuildFile(
+  dir: string,
+): { buildFile: string; language: string; analyzerId: string } | null {
+  for (const analyzer of getRegistry()) {
+    for (const pattern of analyzer.buildFilePatterns) {
+      if (fs.existsSync(path.join(dir, pattern))) {
+        return {
+          buildFile: pattern,
+          language: analyzer.id,
+          analyzerId: analyzer.id,
+        };
+      }
+    }
+  }
+  return null;
+}
 
 export const scanCommand = new Command("scan")
   .description("Scan source code and produce raw-structure.json")
@@ -13,18 +42,79 @@ export const scanCommand = new Command("scan")
   .option("--force", "Skip cache and re-scan everything")
   .action(async (options) => {
     const { config, configDir } = loadConfig(options.config);
+    const cwd = process.cwd();
 
     try {
-      const { rawStructure, fromCache } = await runScan({
-        rootDir: configDir,
-        config,
-        force: options.force,
-      });
+      // Check if we're in a project subdirectory (has a build file)
+      const buildInfo = detectBuildFile(cwd);
+      const isProjectDir =
+        buildInfo !== null && path.resolve(cwd) !== path.resolve(configDir);
 
-      if (fromCache) {
-        console.error(
-          "Source files unchanged since last scan. Use --force to re-scan.",
-        );
+      let rawStructure;
+
+      if (isProjectDir) {
+        // Single-project scan from a container/library directory
+        const relPath = path.relative(configDir, cwd);
+        console.error(`Scanning project: ${relPath}`);
+
+        const result = await runProjectScan({
+          rootDir: configDir,
+          project: {
+            path: relPath,
+            buildFile: buildInfo.buildFile,
+            language: buildInfo.language,
+            analyzerId: buildInfo.analyzerId,
+            type: "container", // Default; classification happens at discovery
+          },
+          config,
+          force: options.force,
+        });
+
+        if (result.fromCache) {
+          console.error(
+            "Source files unchanged since last scan. Use --force to re-scan.",
+          );
+        }
+
+        rawStructure = result.scan;
+      } else {
+        // Root-level scan: discover all projects and scan them
+        const discovered = await discoverApplications(configDir, config, {
+          onSearching: (language, pattern) => {
+            console.error(`  Searching: ${language} (${pattern})`);
+          },
+          onFound: (app) => {
+            console.error(
+              `  Found: ${app.path} (${app.type}: ${app.buildFile})`,
+            );
+          },
+        });
+
+        if (discovered.length === 0) {
+          // Fall back to legacy single-scan for non-monorepo projects
+          const { rawStructure: legacyResult, fromCache } = await runScan({
+            rootDir: configDir,
+            config,
+            force: options.force,
+          });
+
+          if (fromCache) {
+            console.error(
+              "Source files unchanged since last scan. Use --force to re-scan.",
+            );
+          }
+
+          rawStructure = legacyResult;
+        } else {
+          const { rawStructure: combined } = await runScanAll({
+            rootDir: configDir,
+            config,
+            projects: discovered,
+            force: options.force,
+          });
+
+          rawStructure = combined;
+        }
       }
 
       const json = JSON.stringify(rawStructure, null, 2);
