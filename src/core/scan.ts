@@ -5,18 +5,24 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { discoverApplications } from "./discovery.js";
-import { computeChecksum } from "./checksum.js";
+import { computeChecksum, computeProjectChecksum } from "./checksum.js";
 import {
   readManifest,
   writeManifest,
   createDefaultManifest,
 } from "./manifest.js";
+import {
+  readProjectCache,
+  writeProjectScan,
+  isProjectStale,
+} from "./per-project-cache.js";
 import { getRegistry, getAnalyzer } from "../analyzers/registry.js";
 import { slugify } from "./slugify.js";
 import { SPINNER_FRAMES, SPINNER_INTERVAL } from "../cli/terminal-utils.js";
 import { computeEffectiveExcludes } from "../config/loader.js";
 import type { Config } from "../config/schema.js";
 import type { RawStructure, ScannedApplication } from "../analyzers/types.js";
+import type { DiscoveredProject } from "./discovery.js";
 
 export class ScanError extends Error {
   constructor(message: string) {
@@ -362,4 +368,147 @@ export async function runScan({
   console.error("Manifest updated.");
 
   return { rawStructure, fromCache: false };
+}
+
+export interface ProjectScanResult {
+  project: DiscoveredProject;
+  scan: RawStructure;
+  fromCache: boolean;
+}
+
+/**
+ * Scan a single project, using per-project cache.
+ */
+export async function runProjectScan(options: {
+  rootDir: string;
+  project: DiscoveredProject;
+  config: Config;
+  force?: boolean;
+}): Promise<ProjectScanResult> {
+  const { rootDir, project, config, force } = options;
+  const projectAbsPath = path.resolve(rootDir, project.path);
+
+  const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
+
+  const configFingerprint = JSON.stringify({
+    exclude: effectiveExcludes,
+    abstraction: config.abstraction,
+  });
+
+  const checksum = await computeProjectChecksum(
+    projectAbsPath,
+    effectiveExcludes,
+    configFingerprint,
+  );
+
+  // Check per-project cache
+  if (!force && !isProjectStale(projectAbsPath, checksum)) {
+    const cache = readProjectCache(projectAbsPath);
+    if (cache) {
+      return { project, scan: cache.scan, fromCache: true };
+    }
+  }
+
+  // Run analyzer
+  const analyzer = getAnalyzer(project.analyzerId);
+  if (!analyzer) {
+    throw new ScanError(`No analyzer found for ${project.analyzerId}`);
+  }
+
+  const scanConfig = {
+    exclude: effectiveExcludes,
+    abstraction: config.abstraction,
+  };
+
+  const result = await analyzer.analyze(projectAbsPath, scanConfig);
+
+  // Normalize IDs to relative paths
+  const relativeId = slugify(project.path);
+  const absolutePrefix = slugify(projectAbsPath);
+
+  result.path = project.path;
+  result.id = relativeId;
+
+  for (const mod of result.modules) {
+    if (mod.id.startsWith(absolutePrefix)) {
+      mod.id = relativeId + mod.id.slice(absolutePrefix.length);
+    }
+  }
+  for (const mod of result.modules) {
+    for (const imp of mod.imports) {
+      if (imp.resolved?.startsWith(absolutePrefix)) {
+        imp.resolved = relativeId + imp.resolved.slice(absolutePrefix.length);
+      }
+    }
+  }
+
+  const scan: RawStructure = {
+    version: 1,
+    scannedAt: new Date().toISOString(),
+    checksum,
+    applications: [result],
+  };
+
+  // Write per-project cache
+  writeProjectScan(projectAbsPath, scan, checksum);
+
+  return { project, scan, fromCache: false };
+}
+
+/**
+ * Scan all projects from root, using per-project caching.
+ * Returns combined RawStructure + per-project results.
+ */
+export async function runScanAll(options: {
+  rootDir: string;
+  config: Config;
+  projects: DiscoveredProject[];
+  force?: boolean;
+}): Promise<{
+  rawStructure: RawStructure;
+  projectResults: ProjectScanResult[];
+  staleProjects: DiscoveredProject[];
+}> {
+  const { rootDir, config, projects, force } = options;
+  const projectResults: ProjectScanResult[] = [];
+  const staleProjects: DiscoveredProject[] = [];
+
+  for (const project of projects) {
+    console.error(`Scanning: ${project.path} (${project.type})`);
+    const result = await runProjectScan({
+      rootDir,
+      project,
+      config,
+      force,
+    });
+
+    if (result.fromCache) {
+      console.error(`  Cached (unchanged)`);
+    } else {
+      console.error(`  Scanned`);
+      staleProjects.push(project);
+    }
+
+    projectResults.push(result);
+  }
+
+  // Combine into a single RawStructure
+  const allApplications = projectResults.flatMap((r) => r.scan.applications);
+
+  // Cross-app coordinate matching
+  matchCrossAppCoordinates(allApplications);
+
+  const combinedChecksum = allApplications
+    .map((a) => a.id)
+    .sort()
+    .join(",");
+
+  const rawStructure: RawStructure = {
+    version: 1,
+    scannedAt: new Date().toISOString(),
+    checksum: `combined:${combinedChecksum}`,
+    applications: allApplications,
+  };
+
+  return { rawStructure, projectResults, staleProjects };
 }
