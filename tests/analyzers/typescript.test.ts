@@ -1,9 +1,9 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as path from "node:path";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import { parseTypeScriptImports } from "../../src/analyzers/typescript/imports.js";
-import { extractTypeScriptModules } from "../../src/analyzers/typescript/modules.js";
+import { extractTypeScriptModules, resolveSourceRoot } from "../../src/analyzers/typescript/modules.js";
 import { typescriptAnalyzer } from "../../src/analyzers/typescript/index.js";
 
 const FIXTURES = path.resolve(
@@ -78,10 +78,10 @@ describe("TypeScript Imports Parser", () => {
 });
 
 describe("TypeScript Imports Parser - error handling", () => {
-  it("throws on missing file", () => {
+  it("throws ENOENT on missing file", () => {
     expect(() =>
       parseTypeScriptImports("/nonexistent/path/file.ts"),
-    ).toThrow();
+    ).toThrow(/ENOENT/);
   });
 });
 
@@ -173,5 +173,54 @@ describe("TypeScript Analyzer", () => {
 
     expect(externalImports.some((i) => i.source === "express")).toBe(true);
     expect(internalImports.some((i) => i.source === "../middleware/auth")).toBe(true);
+  });
+});
+
+const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
+
+describe("TypeScript Analyzer - error handling", () => {
+  it("skips missing source files and continues scan", async () => {
+    const original = fs.readFileSync;
+    const spy = vi.spyOn(fs, "readFileSync").mockImplementation((file: any, opts?: any): any => {
+      if (typeof file === "string" && file.endsWith("users.ts")) {
+        const err = Object.assign(new Error(`ENOENT: no such file or directory: ${file}`), { code: "ENOENT" });
+        throw err;
+      }
+      return original(file, opts);
+    });
+    try {
+      const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+      expect(result.language).toBe("typescript");
+      expect(result.modules.length).toBeGreaterThan(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.skipIf(isRoot)("propagates I/O errors reading package.json", async () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dd-test-pkg-"));
+    fs.writeFileSync(path.join(tmpDir, "tsconfig.json"), "{}");
+    const pkgPath = path.join(tmpDir, "package.json");
+    fs.writeFileSync(pkgPath, '{"name":"test"}');
+    fs.chmodSync(pkgPath, 0o000);
+    try {
+      await expect(typescriptAnalyzer.analyze(tmpDir, defaultConfig)).rejects.toThrow();
+    } finally {
+      fs.chmodSync(pkgPath, 0o644);
+      fs.rmSync(tmpDir, { recursive: true });
+    }
+  });
+
+  it.skipIf(isRoot)("propagates I/O errors reading tsconfig.json", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "dd-test-tsconfig-"));
+    const tsconfigPath = path.join(tmpDir, "tsconfig.json");
+    fs.writeFileSync(tsconfigPath, '{"compilerOptions":{"rootDir":"src"}}');
+    fs.chmodSync(tsconfigPath, 0o000);
+    try {
+      expect(() => resolveSourceRoot(tmpDir)).toThrow();
+    } finally {
+      fs.chmodSync(tsconfigPath, 0o644);
+      fs.rmSync(tmpDir, { recursive: true });
+    }
   });
 });
