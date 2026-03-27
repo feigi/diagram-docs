@@ -6,3 +6,4 @@ bench-results.json
 .idea
 .worktrees/
 .diagram-docs/logs/
+*.tgz
