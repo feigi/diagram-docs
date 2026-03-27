@@ -1,14 +1,18 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ProjectType } from "../analyzers/types.js";
-import type { DiscoveredApp } from "./discovery.js";
+
+interface ClassifyInput {
+  language: string;
+  buildFile: string;
+}
 
 /**
  * Classify a discovered project as container or library by inspecting
  * its build file. An explicit config override takes precedence.
  */
 export function classifyProject(
-  app: DiscoveredApp,
+  app: ClassifyInput,
   appAbsPath: string,
   configOverride?: ProjectType,
 ): ProjectType {
