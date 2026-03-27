@@ -30,6 +30,8 @@ export function generateSubmoduleDocs(
 ): SubmoduleOutputInfo[] {
   const results: SubmoduleOutputInfo[] = [];
   const subCfg = config.submodules;
+  let changedCount = 0;
+  let unchangedCount = 0;
 
   for (const container of model.containers) {
     // Check for explicit exclude
@@ -108,8 +110,17 @@ export function generateSubmoduleDocs(
     });
 
     if (changed) {
+      changedCount++;
       console.error(`Generated: ${path.relative(repoRoot, outputDir)}/`);
+    } else {
+      unchangedCount++;
     }
+  }
+
+  if (unchangedCount > 0 && changedCount === 0) {
+    console.error(`${unchangedCount} submodule doc(s) unchanged.`);
+  } else if (unchangedCount > 0) {
+    console.error(`${unchangedCount} submodule doc(s) unchanged.`);
   }
 
   return results;
