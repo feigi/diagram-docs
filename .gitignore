@@ -7,3 +7,4 @@ bench-results.json
 .worktrees/
 .diagram-docs/logs/
 *.tgz
+.serena/
