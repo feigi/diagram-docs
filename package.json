@@ -7,7 +7,7 @@
     "diagram-docs": "./dist/cli/index.js"
   },
   "scripts": {
-    "prepare": "tsc",
+    "prepare": "tsc && chmod +x dist/cli/index.js",
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
