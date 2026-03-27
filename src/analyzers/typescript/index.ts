@@ -39,7 +39,12 @@ function readPackageJson(appPath: string): PackageJson | null {
   try {
     return JSON.parse(content) as PackageJson;
   } catch (err) {
-    if (err instanceof SyntaxError) return null;
+    if (err instanceof SyntaxError) {
+      process.stderr.write(
+        `Warning: ${pkgPath} contains invalid JSON (${err.message}), dependency data will be missing\n`,
+      );
+      return null;
+    }
     throw err;
   }
 }
@@ -113,7 +118,12 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
         try {
           tsImports = parseTypeScriptImports(fullPath);
         } catch (err) {
-          if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+            process.stderr.write(
+              `Warning: source file not found during import scan, skipping: ${fullPath}\n`,
+            );
+            continue;
+          }
           throw err;
         }
 

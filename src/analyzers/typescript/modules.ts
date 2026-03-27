@@ -46,7 +46,9 @@ export function resolveSourceRoot(appPath: string): string {
     }
   } catch (err) {
     if (!(err instanceof SyntaxError)) throw err;
-    // Malformed tsconfig — fall back to appPath
+    process.stderr.write(
+      `Warning: ${tsconfigPath} contains invalid JSON (${(err as SyntaxError).message}), falling back to project root for source discovery\n`,
+    );
   }
 
   return appPath;
