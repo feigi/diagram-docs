@@ -23,11 +23,19 @@ import {
 export interface BuildModelOptions {
   readonly config: Config;
   readonly rawStructure: RawStructure;
+  /** Libraries discovered in the project — injected as external systems. */
+  readonly libraries?: Array<{
+    id: string;
+    name: string;
+    language: string;
+    path: string;
+  }>;
 }
 
 export function buildModel({
   config,
   rawStructure,
+  libraries,
 }: BuildModelOptions): ArchitectureModel {
   const apps = rawStructure.applications;
   const granularity = config.abstraction.granularity;
@@ -150,6 +158,21 @@ export function buildModel({
     configExternalSystems,
     detectedExternalSystems,
   );
+
+  // Inject libraries as external systems
+  if (libraries) {
+    for (const lib of libraries) {
+      const libId = slugify(lib.id);
+      if (externalSystems.some((es) => es.id === libId)) continue;
+      externalSystems.push({
+        id: libId,
+        name: humanizeName(lib.name),
+        description: `Shared ${lib.language} library`,
+        technology: lib.language,
+        tags: ["library"],
+      });
+    }
+  }
 
   // Relationships
   const relationships = buildRelationships(
