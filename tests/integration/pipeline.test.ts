@@ -13,6 +13,9 @@ import type {
   RawStructure,
   ScannedApplication,
 } from "../../src/analyzers/types.js";
+import { classifyProject } from "../../src/core/classify.js";
+import { computeProjectChecksum } from "../../src/core/checksum.js";
+import { resolveConfig } from "../../src/core/cascading-config.js";
 
 const MONOREPO = path.resolve(__dirname, "../fixtures/monorepo");
 const CONFIG_PATH = path.join(MONOREPO, "diagram-docs.yaml");
@@ -216,5 +219,69 @@ describe("Integration: Post-scan cross-app coordinate matching", () => {
 
     expect(apps[0].internalImports).toHaveLength(0);
     expect(apps[0].externalDependencies).toHaveLength(1);
+  });
+});
+
+describe("per-container scanning", () => {
+  const monorepoRoot = path.resolve("tests/fixtures/monorepo");
+
+  it("classifies libs/mathlib as library", () => {
+    const type = classifyProject(
+      {
+        path: "libs/mathlib",
+        buildFile: "CMakeLists.txt",
+        language: "c",
+        analyzerId: "c",
+      },
+      path.join(monorepoRoot, "libs/mathlib"),
+    );
+    expect(type).toBe("library");
+  });
+
+  it("classifies services/api-gateway as container", async () => {
+    // The TS analyzer discovers by tsconfig.json. classifyTypeScript returns
+    // "container" when buildFile !== "package.json" (early return).
+    const config = resolveConfig(monorepoRoot);
+    const projects = await discoverApplications(monorepoRoot, config);
+    const apiGateway = projects.find((p) => p.path.includes("api-gateway"));
+
+    // Verify it was found and classified as container
+    expect(apiGateway).toBeDefined();
+    expect(apiGateway!.type).toBe("container");
+  });
+
+  it("computes independent checksums per project", async () => {
+    const checksumA = await computeProjectChecksum(
+      path.join(monorepoRoot, "services/api-gateway"),
+      [],
+    );
+    const checksumB = await computeProjectChecksum(
+      path.join(monorepoRoot, "libs/mathlib"),
+      [],
+    );
+    expect(checksumA).not.toBe(checksumB);
+  });
+
+  it("resolves cascading config for container", () => {
+    const config = resolveConfig(
+      path.join(monorepoRoot, "services/api-gateway"),
+    );
+    // Has local override (from Task 6 fixture)
+    expect(config.levels.component).toBe(false);
+    // Inherits from root
+    expect(config.system.name).toBe("Test Monorepo");
+  });
+
+  it("discovery returns classified projects", async () => {
+    const config = resolveConfig(monorepoRoot);
+    const projects = await discoverApplications(monorepoRoot, config);
+
+    const mathlib = projects.find((p) => p.path.includes("mathlib"));
+    expect(mathlib?.type).toBe("library");
+
+    // All projects should have a type
+    for (const proj of projects) {
+      expect(["container", "library"]).toContain(proj.type);
+    }
   });
 });
