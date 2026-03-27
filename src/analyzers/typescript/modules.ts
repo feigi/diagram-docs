@@ -20,9 +20,10 @@ export function resolveSourceRoot(appPath: string): string {
   const tsconfigPath = path.join(appPath, "tsconfig.json");
   if (!fs.existsSync(tsconfigPath)) return appPath;
 
+  // I/O errors propagate; only JSON parse failures fall back to appPath
+  const raw = fs.readFileSync(tsconfigPath, "utf-8");
   try {
     // Strip comments (// and /* */) for JSON parsing
-    const raw = fs.readFileSync(tsconfigPath, "utf-8");
     const stripped = raw
       .replace(/\/\/.*$/gm, "")
       .replace(/\/\*[\s\S]*?\*\//g, "");
@@ -43,8 +44,9 @@ export function resolveSourceRoot(appPath: string): string {
       const resolved = path.resolve(appPath, first);
       if (fs.existsSync(resolved)) return resolved;
     }
-  } catch {
-    // Parse error — fall back to appPath
+  } catch (err) {
+    if (!(err instanceof SyntaxError)) throw err;
+    // Malformed tsconfig — fall back to appPath
   }
 
   return appPath;
