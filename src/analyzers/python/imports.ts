@@ -9,7 +9,18 @@ export interface PythonImportInfo {
 }
 
 export function parsePythonImports(filePath: string): PythonImportInfo[] {
-  const content = fs.readFileSync(filePath, "utf-8");
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      process.stderr.write(
+        `Warning: source file not found during import scan, skipping: ${filePath}\n`,
+      );
+      return [];
+    }
+    throw err;
+  }
   const imports: PythonImportInfo[] = [];
   const seen = new Set<string>();
 

@@ -49,7 +49,18 @@ export async function extractPackages(
 
     // Extract public class name (simple heuristic)
     const className = path.basename(file, ".java");
-    const content = fs.readFileSync(fullPath, "utf-8");
+    let content: string;
+    try {
+      content = fs.readFileSync(fullPath, "utf-8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        process.stderr.write(
+          `Warning: source file not found during package scan, skipping: ${fullPath}\n`,
+        );
+        continue;
+      }
+      throw err;
+    }
     if (
       content.includes(`public class ${className}`) ||
       content.includes(`public interface ${className}`) ||
@@ -67,7 +78,18 @@ export async function extractPackages(
  * Returns annotation names without the '@' prefix.
  */
 export function detectClassAnnotations(filePath: string): string[] {
-  const content = fs.readFileSync(filePath, "utf-8");
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      process.stderr.write(
+        `Warning: source file not found during annotation scan, skipping: ${filePath}\n`,
+      );
+      return [];
+    }
+    throw err;
+  }
   const annotations: string[] = [];
   for (const match of content.matchAll(CLASS_ANNOTATION_RE)) {
     annotations.push(match[1].slice(1)); // Remove '@' prefix

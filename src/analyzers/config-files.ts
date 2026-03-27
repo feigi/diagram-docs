@@ -58,10 +58,9 @@ export function collectConfigFiles(
 
   for (const file of files) {
     const fullPath = path.join(dir, file);
-    const stat = fs.statSync(fullPath);
-    if (stat.size > MAX_FILE_SIZE) continue;
-
     try {
+      const stat = fs.statSync(fullPath);
+      if (stat.size > MAX_FILE_SIZE) continue;
       const content = fs.readFileSync(fullPath, "utf-8");
       // Skip files that look binary (contain null bytes)
       if (content.includes("\0")) continue;
@@ -69,8 +68,15 @@ export function collectConfigFiles(
         path: path.relative(appPath, fullPath),
         content,
       });
-    } catch {
-      // Skip unreadable files
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "EACCES") {
+        process.stderr.write(
+          `Warning: skipping config file ${fullPath}: ${(err as Error).message}\n`,
+        );
+        continue;
+      }
+      throw err;
     }
   }
 

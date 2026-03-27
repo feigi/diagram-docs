@@ -1,5 +1,11 @@
+#!/usr/bin/env sh
 set -e
+
+STAGED_FILES=$(git diff --name-only --cached)
 
 npm run format
 npm run lint -- --fix
-git add -u
+
+if [ -n "$STAGED_FILES" ]; then
+  echo "$STAGED_FILES" | xargs git add
+fi
