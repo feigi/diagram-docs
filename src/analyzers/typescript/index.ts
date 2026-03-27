@@ -35,10 +35,12 @@ interface PackageJson {
 function readPackageJson(appPath: string): PackageJson | null {
   const pkgPath = path.join(appPath, "package.json");
   if (!fs.existsSync(pkgPath)) return null;
+  const content = fs.readFileSync(pkgPath, "utf-8");
   try {
-    return JSON.parse(fs.readFileSync(pkgPath, "utf-8"));
-  } catch {
-    return null;
+    return JSON.parse(content) as PackageJson;
+  } catch (err) {
+    if (err instanceof SyntaxError) return null;
+    throw err;
   }
 }
 
