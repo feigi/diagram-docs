@@ -1258,6 +1258,13 @@ export interface BuildModelWithLLMOptions {
   readonly existingModelYaml?: string;
   readonly onStatus?: (status: string, providerName: string) => void;
   readonly onProgress?: (event: ProgressEvent) => void;
+  readonly cachedModels?: Map<string, ArchitectureModel>;
+  readonly libraries?: Array<{
+    id: string;
+    name: string;
+    language: string;
+    path: string;
+  }>;
 }
 
 export async function buildModelWithLLM(
@@ -1293,6 +1300,7 @@ export async function buildModelWithLLM(
           ? (status) => options.onStatus!(status, resolvedProvider.name)
           : undefined,
         onProgress: options.onProgress,
+        cachedModels: options.cachedModels,
       });
     } catch (err) {
       if (
@@ -1317,6 +1325,7 @@ export async function buildModelWithLLM(
       const anchor = buildModel({
         config: options.config,
         rawStructure: options.rawStructure,
+        libraries: options.libraries,
       });
       existingModelYaml = stringifyYaml(anchor, { lineWidth: 120 });
     } catch (err: unknown) {
