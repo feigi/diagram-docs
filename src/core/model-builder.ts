@@ -36,6 +36,10 @@ export function buildModel({
   // Skip shell parent apps: apps with 0 modules whose path is a prefix of another app's path.
   // These are build-system root projects (e.g., Gradle multi-module roots) that contain
   // no code of their own — their subprojects are scanned as separate apps.
+  //
+  // NOTE: Non-root shell parents are normally rolled up during scan (rollUpShellParents).
+  // This filter acts as a safety net for root (`.`) shell parents and any edge cases
+  // where roll-up was not applied (e.g., pre-existing raw-structure.json).
   const isChildPath = (parent: string, child: string): boolean => {
     if (parent === ".") return child !== ".";
     return child.startsWith(parent + "/");

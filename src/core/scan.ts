@@ -74,6 +74,128 @@ export function matchCrossAppCoordinates(
   }
 }
 
+/**
+ * Post-scan pass: merge subproject apps into their shell parent's identity.
+ *
+ * A "shell parent" is an app with 0 modules whose path is a prefix of at least
+ * one other app's path — typically a Gradle/Maven multi-module root that has no
+ * source code of its own.
+ *
+ * - Root (`.`) shell parents are skipped (monorepo roots, not single deployable units).
+ * - Single child → child inherits parent's ID, name, and path.
+ * - Multiple children → modules/deps are merged under the parent's identity.
+ *
+ * All `internalImports.targetApplicationId` references across ALL apps are
+ * rewritten so downstream consumers never see the old child IDs.
+ */
+export function rollUpShellParents(
+  applications: ScannedApplication[],
+): ScannedApplication[] {
+  const byPath = new Map(applications.map((a) => [a.path, a]));
+
+  // Identify non-root shell parents
+  const shellParents = applications.filter(
+    (app) =>
+      app.modules.length === 0 &&
+      app.path !== "." &&
+      applications.some(
+        (other) =>
+          other.path !== app.path && isDirectChild(app.path, other.path),
+      ),
+  );
+
+  if (shellParents.length === 0) return applications;
+
+  // Map: old child ID → new (parent) ID
+  const remap = new Map<string, string>();
+  const removedIds = new Set<string>();
+
+  const merged: ScannedApplication[] = [];
+
+  for (const parent of shellParents) {
+    const children = applications.filter(
+      (a) => a.path !== parent.path && isDirectChild(parent.path, a.path),
+    );
+    if (children.length === 0) continue;
+
+    removedIds.add(parent.id);
+    for (const child of children) {
+      removedIds.add(child.id);
+      remap.set(child.id, parent.id);
+    }
+
+    // Also remap the parent's own ID (in case something references it)
+    // This is a no-op mapping but keeps the logic uniform
+    remap.set(parent.id, parent.id);
+
+    const mergedApp = mergeIntoParent(parent, children);
+
+    // Remove intra-group internalImports (children referencing each other)
+    mergedApp.internalImports = mergedApp.internalImports.filter(
+      (imp) => !removedIds.has(imp.targetApplicationId),
+    );
+
+    merged.push(mergedApp);
+  }
+
+  // Build final list: keep apps not involved in any roll-up, then add merged
+  const result = applications.filter((a) => !removedIds.has(a.id));
+  result.push(...merged);
+
+  // Rewrite internalImports across all remaining apps
+  for (const app of result) {
+    for (const imp of app.internalImports) {
+      const newId = remap.get(imp.targetApplicationId);
+      if (newId) {
+        imp.targetApplicationId = newId;
+        // Also update targetPath to the merged app's path
+        const target = result.find((a) => a.id === newId);
+        if (target) imp.targetPath = target.path;
+      }
+    }
+  }
+
+  return result.sort((a, b) => a.path.localeCompare(b.path));
+}
+
+function isDirectChild(parentPath: string, candidatePath: string): boolean {
+  if (!candidatePath.startsWith(parentPath + "/")) return false;
+  const rest = candidatePath.slice(parentPath.length + 1);
+  return !rest.includes("/");
+}
+
+function mergeIntoParent(
+  parent: ScannedApplication,
+  children: ScannedApplication[],
+): ScannedApplication {
+  const first = children[0];
+
+  // Deduplicate external deps by name
+  const seenDeps = new Set<string>();
+  const externalDependencies = [];
+  for (const child of children) {
+    for (const dep of child.externalDependencies) {
+      if (!seenDeps.has(dep.name)) {
+        seenDeps.add(dep.name);
+        externalDependencies.push(dep);
+      }
+    }
+  }
+
+  return {
+    id: parent.id,
+    path: parent.path,
+    name: parent.name,
+    language: first.language,
+    buildFile: first.buildFile,
+    modules: children.flatMap((c) => c.modules),
+    externalDependencies,
+    internalImports: children.flatMap((c) => c.internalImports),
+    publishedAs: children.find((c) => c.publishedAs)?.publishedAs,
+    configFiles: children.flatMap((c) => c.configFiles ?? []),
+  };
+}
+
 export async function runScan({
   rootDir,
   config,
@@ -212,11 +334,14 @@ export async function runScan({
   // Cross-app coordinate matching
   matchCrossAppCoordinates(applications);
 
+  // Roll up shell parent projects (e.g. Gradle multi-module roots with no code)
+  const rolledUpApplications = rollUpShellParents(applications);
+
   const rawStructure: RawStructure = {
     version: 1,
     scannedAt: new Date().toISOString(),
     checksum,
-    applications,
+    applications: rolledUpApplications,
   };
 
   const json = JSON.stringify(rawStructure, null, 2);
