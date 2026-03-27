@@ -5,8 +5,8 @@ export interface TypeScriptImportInfo {
   isRelative: boolean;
 }
 
-// import ... from "source"  /  import type ... from "source"
-const STATIC_IMPORT = /^\s*import\s+(?:type\s+)?(?:[^\n]*?)\s+from\s+["']([^"']+)["']/gm;
+// import ... from "source"  /  import type ... from "source"  (including multi-line)
+const STATIC_IMPORT = /^\s*import\s+(?:type\s+)?(?:[\s\S]*?)\s+from\s+["']([^"']+)["']/gm;
 
 // import("source")
 const DYNAMIC_IMPORT = /import\(\s*["']([^"']+)["']\s*\)/g;

@@ -27,7 +27,8 @@ describe("updateConfigLLM", () => {
   it("patches llm.provider and llm.model into existing config", () => {
     const { configPath } = writeDefaultConfig(tmpDir);
     const before = parseYaml(fs.readFileSync(configPath, "utf-8"));
-    expect(before.llm).toBeUndefined(); // not written by default
+    expect(before.llm?.provider).toBeUndefined(); // provider not written by default
+    expect(before.llm?.model).toBeUndefined(); // model not written by default
 
     const config = updateConfigLLM(configPath, "copilot", "gpt-4o");
     expect(config.llm.provider).toBe("copilot");

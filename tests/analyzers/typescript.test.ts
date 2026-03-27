@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import * as path from "node:path";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import { parseTypeScriptImports } from "../../src/analyzers/typescript/imports.js";
 import { extractTypeScriptModules } from "../../src/analyzers/typescript/modules.js";
 import { typescriptAnalyzer } from "../../src/analyzers/typescript/index.js";
@@ -53,6 +55,25 @@ describe("TypeScript Imports Parser", () => {
     );
 
     expect(imports.some((i) => i.source === "express")).toBe(true);
+  });
+
+  it("parses multi-line imports", () => {
+    const tmpFile = path.join(os.tmpdir(), "dd-test-multiline.ts");
+    fs.writeFileSync(tmpFile, [
+      'import {',
+      '  Controller,',
+      '  Get,',
+      '  Post,',
+      '} from "@nestjs/common";',
+      'import { Injectable } from "@nestjs/core";',
+    ].join("\n"), "utf-8");
+    try {
+      const imports = parseTypeScriptImports(tmpFile);
+      expect(imports.some((i) => i.source === "@nestjs/common")).toBe(true);
+      expect(imports.some((i) => i.source === "@nestjs/core")).toBe(true);
+    } finally {
+      fs.unlinkSync(tmpFile);
+    }
   });
 });
 
