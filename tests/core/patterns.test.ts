@@ -46,7 +46,9 @@ describe("detectRole", () => {
   });
 
   it("detects controller from comma-separated list", () => {
-    expect(detectRole("Transactional,RestController,Validated")).toBe("controller");
+    expect(detectRole("Transactional,RestController,Validated")).toBe(
+      "controller",
+    );
   });
 
   // Listener patterns
@@ -63,7 +65,9 @@ describe("detectRole", () => {
   });
 
   it("detects listener from comma-separated list", () => {
-    expect(detectRole("Component,KafkaListener,Transactional")).toBe("listener");
+    expect(detectRole("Component,KafkaListener,Transactional")).toBe(
+      "listener",
+    );
   });
 
   // Repository patterns
@@ -139,45 +143,63 @@ describe("detectExternalSystems", () => {
   // Database patterns
   it("detects PostgreSQL", () => {
     const result = detectExternalSystems(["postgresql"]);
-    expect(result).toEqual([{ keyword: "postgresql", type: "Database", technology: "PostgreSQL" }]);
+    expect(result).toEqual([
+      { keyword: "postgresql", type: "Database", technology: "PostgreSQL" },
+    ]);
   });
 
   it("detects PostgreSQL case-insensitively", () => {
     const result = detectExternalSystems(["PostgreSQL"]);
-    expect(result).toEqual([{ keyword: "postgresql", type: "Database", technology: "PostgreSQL" }]);
+    expect(result).toEqual([
+      { keyword: "postgresql", type: "Database", technology: "PostgreSQL" },
+    ]);
   });
 
   it("detects MySQL", () => {
     const result = detectExternalSystems(["mysql"]);
-    expect(result).toEqual([{ keyword: "mysql", type: "Database", technology: "MySQL" }]);
+    expect(result).toEqual([
+      { keyword: "mysql", type: "Database", technology: "MySQL" },
+    ]);
   });
 
   it("detects Oracle via ojdbc driver artifact", () => {
     const result = detectExternalSystems(["com.oracle.database.jdbc:ojdbc8"]);
-    expect(result).toEqual([{ keyword: "ojdbc", type: "Database", technology: "Oracle" }]);
+    expect(result).toEqual([
+      { keyword: "ojdbc", type: "Database", technology: "Oracle" },
+    ]);
   });
 
   it("detects Oracle via legacy ojdbc artifact", () => {
     const result = detectExternalSystems(["oracle:ojdbc14"]);
-    expect(result).toEqual([{ keyword: "ojdbc", type: "Database", technology: "Oracle" }]);
+    expect(result).toEqual([
+      { keyword: "ojdbc", type: "Database", technology: "Oracle" },
+    ]);
   });
 
   it("does not match GraalVM as Oracle (false positive avoidance)", () => {
-    expect(detectExternalSystems(["com.oracle.graalvm:graalvm-sdk"])).toEqual([]);
+    expect(detectExternalSystems(["com.oracle.graalvm:graalvm-sdk"])).toEqual(
+      [],
+    );
   });
 
   it("does not match OCI SDK as Oracle (false positive avoidance)", () => {
-    expect(detectExternalSystems(["com.oracle.oci.sdk:oci-java-sdk-core"])).toEqual([]);
+    expect(
+      detectExternalSystems(["com.oracle.oci.sdk:oci-java-sdk-core"]),
+    ).toEqual([]);
   });
 
   it("detects SQLite", () => {
     const result = detectExternalSystems(["sqlite"]);
-    expect(result).toEqual([{ keyword: "sqlite", type: "Database", technology: "SQLite" }]);
+    expect(result).toEqual([
+      { keyword: "sqlite", type: "Database", technology: "SQLite" },
+    ]);
   });
 
   it("detects H2 via h2database (primary Maven group ID keyword)", () => {
     const result = detectExternalSystems(["com.h2database:h2"]);
-    expect(result).toEqual([{ keyword: "h2database", type: "Database", technology: "H2" }]);
+    expect(result).toEqual([
+      { keyword: "h2database", type: "Database", technology: "H2" },
+    ]);
   });
 
   it("does not match bare h2 to avoid false positives", () => {
@@ -188,65 +210,97 @@ describe("detectExternalSystems", () => {
   // Message broker patterns
   it("detects Kafka", () => {
     const result = detectExternalSystems(["kafka"]);
-    expect(result).toEqual([{ keyword: "kafka", type: "Message Broker", technology: "Apache Kafka" }]);
+    expect(result).toEqual([
+      { keyword: "kafka", type: "Message Broker", technology: "Apache Kafka" },
+    ]);
   });
 
   it("detects Kafka as substring (e.g., spring-kafka)", () => {
     const result = detectExternalSystems(["spring-kafka"]);
-    expect(result).toEqual([{ keyword: "kafka", type: "Message Broker", technology: "Apache Kafka" }]);
+    expect(result).toEqual([
+      { keyword: "kafka", type: "Message Broker", technology: "Apache Kafka" },
+    ]);
   });
 
   it("detects RabbitMQ", () => {
     const result = detectExternalSystems(["rabbitmq"]);
-    expect(result).toEqual([{ keyword: "rabbitmq", type: "Message Broker", technology: "RabbitMQ" }]);
+    expect(result).toEqual([
+      { keyword: "rabbitmq", type: "Message Broker", technology: "RabbitMQ" },
+    ]);
   });
 
   it("detects RabbitMQ via amqp", () => {
     const result = detectExternalSystems(["amqp"]);
-    expect(result).toEqual([{ keyword: "amqp", type: "Message Broker", technology: "RabbitMQ" }]);
+    expect(result).toEqual([
+      { keyword: "amqp", type: "Message Broker", technology: "RabbitMQ" },
+    ]);
   });
 
   // Cache patterns
   it("detects Redis", () => {
     const result = detectExternalSystems(["redis"]);
-    expect(result).toEqual([{ keyword: "redis", type: "Cache", technology: "Redis" }]);
+    expect(result).toEqual([
+      { keyword: "redis", type: "Cache", technology: "Redis" },
+    ]);
   });
 
   it("detects Redis via jedis", () => {
     const result = detectExternalSystems(["jedis"]);
-    expect(result).toEqual([{ keyword: "jedis", type: "Cache", technology: "Redis" }]);
+    expect(result).toEqual([
+      { keyword: "jedis", type: "Cache", technology: "Redis" },
+    ]);
   });
 
   it("detects Redis via lettuce", () => {
     const result = detectExternalSystems(["lettuce-core"]);
-    expect(result).toEqual([{ keyword: "lettuce", type: "Cache", technology: "Redis" }]);
+    expect(result).toEqual([
+      { keyword: "lettuce", type: "Cache", technology: "Redis" },
+    ]);
   });
 
   it("detects Memcached", () => {
     const result = detectExternalSystems(["memcached"]);
-    expect(result).toEqual([{ keyword: "memcached", type: "Cache", technology: "Memcached" }]);
+    expect(result).toEqual([
+      { keyword: "memcached", type: "Cache", technology: "Memcached" },
+    ]);
   });
 
   // Search engine patterns
   it("detects Elasticsearch", () => {
     const result = detectExternalSystems(["elasticsearch"]);
-    expect(result).toEqual([{ keyword: "elasticsearch", type: "Search Engine", technology: "Elasticsearch" }]);
+    expect(result).toEqual([
+      {
+        keyword: "elasticsearch",
+        type: "Search Engine",
+        technology: "Elasticsearch",
+      },
+    ]);
   });
 
   it("detects OpenSearch", () => {
     const result = detectExternalSystems(["opensearch"]);
-    expect(result).toEqual([{ keyword: "opensearch", type: "Search Engine", technology: "OpenSearch" }]);
+    expect(result).toEqual([
+      {
+        keyword: "opensearch",
+        type: "Search Engine",
+        technology: "OpenSearch",
+      },
+    ]);
   });
 
   // Object storage patterns
   it("detects S3 from standalone dep name", () => {
     const result = detectExternalSystems(["s3"]);
-    expect(result).toEqual([{ keyword: "s3", type: "Object Storage", technology: "S3" }]);
+    expect(result).toEqual([
+      { keyword: "s3", type: "Object Storage", technology: "S3" },
+    ]);
   });
 
   it("detects S3 from aws-java-sdk-s3", () => {
     const result = detectExternalSystems(["aws-java-sdk-s3"]);
-    expect(result).toEqual([{ keyword: "s3", type: "Object Storage", technology: "S3" }]);
+    expect(result).toEqual([
+      { keyword: "s3", type: "Object Storage", technology: "S3" },
+    ]);
   });
 
   it("does not match css3 as S3 (false positive avoidance)", () => {
@@ -259,14 +313,20 @@ describe("detectExternalSystems", () => {
 
   it("detects MinIO", () => {
     const result = detectExternalSystems(["minio"]);
-    expect(result).toEqual([{ keyword: "minio", type: "Object Storage", technology: "S3" }]);
+    expect(result).toEqual([
+      { keyword: "minio", type: "Object Storage", technology: "S3" },
+    ]);
   });
 
   // Deduplication
   it("deduplicates by type+technology when multiple keywords match the same system", () => {
     const result = detectExternalSystems(["redis", "jedis", "lettuce"]);
     expect(result).toHaveLength(1);
-    expect(result[0]).toEqual({ keyword: "redis", type: "Cache", technology: "Redis" });
+    expect(result[0]).toEqual({
+      keyword: "redis",
+      type: "Cache",
+      technology: "Redis",
+    });
   });
 
   it("returns multiple distinct systems", () => {
@@ -286,15 +346,21 @@ describe("detectExternalSystems", () => {
 
 describe("inferRelationshipLabel", () => {
   it("returns 'Delegates to' when source role is controller", () => {
-    expect(inferRelationshipLabel("controller", "service")).toBe("Delegates to");
+    expect(inferRelationshipLabel("controller", "service")).toBe(
+      "Delegates to",
+    );
   });
 
   it("returns 'Delegates to' for controller → repository", () => {
-    expect(inferRelationshipLabel("controller", "repository")).toBe("Delegates to");
+    expect(inferRelationshipLabel("controller", "repository")).toBe(
+      "Delegates to",
+    );
   });
 
   it("returns 'Persists via' when target role is repository", () => {
-    expect(inferRelationshipLabel("service", "repository")).toBe("Persists via");
+    expect(inferRelationshipLabel("service", "repository")).toBe(
+      "Persists via",
+    );
   });
 
   it("returns 'Uses' as fallback", () => {
@@ -311,17 +377,23 @@ describe("inferRelationshipLabel", () => {
 
   it("controller takes priority over repository target", () => {
     // controller source → "Delegates to" even if target is repository
-    expect(inferRelationshipLabel("controller", "repository")).toBe("Delegates to");
+    expect(inferRelationshipLabel("controller", "repository")).toBe(
+      "Delegates to",
+    );
   });
 });
 
 describe("inferExternalRelationshipLabel", () => {
   it("returns 'Reads/writes data in' for Database", () => {
-    expect(inferExternalRelationshipLabel("Database")).toBe("Reads/writes data in");
+    expect(inferExternalRelationshipLabel("Database")).toBe(
+      "Reads/writes data in",
+    );
   });
 
   it("returns 'Publishes/consumes messages via' for Message Broker", () => {
-    expect(inferExternalRelationshipLabel("Message Broker")).toBe("Publishes/consumes messages via");
+    expect(inferExternalRelationshipLabel("Message Broker")).toBe(
+      "Publishes/consumes messages via",
+    );
   });
 
   it("returns 'Caches data in' for Cache", () => {
@@ -329,16 +401,26 @@ describe("inferExternalRelationshipLabel", () => {
   });
 
   it("returns 'Indexes/queries' for Search Engine", () => {
-    expect(inferExternalRelationshipLabel("Search Engine")).toBe("Indexes/queries");
+    expect(inferExternalRelationshipLabel("Search Engine")).toBe(
+      "Indexes/queries",
+    );
   });
 
   it("returns 'Stores objects in' for Object Storage", () => {
-    expect(inferExternalRelationshipLabel("Object Storage")).toBe("Stores objects in");
+    expect(inferExternalRelationshipLabel("Object Storage")).toBe(
+      "Stores objects in",
+    );
   });
 
   it("covers all SystemType values", () => {
     // Ensure every SystemType has a non-empty label
-    const systemTypes = ["Database", "Message Broker", "Cache", "Search Engine", "Object Storage"] as const;
+    const systemTypes = [
+      "Database",
+      "Message Broker",
+      "Cache",
+      "Search Engine",
+      "Object Storage",
+    ] as const;
     for (const st of systemTypes) {
       expect(inferExternalRelationshipLabel(st)).toBeTruthy();
     }
@@ -347,15 +429,21 @@ describe("inferExternalRelationshipLabel", () => {
 
 describe("inferComponentTech", () => {
   it("returns 'Java REST Controller' for controller role in Java", () => {
-    expect(inferComponentTech("RestController", "java")).toBe("Java REST Controller");
+    expect(inferComponentTech("RestController", "java")).toBe(
+      "Java REST Controller",
+    );
   });
 
   it("returns 'Java REST Controller' for controller role via Controller annotation", () => {
-    expect(inferComponentTech("Controller", "java")).toBe("Java REST Controller");
+    expect(inferComponentTech("Controller", "java")).toBe(
+      "Java REST Controller",
+    );
   });
 
   it("returns 'Java Message Listener' for listener role in Java", () => {
-    expect(inferComponentTech("KafkaListener", "java")).toBe("Java Message Listener");
+    expect(inferComponentTech("KafkaListener", "java")).toBe(
+      "Java Message Listener",
+    );
   });
 
   it("returns 'Java Repository' for repository role in Java", () => {

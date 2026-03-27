@@ -85,8 +85,8 @@ function buildValidIdSet(model: ArchitectureModel): Set<string> {
 }
 
 // Patterns that indicate a D2 identifier reference
-const ID_LINE = /^([a-z0-9][a-z0-9.\-]*)/;
-const CONNECTION = /^([a-z0-9][a-z0-9.\-]*)\s*->\s*([a-z0-9][a-z0-9.\-]*)/;
+const ID_LINE = /^([a-z0-9][a-z0-9.-]*)/;
+const CONNECTION = /^([a-z0-9][a-z0-9.-]*)\s*->\s*([a-z0-9][a-z0-9.-]*)/;
 
 /**
  * Parse a user D2 file and check for references to unknown IDs.
@@ -162,13 +162,41 @@ function checkId(
 
 /** Known D2 property names that should not be treated as model IDs. */
 const D2_PROPS = new Set([
-  "class", "shape", "label", "style", "icon", "tooltip",
-  "link", "near", "width", "height", "top", "left",
-  "grid-rows", "grid-columns", "grid-gap", "vertical-gap", "horizontal-gap",
-  "font-size", "font-color", "fill", "stroke", "stroke-width",
-  "stroke-dash", "border-radius", "opacity", "shadow", "3d",
-  "multiple", "animated", "bold", "italic", "underline",
-  "text-transform", "source-arrowhead", "target-arrowhead",
+  "class",
+  "shape",
+  "label",
+  "style",
+  "icon",
+  "tooltip",
+  "link",
+  "near",
+  "width",
+  "height",
+  "top",
+  "left",
+  "grid-rows",
+  "grid-columns",
+  "grid-gap",
+  "vertical-gap",
+  "horizontal-gap",
+  "font-size",
+  "font-color",
+  "fill",
+  "stroke",
+  "stroke-width",
+  "stroke-dash",
+  "border-radius",
+  "opacity",
+  "shadow",
+  "3d",
+  "multiple",
+  "animated",
+  "bold",
+  "italic",
+  "underline",
+  "text-transform",
+  "source-arrowhead",
+  "target-arrowhead",
 ]);
 
 /**

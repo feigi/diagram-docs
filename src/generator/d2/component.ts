@@ -28,19 +28,23 @@ export function generateComponentDiagram(
 
   // Container boundary with components inside
   const cId = toD2Id(containerId);
-  w.container(cId, `${container.name}\\n[Container: ${container.technology}]`, () => {
-    w.raw("class: system-boundary");
-    w.blank();
+  w.container(
+    cId,
+    `${container.name}\\n[Container: ${container.technology}]`,
+    () => {
+      w.raw("class: system-boundary");
+      w.blank();
 
-    for (const comp of sortById(components)) {
-      const id = toD2Id(comp.id);
-      w.shape(
-        id,
-        `${comp.name}\\n\\n[Component: ${comp.technology}]\\n${wrapText(comp.description)}`,
-        { "class": "component" },
-      );
-    }
-  });
+      for (const comp of sortById(components)) {
+        const id = toD2Id(comp.id);
+        w.shape(
+          id,
+          `${comp.name}\\n\\n[Component: ${comp.technology}]\\n${wrapText(comp.description)}`,
+          { class: "component" },
+        );
+      }
+    },
+  );
 
   w.blank();
 
@@ -64,13 +68,13 @@ export function generateComponentDiagram(
 
     if (ext) {
       w.shape(toD2Id(refId), `${ext.name}\\n[External System]`, {
-        "class": "external-system",
+        class: "external-system",
       });
     } else if (otherContainer) {
       w.shape(
         toD2Id(refId),
         `${otherContainer.name}\\n[Container: ${otherContainer.technology}]`,
-        { "class": "container" },
+        { class: "container" },
       );
     } else {
       w.shape(toD2Id(refId), refId);
@@ -89,7 +93,9 @@ export function generateComponentDiagram(
       : toD2Id(rel.targetId);
 
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`, 40, 1), { "style.font-size": "13" });
+    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`, 40, 1), {
+      "style.font-size": "13",
+    });
   }
 
   return w.toString();

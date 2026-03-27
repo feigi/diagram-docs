@@ -12,7 +12,11 @@ import type {
 import { slugify } from "../../core/slugify.js";
 import { parseJavaImports } from "./imports.js";
 import { extractPackages, detectClassAnnotations } from "./packages.js";
-import { parseSettingsGradle, parseGradleDependencies, findFile } from "./gradle.js";
+import {
+  parseSettingsGradle,
+  parseGradleDependencies,
+  findFile,
+} from "./gradle.js";
 import { collectConfigFiles } from "../config-files.js";
 
 function parsePomDependencies(pomPath: string): ExternalDep[] {
@@ -46,7 +50,10 @@ export const javaAnalyzer: LanguageAnalyzer = {
   buildFilePatterns: ["pom.xml", "build.gradle", "build.gradle.kts"],
   defaultExcludes: ["**/target/**", "**/.gradle/**"],
 
-  async analyze(appPath: string, config: ScanConfig): Promise<ScannedApplication> {
+  async analyze(
+    appPath: string,
+    config: ScanConfig,
+  ): Promise<ScannedApplication> {
     const appId = slugify(appPath);
     const dirName = path.basename(appPath);
 
@@ -76,7 +83,9 @@ export const javaAnalyzer: LanguageAnalyzer = {
 
         for (const imp of javaImports) {
           const pkgPrefix = imp.source.split(".").slice(0, -1).join(".");
-          const isInternal = packages.some((p) => p.name === pkgPrefix || imp.source.startsWith(p.name));
+          const isInternal = packages.some(
+            (p) => p.name === pkgPrefix || imp.source.startsWith(p.name),
+          );
           imports.push({
             source: imp.source,
             isExternal: !isInternal,
@@ -104,10 +113,13 @@ export const javaAnalyzer: LanguageAnalyzer = {
 
     // Handle build file dependencies
     const pomPath = path.join(appPath, "pom.xml");
-    const gradleBuildFile = findFile(appPath, ["build.gradle", "build.gradle.kts"]);
+    const gradleBuildFile = findFile(appPath, [
+      "build.gradle",
+      "build.gradle.kts",
+    ]);
 
     let externalDependencies: ExternalDep[] = [];
-    let internalImports: InternalImport[] = [];
+    const internalImports: InternalImport[] = [];
     let buildFile: string;
     let publishedAs: string | undefined;
     let appName = dirName;
@@ -137,7 +149,9 @@ export const javaAnalyzer: LanguageAnalyzer = {
         // Find the directory for this project dep from parent settings
         let targetDir = projDep; // default: project name = directory name
         if (parentSettings) {
-          const sub = parentSettings.subprojects.find((s) => s.name === projDep);
+          const sub = parentSettings.subprojects.find(
+            (s) => s.name === projDep,
+          );
           if (sub) {
             targetDir = sub.dir;
           }
@@ -204,4 +218,3 @@ function deduplicateImports(imports: ModuleImport[]): ModuleImport[] {
     return true;
   });
 }
-

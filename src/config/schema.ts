@@ -13,11 +13,7 @@ export const configSchema = z.object({
       include: z.array(z.string()).default(["**"]),
       exclude: z
         .array(z.string())
-        .default([
-          "**/*test*/**",
-          "**/*test*",
-          "**/build/**",
-        ]),
+        .default(["**/*test*/**", "**/*test*", "**/build/**"]),
       /** Patterns that override built-in excludes, forcing matched paths to be scanned. */
       forceInclude: z.array(z.string()).default([]),
     })
@@ -64,9 +60,7 @@ export const configSchema = z.object({
 
   llm: z
     .object({
-      provider: z
-        .enum(["auto", "claude-code", "copilot"])
-        .default("auto"),
+      provider: z.enum(["auto", "claude-code", "copilot"]).default("auto"),
       model: z.string().default("sonnet"),
       /** Max parallel LLM calls for per-app architecture modeling */
       concurrency: z.number().int().min(1).max(16).default(10),

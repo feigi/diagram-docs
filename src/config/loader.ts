@@ -20,7 +20,11 @@ export function findConfigFile(startDir: string): string | null {
 /**
  * Build default config values in memory without writing to disk.
  */
-export function buildDefaultConfig(dir: string): { config: Config; configPath: string; defaults: Record<string, unknown> } {
+export function buildDefaultConfig(dir: string): {
+  config: Config;
+  configPath: string;
+  defaults: Record<string, unknown>;
+} {
   const dirName = path.basename(dir);
   const defaults: Record<string, unknown> = {
     system: {
@@ -58,9 +62,16 @@ export function buildDefaultConfig(dir: string): { config: Config; configPath: s
  * Write a default diagram-docs.yaml to the given directory.
  * Returns the written config and file path.
  */
-export function writeDefaultConfig(dir: string): { config: Config; configPath: string } {
+export function writeDefaultConfig(dir: string): {
+  config: Config;
+  configPath: string;
+} {
   const { config, configPath, defaults } = buildDefaultConfig(dir);
-  fs.writeFileSync(configPath, stringifyYaml(defaults, { lineWidth: 120 }), "utf-8");
+  fs.writeFileSync(
+    configPath,
+    stringifyYaml(defaults, { lineWidth: 120 }),
+    "utf-8",
+  );
   return { config, configPath };
 }
 
@@ -105,7 +116,11 @@ export function updateConfigLLM(
   const raw = fs.readFileSync(configPath, "utf-8");
   const parsed = parseYaml(raw) ?? {};
   parsed.llm = { ...parsed.llm, provider, model };
-  fs.writeFileSync(configPath, stringifyYaml(parsed, { lineWidth: 120 }), "utf-8");
+  fs.writeFileSync(
+    configPath,
+    stringifyYaml(parsed, { lineWidth: 120 }),
+    "utf-8",
+  );
   return configSchema.parse(parsed);
 }
 

@@ -2,7 +2,11 @@ import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
-import { loadConfig, writeDefaultConfig, updateConfigLLM } from "../../config/loader.js";
+import {
+  loadConfig,
+  writeDefaultConfig,
+  updateConfigLLM,
+} from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
 import { buildModel } from "../../core/model-builder.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
@@ -14,7 +18,11 @@ import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
 import type { Config } from "../../config/schema.js";
 import { runScan, ScanError } from "../../core/scan.js";
-import { readManifest, writeManifest, createDefaultManifest } from "../../core/manifest.js";
+import {
+  readManifest,
+  writeManifest,
+  createDefaultManifest,
+} from "../../core/manifest.js";
 import {
   buildModelWithLLM,
   serializeModel,
@@ -22,7 +30,6 @@ import {
   LLMCallError,
   LLMOutputError,
 } from "../../core/llm-model-builder.js";
-import { createFrame } from "../frame.js";
 import { formatElapsed } from "../terminal-utils.js";
 import { promptLLMSetup } from "../interactive-setup.js";
 
@@ -34,7 +41,12 @@ export const generateCommand = new Command("generate")
   .option("--deterministic", "Use deterministic model builder (skip LLM)")
   .action(async (options) => {
     const startTime = Date.now();
-    let { config, configDir, configCreated } = loadConfig(options.config);
+    const {
+      config: initialConfig,
+      configDir,
+      configCreated,
+    } = loadConfig(options.config);
+    let config = initialConfig;
 
     // Interactive LLM setup when config was just created and not deterministic.
     // The config is only in memory at this point — write to disk only after
@@ -53,7 +65,12 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    const model = await resolveModel(options.model, configDir, config, options.deterministic);
+    const model = await resolveModel(
+      options.model,
+      configDir,
+      config,
+      options.deterministic,
+    );
 
     const outputDir = path.resolve(configDir, config.output.dir);
     const generatedDir = path.join(outputDir, "_generated");
@@ -78,13 +95,13 @@ export const generateCommand = new Command("generate")
 
     // L2: Container diagram
     if (config.levels.container) {
-      const useSubmoduleLinks =
-        options.submodules || config.submodules.enabled;
+      const useSubmoduleLinks = options.submodules || config.submodules.enabled;
       const d2 = generateContainerDiagram(model, {
         componentLinks: config.levels.component,
         format: config.output.format,
         submoduleLinkResolver: useSubmoduleLinks
-          ? (containerId) => resolveSubmoduleLink(containerId, model, config, outputDir)
+          ? (containerId) =>
+              resolveSubmoduleLink(containerId, model, config, outputDir)
           : undefined,
       });
       if (writeIfChanged(path.join(generatedDir, "c2-container.d2"), d2)) {
@@ -125,9 +142,7 @@ export const generateCommand = new Command("generate")
       );
     }
     if (filesUnchanged > 0) {
-      console.error(
-        `${filesUnchanged} generated file(s) unchanged.`,
-      );
+      console.error(`${filesUnchanged} generated file(s) unchanged.`);
     }
 
     // Check for stale references in user customizations
@@ -215,14 +230,23 @@ async function resolveModel(
 
   if (fs.existsSync(autoModelPath)) {
     if (manifest.lastModel?.checksum === scanChecksum) {
-      console.error(`Using model: ${path.relative(process.cwd(), autoModelPath)} (up to date)`);
+      console.error(
+        `Using model: ${path.relative(process.cwd(), autoModelPath)} (up to date)`,
+      );
       return loadModel(autoModelPath);
     }
-    console.error("Source code changed since model was last built. Rebuilding model...");
+    console.error(
+      "Source code changed since model was last built. Rebuilding model...",
+    );
   }
 
   // 4. Build model: LLM (default) or deterministic (--deterministic)
-  const model = await buildModelFromScan(rawStructure, configDir, config, deterministic);
+  const model = await buildModelFromScan(
+    rawStructure,
+    configDir,
+    config,
+    deterministic,
+  );
 
   // 5. Persist model and record scan checksum
   fs.writeFileSync(autoModelPath, serializeModel(model), "utf-8");
@@ -231,7 +255,9 @@ async function resolveModel(
     checksum: scanChecksum,
   };
   writeManifest(configDir, manifest);
-  console.error(`Model written to ${path.relative(process.cwd(), autoModelPath)}`);
+  console.error(
+    `Model written to ${path.relative(process.cwd(), autoModelPath)}`,
+  );
 
   return model;
 }
@@ -275,7 +301,9 @@ async function buildModelFromScan(
           "Or use the deterministic builder:\n" +
           "  diagram-docs generate --deterministic",
       );
-      console.error("  Per-app agent logs may be available in .diagram-docs/logs/");
+      console.error(
+        "  Per-app agent logs may be available in .diagram-docs/logs/",
+      );
       process.exit(1);
     }
     if (err instanceof LLMOutputError) {
@@ -367,7 +395,9 @@ function renderD2Files(d2Files: string[], config: Config): void {
         return;
       }
       if (msg.includes("ETIMEDOUT") || msg.includes("killed")) {
-        console.error(`Warning: rendering timed out for ${relPath} (diagram may be too large)`);
+        console.error(
+          `Warning: rendering timed out for ${relPath} (diagram may be too large)`,
+        );
         continue;
       }
       console.error(`Warning: failed to render ${relPath}: ${msg}`);

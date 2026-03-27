@@ -74,8 +74,5 @@ export interface ExpectedApplication {
   externalDependencies: Array<{
     name: string;
   }>;
-  metadata: Record<
-    string,
-    Record<string, string>
-  >;
+  metadata: Record<string, Record<string, string>>;
 }

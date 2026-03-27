@@ -26,7 +26,9 @@ describe("AgentLogger", () => {
     await logger.logDone(5000);
 
     const content = fs.readFileSync(logPath, "utf-8");
-    expect(content).toContain("START app=my-app model=sonnet provider=claude-code");
+    expect(content).toContain(
+      "START app=my-app model=sonnet provider=claude-code",
+    );
     expect(content).toContain("SYSTEM PROMPT");
     expect(content).toContain("system prompt text");
     expect(content).toContain("USER MESSAGE");
@@ -42,7 +44,11 @@ describe("AgentLogger", () => {
       provider: "claude-code",
     });
     logger.logPrompt("sys", "usr");
-    logger.logProgress({ line: "analyzing structure...", final: true, kind: "thinking" });
+    logger.logProgress({
+      line: "analyzing structure...",
+      final: true,
+      kind: "thinking",
+    });
     logger.logProgress({ line: "version: 1", final: true, kind: "output" });
     await logger.logDone(3000);
 
@@ -81,7 +87,9 @@ describe("AgentLogger", () => {
     await logger.logFailed("Provider timeout after 900000ms", 107000);
 
     const content = fs.readFileSync(logPath, "utf-8");
-    expect(content).toContain("FAILED elapsed=107s error=Provider timeout after 900000ms");
+    expect(content).toContain(
+      "FAILED elapsed=107s error=Provider timeout after 900000ms",
+    );
     expect(content).not.toContain("DONE");
   });
 
@@ -95,7 +103,11 @@ describe("AgentLogger", () => {
     logger.logPrompt("sys", "usr");
     logger.logProgress({ line: "thinking...", final: true, kind: "thinking" });
     logger.logProgress({ line: "output line", final: true, kind: "output" });
-    logger.logProgress({ line: "more thinking", final: true, kind: "thinking" });
+    logger.logProgress({
+      line: "more thinking",
+      final: true,
+      kind: "thinking",
+    });
     await logger.logDone(2000);
 
     const content = fs.readFileSync(logPath, "utf-8");

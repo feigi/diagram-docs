@@ -22,7 +22,9 @@ export const scanCommand = new Command("scan")
       });
 
       if (fromCache) {
-        console.error("Source files unchanged since last scan. Use --force to re-scan.");
+        console.error(
+          "Source files unchanged since last scan. Use --force to re-scan.",
+        );
       }
 
       const json = JSON.stringify(rawStructure, null, 2);

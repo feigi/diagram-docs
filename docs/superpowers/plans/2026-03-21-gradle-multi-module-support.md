@@ -14,23 +14,24 @@
 
 ## File Structure
 
-| File | Role |
-|------|------|
-| `src/analyzers/java/gradle.ts` | **New** — `parseSettingsGradle()`, `parseGradleDependencies()` |
-| `src/analyzers/java/index.ts` | **Modify** — use gradle.ts for subproject exclusion, dep parsing, publishedAs |
-| `src/analyzers/types.ts` | **Modify** — add optional `publishedAs` to `ScannedApplication` |
-| `src/schemas/raw-structure.schema.json` | **Modify** — add `publishedAs` field |
-| `src/cli/commands/scan.ts` | **Modify** — add post-scan cross-app coordinate matching |
-| `tests/analyzers/java/gradle.test.ts` | **New** — unit tests for gradle parsing |
-| `tests/analyzers/java.test.ts` | **Modify** — add multi-module fixture tests |
-| `tests/fixtures/gradle-multimodule/` | **New** — fixture for multi-module Gradle project |
-| `tests/integration/pipeline.test.ts` | **Modify** — add cross-app coordinate matching test |
+| File                                    | Role                                                                          |
+| --------------------------------------- | ----------------------------------------------------------------------------- |
+| `src/analyzers/java/gradle.ts`          | **New** — `parseSettingsGradle()`, `parseGradleDependencies()`                |
+| `src/analyzers/java/index.ts`           | **Modify** — use gradle.ts for subproject exclusion, dep parsing, publishedAs |
+| `src/analyzers/types.ts`                | **Modify** — add optional `publishedAs` to `ScannedApplication`               |
+| `src/schemas/raw-structure.schema.json` | **Modify** — add `publishedAs` field                                          |
+| `src/cli/commands/scan.ts`              | **Modify** — add post-scan cross-app coordinate matching                      |
+| `tests/analyzers/java/gradle.test.ts`   | **New** — unit tests for gradle parsing                                       |
+| `tests/analyzers/java.test.ts`          | **Modify** — add multi-module fixture tests                                   |
+| `tests/fixtures/gradle-multimodule/`    | **New** — fixture for multi-module Gradle project                             |
+| `tests/integration/pipeline.test.ts`    | **Modify** — add cross-app coordinate matching test                           |
 
 ---
 
 ### Task 1: Add `publishedAs` to types and schema
 
 **Files:**
+
 - Modify: `src/analyzers/types.ts:12-21`
 - Modify: `src/schemas/raw-structure.schema.json:14-72`
 
@@ -67,6 +68,7 @@ git commit -m "Add optional publishedAs field to ScannedApplication"
 ### Task 2: Create Gradle parsing module with tests (settings.gradle)
 
 **Files:**
+
 - Create: `src/analyzers/java/gradle.ts`
 - Create: `tests/analyzers/java/gradle.test.ts`
 - Create: `tests/fixtures/gradle-multimodule/` (fixture files)
@@ -74,6 +76,7 @@ git commit -m "Add optional publishedAs field to ScannedApplication"
 - [ ] **Step 1: Create the fixture directory and settings.gradle files**
 
 Create `tests/fixtures/gradle-multimodule/settings.gradle`:
+
 ```
 rootProject.name = 'my-system'
 include 'app'
@@ -81,6 +84,7 @@ include 'lib'
 ```
 
 Create `tests/fixtures/gradle-multimodule/with-projectdir/settings.gradle`:
+
 ```
 rootProject.name = 'my-db'
 include('my-db-model')
@@ -110,9 +114,7 @@ describe("parseSettingsGradle", () => {
   });
 
   it("handles projectDir overrides", () => {
-    const result = parseSettingsGradle(
-      path.join(FIXTURES, "with-projectdir"),
-    );
+    const result = parseSettingsGradle(path.join(FIXTURES, "with-projectdir"));
     expect(result).not.toBeNull();
     expect(result!.rootProjectName).toBe("my-db");
     expect(result!.subprojects).toEqual([
@@ -155,9 +157,7 @@ export function parseSettingsGradle(appPath: string): GradleSettings | null {
   const content = fs.readFileSync(settingsFile, "utf-8");
 
   // Extract rootProject.name
-  const nameMatch = content.match(
-    /rootProject\.name\s*=\s*['"]([^'"]+)['"]/,
-  );
+  const nameMatch = content.match(/rootProject\.name\s*=\s*['"]([^'"]+)['"]/);
   const rootProjectName = nameMatch?.[1] ?? null;
 
   // Extract include directives: include 'foo', include('foo'), include('foo', 'bar')
@@ -173,9 +173,7 @@ export function parseSettingsGradle(appPath: string): GradleSettings | null {
 
   // Handle multi-arg include: include('a', 'b', 'c')
   // The regex above only gets first two. Re-scan for all quoted strings in include() calls.
-  for (const includeMatch of content.matchAll(
-    /include\s*\(([^)]+)\)/g,
-  )) {
+  for (const includeMatch of content.matchAll(/include\s*\(([^)]+)\)/g)) {
     const args = includeMatch[1];
     for (const argMatch of args.matchAll(/['"]([^'"]+)['"]/g)) {
       const name = argMatch[1];
@@ -236,6 +234,7 @@ git commit -m "Add parseSettingsGradle for Gradle multi-module discovery"
 ### Task 3: Add `parseGradleDependencies` with tests
 
 **Files:**
+
 - Modify: `src/analyzers/java/gradle.ts`
 - Modify: `tests/analyzers/java/gradle.test.ts`
 - Create: `tests/fixtures/gradle-multimodule/app/build.gradle`
@@ -244,6 +243,7 @@ git commit -m "Add parseSettingsGradle for Gradle multi-module discovery"
 - [ ] **Step 1: Create fixture build.gradle files**
 
 Create `tests/fixtures/gradle-multimodule/build.gradle`:
+
 ```
 plugins {
     id 'base'
@@ -257,6 +257,7 @@ subprojects {
 ```
 
 Create `tests/fixtures/gradle-multimodule/app/build.gradle`:
+
 ```
 plugins {
     id 'java'
@@ -334,7 +335,9 @@ export interface GradleDependencies {
   mavenDeps: Array<{ group: string; artifact: string; version?: string }>;
 }
 
-export function parseGradleDependencies(buildFilePath: string): GradleDependencies {
+export function parseGradleDependencies(
+  buildFilePath: string,
+): GradleDependencies {
   if (!fs.existsSync(buildFilePath)) {
     return { group: null, projectDeps: [], mavenDeps: [] };
   }
@@ -352,10 +355,14 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
   // Exclude test configurations
   // Word-boundary prefix prevents matching testImplementation as implementation
   const implConfigs = "(?:^|\\s)(?:implementation|api|compileOnly|runtimeOnly)";
-  const testConfigs = "(?:testImplementation|testCompileOnly|testRuntimeOnly|testAnnotationProcessor)";
+  const testConfigs =
+    "(?:testImplementation|testCompileOnly|testRuntimeOnly|testAnnotationProcessor)";
 
   for (const match of content.matchAll(
-    new RegExp(`${implConfigs}\\s+project\\s*\\(\\s*['\"][:.]?([^'\"]+)['\"]\\s*\\)`, "g"),
+    new RegExp(
+      `${implConfigs}\\s+project\\s*\\(\\s*['\"][:.]?([^'\"]+)['\"]\\s*\\)`,
+      "g",
+    ),
   )) {
     projectDeps.push(match[1].replace(/^:/, ""));
   }
@@ -363,7 +370,10 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
   // Match Maven coordinate deps: implementation 'group:artifact:version'
   // and implementation 'group:artifact' (version managed by BOM)
   for (const match of content.matchAll(
-    new RegExp(`${implConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "g"),
+    new RegExp(
+      `${implConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`,
+      "g",
+    ),
   )) {
     mavenDeps.push({
       group: match[1],
@@ -375,7 +385,10 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
   // Exclude deps from test configurations — scan for those and remove matches
   const testDeps = new Set<string>();
   for (const match of content.matchAll(
-    new RegExp(`${testConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "g"),
+    new RegExp(
+      `${testConfigs}\\s+['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`,
+      "g",
+    ),
   )) {
     testDeps.add(`${match[1]}:${match[2]}`);
   }
@@ -404,6 +417,7 @@ git commit -m "Add parseGradleDependencies for Gradle dependency extraction"
 ### Task 4: Wire gradle.ts into the Java analyzer
 
 **Files:**
+
 - Modify: `src/analyzers/java/index.ts`
 - Create: `tests/fixtures/gradle-multimodule/app/src/main/java/com/example/app/App.java`
 - Create: `tests/fixtures/gradle-multimodule/lib/build.gradle`
@@ -413,6 +427,7 @@ git commit -m "Add parseGradleDependencies for Gradle dependency extraction"
 - [ ] **Step 1: Create Java source fixtures for multi-module project**
 
 Create `tests/fixtures/gradle-multimodule/app/src/main/java/com/example/app/App.java`:
+
 ```java
 package com.example.app;
 
@@ -426,6 +441,7 @@ public class App {
 ```
 
 Create `tests/fixtures/gradle-multimodule/lib/build.gradle`:
+
 ```
 plugins {
     id 'java-library'
@@ -435,6 +451,7 @@ group = 'com.example.mylib'
 ```
 
 Create `tests/fixtures/gradle-multimodule/lib/src/main/java/com/example/lib/Util.java`:
+
 ```java
 package com.example.lib;
 
@@ -450,7 +467,10 @@ public class Util {
 Add to `tests/analyzers/java.test.ts`:
 
 ```ts
-const GRADLE_FIXTURES = path.resolve(__dirname, "../fixtures/gradle-multimodule");
+const GRADLE_FIXTURES = path.resolve(
+  __dirname,
+  "../fixtures/gradle-multimodule",
+);
 
 describe("Java Analyzer — Gradle multi-module", () => {
   it("excludes subproject directories from root scan", async () => {
@@ -683,6 +703,7 @@ git commit -m "Wire Gradle multi-module support into Java analyzer"
 ### Task 5: Post-scan cross-app coordinate matching
 
 **Files:**
+
 - Modify: `src/cli/commands/scan.ts`
 - Modify: `tests/integration/pipeline.test.ts`
 
@@ -722,7 +743,8 @@ describe("Integration: Post-scan cross-app coordinate matching", () => {
       },
     ];
 
-    const { matchCrossAppCoordinates } = await import("../../src/cli/commands/scan.js");
+    const { matchCrossAppCoordinates } =
+      await import("../../src/cli/commands/scan.js");
     matchCrossAppCoordinates(apps);
 
     // The matching dep should be promoted
@@ -775,7 +797,8 @@ export function matchCrossAppCoordinates(
         app.internalImports.push({
           sourceModuleId: app.id,
           targetApplicationId: targetAppId,
-          targetPath: applications.find((a) => a.id === targetAppId)?.path ?? targetAppId,
+          targetPath:
+            applications.find((a) => a.id === targetAppId)?.path ?? targetAppId,
         });
       } else {
         remaining.push(dep);
@@ -790,26 +813,27 @@ export function matchCrossAppCoordinates(
 Then in the `scanCommand` action, add normalization of `internalImports` targetApplicationId inside the existing ID normalization loop (after the module import fixups around line 106):
 
 ```ts
-      // Fix internalImports targetApplicationId: replace absolute-path prefix
-      for (const imp of result.internalImports) {
-        if (imp.targetApplicationId.startsWith(absolutePrefix)) {
-          imp.targetApplicationId =
-            relativeId + imp.targetApplicationId.slice(absolutePrefix.length);
-        }
-        // Also normalize targets that use absolute paths of other apps
-        const rootPrefix = slugify(rootDir);
-        if (imp.targetApplicationId.startsWith(rootPrefix)) {
-          imp.targetApplicationId =
-            imp.targetApplicationId.slice(rootPrefix.length + 1); // +1 for the separator
-        }
-      }
+// Fix internalImports targetApplicationId: replace absolute-path prefix
+for (const imp of result.internalImports) {
+  if (imp.targetApplicationId.startsWith(absolutePrefix)) {
+    imp.targetApplicationId =
+      relativeId + imp.targetApplicationId.slice(absolutePrefix.length);
+  }
+  // Also normalize targets that use absolute paths of other apps
+  const rootPrefix = slugify(rootDir);
+  if (imp.targetApplicationId.startsWith(rootPrefix)) {
+    imp.targetApplicationId = imp.targetApplicationId.slice(
+      rootPrefix.length + 1,
+    ); // +1 for the separator
+  }
+}
 ```
 
 And after the analysis loop, before building `rawStructure`, call:
 
 ```ts
-    // Cross-app coordinate matching
-    matchCrossAppCoordinates(applications);
+// Cross-app coordinate matching
+matchCrossAppCoordinates(applications);
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -843,6 +867,7 @@ npm run dev -- scan -c /Users/chris/Downloads/charging-triad/diagram-docs.yaml \
 ```
 
 Verify:
+
 - `los-cha` root project has 0 modules (subproject dirs excluded)
 - `los-chargingdb` root project has 0 modules
 - `los-kafka-chargingdb-sink` root project has 0 modules
@@ -859,6 +884,7 @@ npm run dev -- model -c /Users/chris/Downloads/charging-triad/diagram-docs.yaml 
 ```
 
 Verify:
+
 - Relationships exist between `los-cha-app` → `los-chargingdb-model`
 - Relationships exist between `los-kafka-chargingdb-sink-app` → `los-chargingdb-model`
 

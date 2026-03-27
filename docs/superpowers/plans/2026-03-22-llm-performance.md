@@ -13,20 +13,22 @@
 ## File Structure
 
 ### New Files
-| File | Responsibility |
-|---|---|
-| `src/core/patterns.ts` | Data-driven registry of role patterns (annotation → architectural role) and external system patterns (dependency keyword → system type). Pure functions, no side effects. |
-| `src/core/parallel-model-builder.ts` | Orchestrates parallel per-app LLM calls: split RawStructure, dispatch with concurrency limit, merge partial models, run synthesis pass. |
-| `tests/core/patterns.test.ts` | Tests for pattern matching functions |
-| `tests/core/parallel-model-builder.test.ts` | Tests for split, merge, dedup, and orchestration logic |
+
+| File                                        | Responsibility                                                                                                                                                            |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/core/patterns.ts`                      | Data-driven registry of role patterns (annotation → architectural role) and external system patterns (dependency keyword → system type). Pure functions, no side effects. |
+| `src/core/parallel-model-builder.ts`        | Orchestrates parallel per-app LLM calls: split RawStructure, dispatch with concurrency limit, merge partial models, run synthesis pass.                                   |
+| `tests/core/patterns.test.ts`               | Tests for pattern matching functions                                                                                                                                      |
+| `tests/core/parallel-model-builder.test.ts` | Tests for split, merge, dedup, and orchestration logic                                                                                                                    |
 
 ### Modified Files
-| File | Changes |
-|---|---|
-| `src/core/model-builder.ts` | Use pattern registry for actors, external systems, relationship labels, descriptions. Consolidate `inferComponentTechnology()` into pattern registry. |
-| `src/core/llm-model-builder.ts` | Add per-app and synthesis prompt builders. Gate parallel path in `buildModelWithLLM()` for multi-app seed mode. Export `LLMProvider` interface and provider instances for reuse. |
-| `src/config/schema.ts` | Add `llm.concurrency` option (default 4). |
-| `tests/core/model-builder.test.ts` | Add tests for new actor inference, external system detection, and relationship labels. |
+
+| File                               | Changes                                                                                                                                                                          |
+| ---------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/core/model-builder.ts`        | Use pattern registry for actors, external systems, relationship labels, descriptions. Consolidate `inferComponentTechnology()` into pattern registry.                            |
+| `src/core/llm-model-builder.ts`    | Add per-app and synthesis prompt builders. Gate parallel path in `buildModelWithLLM()` for multi-app seed mode. Export `LLMProvider` interface and provider instances for reuse. |
+| `src/config/schema.ts`             | Add `llm.concurrency` option (default 4).                                                                                                                                        |
+| `tests/core/model-builder.test.ts` | Add tests for new actor inference, external system detection, and relationship labels.                                                                                           |
 
 ---
 
@@ -35,6 +37,7 @@
 ### Task 1: Pattern Registry
 
 **Files:**
+
 - Create: `src/core/patterns.ts`
 - Create: `tests/core/patterns.test.ts`
 
@@ -107,7 +110,10 @@ describe("detectRole", () => {
 
 describe("detectExternalSystems", () => {
   it("detects PostgreSQL from dependency name", () => {
-    const result = detectExternalSystems(["org.postgresql:postgresql", "spring-boot-starter-web"]);
+    const result = detectExternalSystems([
+      "org.postgresql:postgresql",
+      "spring-boot-starter-web",
+    ]);
     expect(result).toContainEqual({
       keyword: "postgresql",
       type: "Database",
@@ -126,16 +132,26 @@ describe("detectExternalSystems", () => {
 
   it("detects Redis from dependency name", () => {
     const result = detectExternalSystems(["jedis"]);
-    expect(result).toContainEqual(expect.objectContaining({ type: "Cache", technology: "Redis" }));
+    expect(result).toContainEqual(
+      expect.objectContaining({ type: "Cache", technology: "Redis" }),
+    );
   });
 
   it("detects multiple systems from mixed dependencies", () => {
-    const result = detectExternalSystems(["postgresql", "spring-kafka", "lettuce"]);
+    const result = detectExternalSystems([
+      "postgresql",
+      "spring-kafka",
+      "lettuce",
+    ]);
     expect(result).toHaveLength(3);
   });
 
   it("deduplicates by type+technology", () => {
-    const result = detectExternalSystems(["jedis", "lettuce", "spring-data-redis"]);
+    const result = detectExternalSystems([
+      "jedis",
+      "lettuce",
+      "spring-data-redis",
+    ]);
     const redisEntries = result.filter((r) => r.technology === "Redis");
     expect(redisEntries).toHaveLength(1);
   });
@@ -170,7 +186,17 @@ interface RolePattern {
 }
 
 const ROLE_PATTERNS: RolePattern[] = [
-  { keywords: ["controller", "restcontroller", "resource", "endpoint", "route", "handler"], role: "controller" },
+  {
+    keywords: [
+      "controller",
+      "restcontroller",
+      "resource",
+      "endpoint",
+      "route",
+      "handler",
+    ],
+    role: "controller",
+  },
   { keywords: ["listener", "consumer", "subscriber"], role: "listener" },
   { keywords: ["repository", "dao"], role: "repository" },
   { keywords: ["service"], role: "service" },
@@ -212,10 +238,22 @@ const EXTERNAL_SYSTEM_PATTERNS: ExternalSystemPattern[] = [
   { keywords: ["sqlite"], type: "Database", technology: "SQLite" },
   { keywords: ["h2"], type: "Database", technology: "H2" },
   { keywords: ["kafka"], type: "Message Broker", technology: "Apache Kafka" },
-  { keywords: ["rabbitmq", "amqp"], type: "Message Broker", technology: "RabbitMQ" },
-  { keywords: ["redis", "jedis", "lettuce"], type: "Cache", technology: "Redis" },
+  {
+    keywords: ["rabbitmq", "amqp"],
+    type: "Message Broker",
+    technology: "RabbitMQ",
+  },
+  {
+    keywords: ["redis", "jedis", "lettuce"],
+    type: "Cache",
+    technology: "Redis",
+  },
   { keywords: ["memcached"], type: "Cache", technology: "Memcached" },
-  { keywords: ["elasticsearch"], type: "Search Engine", technology: "Elasticsearch" },
+  {
+    keywords: ["elasticsearch"],
+    type: "Search Engine",
+    technology: "Elasticsearch",
+  },
   { keywords: ["opensearch"], type: "Search Engine", technology: "OpenSearch" },
   { keywords: ["s3", "minio"], type: "Object Storage", technology: "S3" },
 ];
@@ -224,7 +262,9 @@ const EXTERNAL_SYSTEM_PATTERNS: ExternalSystemPattern[] = [
  * Detect external systems from an array of dependency names.
  * Returns deduplicated matches (one per type+technology combination).
  */
-export function detectExternalSystems(depNames: string[]): DetectedExternalSystem[] {
+export function detectExternalSystems(
+  depNames: string[],
+): DetectedExternalSystem[] {
   const seen = new Set<string>();
   const results: DetectedExternalSystem[] = [];
   const depsLower = depNames.map((d) => d.toLowerCase());
@@ -265,12 +305,18 @@ export function inferRelationshipLabel(
  */
 export function inferExternalRelationshipLabel(systemType: string): string {
   switch (systemType) {
-    case "Database": return "Reads/writes data in";
-    case "Message Broker": return "Publishes to";
-    case "Cache": return "Caches data in";
-    case "Search Engine": return "Queries";
-    case "Object Storage": return "Stores files in";
-    default: return "Uses";
+    case "Database":
+      return "Reads/writes data in";
+    case "Message Broker":
+      return "Publishes to";
+    case "Cache":
+      return "Caches data in";
+    case "Search Engine":
+      return "Queries";
+    case "Object Storage":
+      return "Stores files in";
+    default:
+      return "Uses";
   }
 }
 
@@ -279,7 +325,10 @@ export function inferExternalRelationshipLabel(systemType: string): string {
  * Falls back to language name if no annotation match.
  * Framework-agnostic: maps roles to generic technology labels.
  */
-export function inferComponentTech(annotations: string, language: string): string {
+export function inferComponentTech(
+  annotations: string,
+  language: string,
+): string {
   const role = detectRole(annotations);
   if (role === "controller") return `${capitalize(language)} REST Controller`;
   if (role === "repository") return `${capitalize(language)} Repository`;
@@ -289,7 +338,8 @@ export function inferComponentTech(annotations: string, language: string): strin
   // Check for specific annotations not covered by roles
   const parts = annotations.split(",").map((a) => a.trim().toLowerCase());
   if (parts.includes("entity")) return "JPA Entity";
-  if (parts.includes("configuration") || parts.includes("config")) return `${capitalize(language)} Configuration`;
+  if (parts.includes("configuration") || parts.includes("config"))
+    return `${capitalize(language)} Configuration`;
   if (parts.includes("component")) return `${capitalize(language)} Component`;
 
   return capitalize(language);
@@ -317,6 +367,7 @@ git commit -m "feat: add framework-agnostic pattern registry for role and extern
 ### Task 2: Enhanced Deterministic Seed — Actors & External Systems
 
 **Files:**
+
 - Modify: `src/core/model-builder.ts:20-138` (the `buildModel` function)
 - Modify: `tests/core/model-builder.test.ts`
 
@@ -397,7 +448,15 @@ it("deduplicates actors across multiple apps", () => {
       language: "java",
       buildFile: "pom.xml",
       modules: [
-        { id: "a-ctrl", path: "ctrl", name: "ctrl", files: [], exports: [], imports: [], metadata: { annotations: "Controller" } },
+        {
+          id: "a-ctrl",
+          path: "ctrl",
+          name: "ctrl",
+          files: [],
+          exports: [],
+          imports: [],
+          metadata: { annotations: "Controller" },
+        },
       ],
       externalDependencies: [],
       internalImports: [],
@@ -409,7 +468,15 @@ it("deduplicates actors across multiple apps", () => {
       language: "java",
       buildFile: "pom.xml",
       modules: [
-        { id: "b-ctrl", path: "ctrl", name: "ctrl", files: [], exports: [], imports: [], metadata: { annotations: "RestController" } },
+        {
+          id: "b-ctrl",
+          path: "ctrl",
+          name: "ctrl",
+          files: [],
+          exports: [],
+          imports: [],
+          metadata: { annotations: "RestController" },
+        },
       ],
       externalDependencies: [],
       internalImports: [],
@@ -442,7 +509,10 @@ it("detects external systems from dependency names", () => {
       language: "java",
       buildFile: "pom.xml",
       modules: [],
-      externalDependencies: [{ name: "org.postgresql:postgresql" }, { name: "spring-kafka" }],
+      externalDependencies: [
+        { name: "org.postgresql:postgresql" },
+        { name: "spring-kafka" },
+      ],
       internalImports: [],
     },
   ]);
@@ -494,29 +564,37 @@ import { detectRole, detectExternalSystems } from "./patterns.js";
 
 // Replace line 121-138 (from `const externalSystems` through `return {`):
 
-  // External systems: merge config-declared with dependency-detected
-  const configExternalSystems = buildExternalSystems(config.externalSystems);
-  const detectedExternalSystems = detectExternalSystemsFromApps(apps);
-  const externalSystems = mergeExternalSystems(configExternalSystems, detectedExternalSystems);
+// External systems: merge config-declared with dependency-detected
+const configExternalSystems = buildExternalSystems(config.externalSystems);
+const detectedExternalSystems = detectExternalSystemsFromApps(apps);
+const externalSystems = mergeExternalSystems(
+  configExternalSystems,
+  detectedExternalSystems,
+);
 
-  // Actors: infer from module annotations
-  const actors = inferActors(apps);
+// Actors: infer from module annotations
+const actors = inferActors(apps);
 
-  // Relationships
-  const relationships = buildRelationships(apps, components, externalSystems, config.externalSystems);
+// Relationships
+const relationships = buildRelationships(
+  apps,
+  components,
+  externalSystems,
+  config.externalSystems,
+);
 
-  return {
-    version: 1,
-    system: {
-      name: config.system.name,
-      description: config.system.description,
-    },
-    actors,
-    externalSystems,
-    containers,
-    components,
-    relationships,
-  };
+return {
+  version: 1,
+  system: {
+    name: config.system.name,
+    description: config.system.description,
+  },
+  actors,
+  externalSystems,
+  containers,
+  components,
+  relationships,
+};
 ```
 
 Add these new helper functions at the bottom of the file:
@@ -525,7 +603,9 @@ Add these new helper functions at the bottom of the file:
 function detectExternalSystemsFromApps(
   apps: ScannedApplication[],
 ): ArchitectureModel["externalSystems"] {
-  const allDeps = apps.flatMap((app) => app.externalDependencies.map((d) => d.name));
+  const allDeps = apps.flatMap((app) =>
+    app.externalDependencies.map((d) => d.name),
+  );
   const detected = detectExternalSystems(allDeps);
   return detected.map((d) => ({
     id: slugify(d.technology),
@@ -574,7 +654,8 @@ function inferActors(apps: ScannedApplication[]): ArchitectureModel["actors"] {
     actors.push({
       id: "upstream-system",
       name: "Upstream System",
-      description: "External system that produces messages consumed by the system",
+      description:
+        "External system that produces messages consumed by the system",
     });
   }
   return actors;
@@ -590,11 +671,16 @@ Also update the description generation in `buildModel` to use detected roles. Re
 function roleDescription(displayName: string, annotations: string): string {
   const role = detectRole(annotations);
   switch (role) {
-    case "controller": return `REST API controller for ${displayName.toLowerCase()}`;
-    case "service": return `Business logic service for ${displayName.toLowerCase()}`;
-    case "repository": return `Data access layer for ${displayName.toLowerCase()}`;
-    case "listener": return `Message listener for ${displayName.toLowerCase()}`;
-    default: return `${displayName} module`;
+    case "controller":
+      return `REST API controller for ${displayName.toLowerCase()}`;
+    case "service":
+      return `Business logic service for ${displayName.toLowerCase()}`;
+    case "repository":
+      return `Data access layer for ${displayName.toLowerCase()}`;
+    case "listener":
+      return `Message listener for ${displayName.toLowerCase()}`;
+    default:
+      return `${displayName} module`;
   }
 }
 
@@ -626,6 +712,7 @@ git commit -m "feat: infer actors, external systems, and role-informed descripti
 ### Task 3: Enhanced Deterministic Seed — Relationship Labels & Component Technology
 
 **Files:**
+
 - Modify: `src/core/model-builder.ts:268-424` (inferComponentTechnology, buildRelationships)
 - Modify: `tests/core/model-builder.test.ts`
 
@@ -694,7 +781,9 @@ it("labels relationships to repository as 'Persists via'", () => {
           name: "svc",
           files: [],
           exports: [],
-          imports: [{ source: "repo", resolved: "app-repo", isExternal: false }],
+          imports: [
+            { source: "repo", resolved: "app-repo", isExternal: false },
+          ],
           metadata: { annotations: "Service" },
         },
         {
@@ -734,27 +823,32 @@ In `src/core/model-builder.ts`, modify `buildRelationships` to use pattern-based
 
 ```ts
 // Update the existing patterns import to include inferRelationshipLabel and Role type:
-import { detectRole, detectExternalSystems, inferRelationshipLabel, type Role } from "./patterns.js";
+import {
+  detectRole,
+  detectExternalSystems,
+  inferRelationshipLabel,
+  type Role,
+} from "./patterns.js";
 
 // In buildRelationships, after the moduleNameToId map (line ~327), add:
-  const moduleRole = new Map<string, Role | undefined>();
-  for (const app of apps) {
-    for (const m of app.modules) {
-      moduleRole.set(m.id, detectRole(m.metadata["annotations"] ?? ""));
-    }
+const moduleRole = new Map<string, Role | undefined>();
+for (const app of apps) {
+  for (const m of app.modules) {
+    moduleRole.set(m.id, detectRole(m.metadata["annotations"] ?? ""));
   }
+}
 
-  // Build component role lookup (use representative module's role)
-  const componentRole = new Map<string, Role | undefined>();
-  for (const comp of components) {
-    for (const modId of comp.moduleIds) {
-      const role = moduleRole.get(modId);
-      if (role) {
-        componentRole.set(comp.id, role);
-        break;
-      }
+// Build component role lookup (use representative module's role)
+const componentRole = new Map<string, Role | undefined>();
+for (const comp of components) {
+  for (const modId of comp.moduleIds) {
+    const role = moduleRole.get(modId);
+    if (role) {
+      componentRole.set(comp.id, role);
+      break;
     }
   }
+}
 ```
 
 Then replace the hardcoded `"Uses"` labels in the component relationship section (line ~382):
@@ -816,6 +910,7 @@ git commit -m "feat: role-aware relationship labels and framework-agnostic compo
 ### Task 4: Add `llm.concurrency` Config Option
 
 **Files:**
+
 - Modify: `src/config/schema.ts:66-73`
 
 - [ ] **Step 1: Add concurrency to llm config schema**
@@ -853,6 +948,7 @@ git commit -m "feat: add llm.concurrency config option (default 4)"
 ### Task 5: Export Provider Interface and Helpers from llm-model-builder
 
 **Files:**
+
 - Modify: `src/core/llm-model-builder.ts`
 
 - [ ] **Step 1: Export the LLMProvider interface and provider resolution**
@@ -921,6 +1017,7 @@ git commit -m "refactor: export LLMProvider interface and provider resolution fo
 ### Task 6: Per-App and Synthesis Prompts
 
 **Files:**
+
 - Modify: `src/core/llm-model-builder.ts`
 
 - [ ] **Step 1: Add per-app system prompt builder**
@@ -930,14 +1027,17 @@ Add to `src/core/llm-model-builder.ts` after `buildSystemPrompt`:
 ```ts
 export function buildPerAppSystemPrompt(outputPath?: string): string {
   const base = buildSystemPrompt(outputPath);
-  return base + `
+  return (
+    base +
+    `
 
 ### Single-App Mode
 You are modeling a SINGLE APPLICATION within a larger multi-app system.
 - Focus only on this application's internal architecture.
 - Do NOT produce cross-container relationships. These are handled separately.
 - The internalImports field is provided for context only (to inform descriptions). Do not create relationships from it.
-- Produce: containers (just this one), components, intra-app relationships, actors, externalSystems relevant to this app.`;
+- Produce: containers (just this one), components, intra-app relationships, actors, externalSystems relevant to this app.`
+  );
 }
 ```
 
@@ -955,24 +1055,32 @@ export function buildPerAppUserMessage(options: {
   // Single-app raw structure
   const singleAppStructure = {
     version: 1,
-    applications: [{
-      id: options.app.id,
-      path: options.app.path,
-      name: options.app.name,
-      language: options.app.language,
-      modules: options.app.modules.map((mod) => {
-        const annotations = mod.metadata["annotations"];
-        return {
-          id: mod.id,
-          name: mod.name,
-          ...(annotations ? { annotations } : {}),
-        };
-      }),
-      externalDependencies: options.app.externalDependencies.map((d) => d.name),
-      internalImports: options.app.internalImports,
-      ...(options.app.publishedAs ? { publishedAs: options.app.publishedAs } : {}),
-      ...(options.app.configFiles?.length ? { configFiles: options.app.configFiles } : {}),
-    }],
+    applications: [
+      {
+        id: options.app.id,
+        path: options.app.path,
+        name: options.app.name,
+        language: options.app.language,
+        modules: options.app.modules.map((mod) => {
+          const annotations = mod.metadata["annotations"];
+          return {
+            id: mod.id,
+            name: mod.name,
+            ...(annotations ? { annotations } : {}),
+          };
+        }),
+        externalDependencies: options.app.externalDependencies.map(
+          (d) => d.name,
+        ),
+        internalImports: options.app.internalImports,
+        ...(options.app.publishedAs
+          ? { publishedAs: options.app.publishedAs }
+          : {}),
+        ...(options.app.configFiles?.length
+          ? { configFiles: options.app.configFiles }
+          : {}),
+      },
+    ],
   };
 
   parts.push("## raw-structure.json\n");
@@ -1037,7 +1145,12 @@ Only include relationships that were provided to you. Do not invent new ones. Re
 }
 
 export function buildSynthesisUserMessage(options: {
-  containers: Array<{ id: string; name: string; description: string; technology: string }>;
+  containers: Array<{
+    id: string;
+    name: string;
+    description: string;
+    technology: string;
+  }>;
   actors: ArchitectureModel["actors"];
   externalSystems: ArchitectureModel["externalSystems"];
   crossAppRelationships: ArchitectureModel["relationships"];
@@ -1077,6 +1190,7 @@ git commit -m "feat: add per-app and synthesis prompt builders for parallel LLM 
 ### Task 7: Parallel Model Builder — Split & Merge
 
 **Files:**
+
 - Create: `src/core/parallel-model-builder.ts`
 - Create: `tests/core/parallel-model-builder.test.ts`
 
@@ -1085,20 +1199,43 @@ git commit -m "feat: add per-app and synthesis prompt builders for parallel LLM 
 ```ts
 // tests/core/parallel-model-builder.test.ts
 import { describe, it, expect } from "vitest";
-import { splitRawStructure, mergePartialModels } from "../../src/core/parallel-model-builder.js";
-import type { RawStructure, ArchitectureModel } from "../../src/analyzers/types.js";
+import {
+  splitRawStructure,
+  mergePartialModels,
+} from "../../src/core/parallel-model-builder.js";
+import type {
+  RawStructure,
+  ArchitectureModel,
+} from "../../src/analyzers/types.js";
 
 function makeRawStructure(apps: RawStructure["applications"]): RawStructure {
-  return { version: 1, scannedAt: "2026-01-01T00:00:00Z", checksum: "test", applications: apps };
+  return {
+    version: 1,
+    scannedAt: "2026-01-01T00:00:00Z",
+    checksum: "test",
+    applications: apps,
+  };
 }
 
 const appA = {
-  id: "app-a", path: "a", name: "a", language: "java" as const, buildFile: "pom.xml",
-  modules: [], externalDependencies: [], internalImports: [],
+  id: "app-a",
+  path: "a",
+  name: "a",
+  language: "java" as const,
+  buildFile: "pom.xml",
+  modules: [],
+  externalDependencies: [],
+  internalImports: [],
 };
 const appB = {
-  id: "app-b", path: "b", name: "b", language: "python" as const, buildFile: "pyproject.toml",
-  modules: [], externalDependencies: [], internalImports: [],
+  id: "app-b",
+  path: "b",
+  name: "b",
+  language: "python" as const,
+  buildFile: "pyproject.toml",
+  modules: [],
+  externalDependencies: [],
+  internalImports: [],
 };
 
 describe("splitRawStructure", () => {
@@ -1113,7 +1250,16 @@ describe("splitRawStructure", () => {
 
   it("preserves internalImports in each slice", () => {
     const raw = makeRawStructure([
-      { ...appA, internalImports: [{ sourceModuleId: "a-mod", targetApplicationId: "app-b", targetPath: "b" }] },
+      {
+        ...appA,
+        internalImports: [
+          {
+            sourceModuleId: "a-mod",
+            targetApplicationId: "app-b",
+            targetPath: "b",
+          },
+        ],
+      },
       appB,
     ]);
     const slices = splitRawStructure(raw);
@@ -1125,21 +1271,83 @@ describe("mergePartialModels", () => {
   const partial1: ArchitectureModel = {
     version: 1,
     system: { name: "", description: "" },
-    actors: [{ id: "api-consumer", name: "API Consumer", description: "Calls APIs" }],
-    externalSystems: [{ id: "postgresql", name: "PostgreSQL", description: "Database", technology: "Database" }],
-    containers: [{ id: "app-a", applicationId: "app-a", name: "A", description: "App A", technology: "Java", path: "a" }],
-    components: [{ id: "a-ctrl", containerId: "app-a", name: "Controller", description: "REST controller", technology: "Java", moduleIds: ["a-ctrl-mod"] }],
-    relationships: [{ sourceId: "a-ctrl", targetId: "a-svc", label: "Delegates to" }],
+    actors: [
+      { id: "api-consumer", name: "API Consumer", description: "Calls APIs" },
+    ],
+    externalSystems: [
+      {
+        id: "postgresql",
+        name: "PostgreSQL",
+        description: "Database",
+        technology: "Database",
+      },
+    ],
+    containers: [
+      {
+        id: "app-a",
+        applicationId: "app-a",
+        name: "A",
+        description: "App A",
+        technology: "Java",
+        path: "a",
+      },
+    ],
+    components: [
+      {
+        id: "a-ctrl",
+        containerId: "app-a",
+        name: "Controller",
+        description: "REST controller",
+        technology: "Java",
+        moduleIds: ["a-ctrl-mod"],
+      },
+    ],
+    relationships: [
+      { sourceId: "a-ctrl", targetId: "a-svc", label: "Delegates to" },
+    ],
   };
 
   const partial2: ArchitectureModel = {
     version: 1,
     system: { name: "", description: "" },
-    actors: [{ id: "api-consumer", name: "API Consumer", description: "External API consumer" }],
-    externalSystems: [{ id: "postgresql", name: "PostgreSQL", description: "Stores data", technology: "Database" }],
-    containers: [{ id: "app-b", applicationId: "app-b", name: "B", description: "App B", technology: "Python", path: "b" }],
-    components: [{ id: "b-svc", containerId: "app-b", name: "Service", description: "Business logic", technology: "Python", moduleIds: ["b-svc-mod"] }],
-    relationships: [{ sourceId: "b-svc", targetId: "b-repo", label: "Persists via" }],
+    actors: [
+      {
+        id: "api-consumer",
+        name: "API Consumer",
+        description: "External API consumer",
+      },
+    ],
+    externalSystems: [
+      {
+        id: "postgresql",
+        name: "PostgreSQL",
+        description: "Stores data",
+        technology: "Database",
+      },
+    ],
+    containers: [
+      {
+        id: "app-b",
+        applicationId: "app-b",
+        name: "B",
+        description: "App B",
+        technology: "Python",
+        path: "b",
+      },
+    ],
+    components: [
+      {
+        id: "b-svc",
+        containerId: "app-b",
+        name: "Service",
+        description: "Business logic",
+        technology: "Python",
+        moduleIds: ["b-svc-mod"],
+      },
+    ],
+    relationships: [
+      { sourceId: "b-svc", targetId: "b-repo", label: "Persists via" },
+    ],
   };
 
   it("concatenates containers and components", () => {
@@ -1157,7 +1365,9 @@ describe("mergePartialModels", () => {
 
   it("deduplicates external systems by id, keeping longer description", () => {
     const merged = mergePartialModels([partial1, partial2]);
-    const pgSystems = merged.externalSystems.filter((e) => e.id === "postgresql");
+    const pgSystems = merged.externalSystems.filter(
+      (e) => e.id === "postgresql",
+    );
     expect(pgSystems).toHaveLength(1);
     expect(pgSystems[0].description).toBe("Database used by the system");
     // Keeps longer description — "Stores data" is shorter than original "Database"
@@ -1200,7 +1410,9 @@ export function splitRawStructure(raw: RawStructure): RawStructure[] {
  * Merge partial per-app ArchitectureModels into a single model.
  * Deduplicates actors and external systems by ID, keeping longer descriptions.
  */
-export function mergePartialModels(partials: ArchitectureModel[]): ArchitectureModel {
+export function mergePartialModels(
+  partials: ArchitectureModel[],
+): ArchitectureModel {
   const containers = partials.flatMap((p) => p.containers);
   const components = partials.flatMap((p) => p.components);
   const relationships = partials.flatMap((p) => p.relationships);
@@ -1256,6 +1468,7 @@ git commit -m "feat: add split and merge logic for parallel per-app LLM calls"
 ### Task 8: Parallel Model Builder — Orchestration
 
 **Files:**
+
 - Modify: `src/core/parallel-model-builder.ts`
 - Modify: `tests/core/parallel-model-builder.test.ts`
 
@@ -1264,7 +1477,10 @@ git commit -m "feat: add split and merge logic for parallel per-app LLM calls"
 Add to `tests/core/parallel-model-builder.test.ts`:
 
 ```ts
-import { buildModelParallel, type ParallelBuildOptions } from "../../src/core/parallel-model-builder.js";
+import {
+  buildModelParallel,
+  type ParallelBuildOptions,
+} from "../../src/core/parallel-model-builder.js";
 import { configSchema } from "../../src/config/schema.js";
 import type { ArchitectureModel } from "../../src/analyzers/types.js";
 import { stringify as stringifyYaml } from "yaml";
@@ -1294,8 +1510,34 @@ describe("buildModelParallel", () => {
   it("dispatches one call per app and merges results", async () => {
     const config = makeConfig();
     const raw = makeRawStructure([
-      { ...appA, modules: [{ id: "a-mod", path: "a", name: "a", files: [], exports: [], imports: [], metadata: {} }] },
-      { ...appB, modules: [{ id: "b-mod", path: "b", name: "b", files: [], exports: [], imports: [], metadata: {} }] },
+      {
+        ...appA,
+        modules: [
+          {
+            id: "a-mod",
+            path: "a",
+            name: "a",
+            files: [],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      },
+      {
+        ...appB,
+        modules: [
+          {
+            id: "b-mod",
+            path: "b",
+            name: "b",
+            files: [],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      },
     ]);
 
     const partialA: ArchitectureModel = {
@@ -1303,8 +1545,26 @@ describe("buildModelParallel", () => {
       system: { name: "", description: "" },
       actors: [],
       externalSystems: [],
-      containers: [{ id: "app-a", applicationId: "app-a", name: "A", description: "App A", technology: "Java", path: "a" }],
-      components: [{ id: "a-mod", containerId: "app-a", name: "A Module", description: "Module A", technology: "Java", moduleIds: ["a-mod"] }],
+      containers: [
+        {
+          id: "app-a",
+          applicationId: "app-a",
+          name: "A",
+          description: "App A",
+          technology: "Java",
+          path: "a",
+        },
+      ],
+      components: [
+        {
+          id: "a-mod",
+          containerId: "app-a",
+          name: "A Module",
+          description: "Module A",
+          technology: "Java",
+          moduleIds: ["a-mod"],
+        },
+      ],
       relationships: [],
     };
     const partialB: ArchitectureModel = {
@@ -1312,8 +1572,26 @@ describe("buildModelParallel", () => {
       system: { name: "", description: "" },
       actors: [],
       externalSystems: [],
-      containers: [{ id: "app-b", applicationId: "app-b", name: "B", description: "App B", technology: "Python", path: "b" }],
-      components: [{ id: "b-mod", containerId: "app-b", name: "B Module", description: "Module B", technology: "Python", moduleIds: ["b-mod"] }],
+      containers: [
+        {
+          id: "app-b",
+          applicationId: "app-b",
+          name: "B",
+          description: "App B",
+          technology: "Python",
+          path: "b",
+        },
+      ],
+      components: [
+        {
+          id: "b-mod",
+          containerId: "app-b",
+          name: "B Module",
+          description: "Module B",
+          technology: "Python",
+          moduleIds: ["b-mod"],
+        },
+      ],
       relationships: [],
     };
 
@@ -1340,14 +1618,29 @@ describe("buildModelParallel", () => {
   it("falls back to deterministic seed when per-app call fails", async () => {
     const config = makeConfig();
     const raw = makeRawStructure([
-      { ...appA, modules: [{ id: "a-mod", path: "a", name: "a", files: [], exports: [], imports: [], metadata: {} }] },
+      {
+        ...appA,
+        modules: [
+          {
+            id: "a-mod",
+            path: "a",
+            name: "a",
+            files: [],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
+      },
     ]);
 
     const provider = {
       name: "mock",
       supportsTools: false,
       isAvailable: () => true,
-      generate: async () => { throw new Error("LLM failed"); },
+      generate: async () => {
+        throw new Error("LLM failed");
+      },
     };
 
     const result = await buildModelParallel({
@@ -1372,7 +1665,7 @@ Expected: FAIL — `buildModelParallel` not found
 
 Add to `src/core/parallel-model-builder.ts`:
 
-```ts
+````ts
 import type { Config } from "../config/schema.js";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { buildModel } from "./model-builder.js";
@@ -1421,7 +1714,9 @@ export async function buildModelParallel(
   });
 
   // 3. Dispatch parallel per-app LLM calls with concurrency limit
-  emit?.(`Dispatching ${apps.length} per-app LLM calls (concurrency: ${concurrency})...`);
+  emit?.(
+    `Dispatching ${apps.length} per-app LLM calls (concurrency: ${concurrency})...`,
+  );
 
   const perAppTimeout = 300_000; // 5 minutes per app
   let running = 0;
@@ -1450,7 +1745,10 @@ export async function buildModelParallel(
       emit?.(`Modeling application ${i + 1}/${apps.length}: ${app.name}...`);
 
       const outputPath = provider.supportsTools
-        ? path.join(os.tmpdir(), `diagram-docs-perapp-${app.id}-${Date.now()}.yaml`)
+        ? path.join(
+            os.tmpdir(),
+            `diagram-docs-perapp-${app.id}-${Date.now()}.yaml`,
+          )
         : undefined;
       const systemPrompt = buildPerAppSystemPrompt(outputPath);
       const userMessage = buildPerAppUserMessage({
@@ -1471,12 +1769,17 @@ export async function buildModelParallel(
       } finally {
         // Clean up temp file for tool-using providers
         if (outputPath) {
-          try { fs.unlinkSync(outputPath); } catch { /* best-effort */ }
+          try {
+            fs.unlinkSync(outputPath);
+          } catch {
+            /* best-effort */
+          }
         }
       }
 
       // Prefer file output if provider wrote one, otherwise use text stream
-      let rawOutput = textOutput.trim()
+      let rawOutput = textOutput
+        .trim()
         .replace(/^```ya?ml\s*\n?/i, "")
         .replace(/\n?```\s*$/i, "");
 
@@ -1492,7 +1795,9 @@ export async function buildModelParallel(
       return architectureModelSchema.parse(parsed) as ArchitectureModel;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      emit?.(`Warning: LLM call failed for ${app.name}, using deterministic seed: ${msg}`);
+      emit?.(
+        `Warning: LLM call failed for ${app.name}, using deterministic seed: ${msg}`,
+      );
       // Fallback to deterministic seed for this app
       return buildModel({ config, rawStructure: slices[i] });
     } finally {
@@ -1515,7 +1820,9 @@ export async function buildModelParallel(
   });
 
   // Add cross-app relationships, preferring existing LLM labels
-  const existingKeys = new Set(merged.relationships.map((r) => `${r.sourceId}->${r.targetId}`));
+  const existingKeys = new Set(
+    merged.relationships.map((r) => `${r.sourceId}->${r.targetId}`),
+  );
   for (const rel of crossAppRelationships) {
     const key = `${rel.sourceId}->${rel.targetId}`;
     if (!existingKeys.has(key)) {
@@ -1539,7 +1846,10 @@ export async function buildModelParallel(
     const synthSystemPrompt = buildSynthesisSystemPrompt();
     const synthUserMessage = buildSynthesisUserMessage({
       containers: merged.containers.map((c) => ({
-        id: c.id, name: c.name, description: c.description, technology: c.technology,
+        id: c.id,
+        name: c.name,
+        description: c.description,
+        technology: c.technology,
       })),
       actors: merged.actors,
       externalSystems: merged.externalSystems,
@@ -1553,7 +1863,8 @@ export async function buildModelParallel(
       options.onProgress,
     );
 
-    let synthYaml = synthOutput.trim()
+    let synthYaml = synthOutput
+      .trim()
       .replace(/^```ya?ml\s*\n?/i, "")
       .replace(/\n?```\s*$/i, "");
 
@@ -1569,18 +1880,27 @@ export async function buildModelParallel(
 
     // Apply synthesis results
     if (synthParsed.system?.name) merged.system.name = synthParsed.system.name;
-    if (synthParsed.system?.description) merged.system.description = synthParsed.system.description;
+    if (synthParsed.system?.description)
+      merged.system.description = synthParsed.system.description;
     if (synthParsed.actors?.length) merged.actors = synthParsed.actors;
-    if (synthParsed.externalSystems?.length) merged.externalSystems = synthParsed.externalSystems;
+    if (synthParsed.externalSystems?.length)
+      merged.externalSystems = synthParsed.externalSystems;
 
     // Update cross-app relationship labels from synthesis
     if (synthParsed.relationships?.length) {
       const synthRelMap = new Map(
-        synthParsed.relationships.map((r) => [`${r.sourceId}->${r.targetId}`, r]),
+        synthParsed.relationships.map((r) => [
+          `${r.sourceId}->${r.targetId}`,
+          r,
+        ]),
       );
       for (const rel of merged.relationships) {
         const synthRel = synthRelMap.get(`${rel.sourceId}->${rel.targetId}`);
-        if (synthRel && synthRel.label !== "Uses" && synthRel.label !== "Calls") {
+        if (
+          synthRel &&
+          synthRel.label !== "Uses" &&
+          synthRel.label !== "Calls"
+        ) {
           rel.label = synthRel.label;
           if (synthRel.technology) rel.technology = synthRel.technology;
         }
@@ -1588,7 +1908,9 @@ export async function buildModelParallel(
     }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    emit?.(`Warning: synthesis call failed, using merged results as-is: ${msg}`);
+    emit?.(
+      `Warning: synthesis call failed, using merged results as-is: ${msg}`,
+    );
     // Fall back to config values for system info
     merged.system.name = config.system.name;
     merged.system.description = config.system.description;
@@ -1596,7 +1918,7 @@ export async function buildModelParallel(
 
   return merged;
 }
-```
+````
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -1615,6 +1937,7 @@ git commit -m "feat: implement parallel per-app LLM orchestration with synthesis
 ### Task 9: Wire Parallel Path into buildModelWithLLM
 
 **Files:**
+
 - Modify: `src/core/llm-model-builder.ts:763-951`
 
 - [ ] **Step 1: Add parallel dispatch gate in buildModelWithLLM**
@@ -1622,22 +1945,22 @@ git commit -m "feat: implement parallel per-app LLM orchestration with synthesis
 In `src/core/llm-model-builder.ts`, after the provider resolution in `buildModelWithLLM` (around line 797), add a gate for the parallel path:
 
 ```ts
-  // Parallel path: multi-app seed mode
-  const isSeedMode = !options.existingModelYaml;
-  const apps = options.rawStructure.applications;
-  if (isSeedMode && apps.length > 1) {
-    const { buildModelParallel } = await import("./parallel-model-builder.js");
-    return buildModelParallel({
-      rawStructure: options.rawStructure,
-      config: options.config,
-      configYaml: options.configYaml,
-      provider: resolvedProvider,
-      onStatus: (status) => options.onStatus?.(status, resolvedProvider.name),
-      onProgress: options.onProgress,
-    });
-  }
+// Parallel path: multi-app seed mode
+const isSeedMode = !options.existingModelYaml;
+const apps = options.rawStructure.applications;
+if (isSeedMode && apps.length > 1) {
+  const { buildModelParallel } = await import("./parallel-model-builder.js");
+  return buildModelParallel({
+    rawStructure: options.rawStructure,
+    config: options.config,
+    configYaml: options.configYaml,
+    provider: resolvedProvider,
+    onStatus: (status) => options.onStatus?.(status, resolvedProvider.name),
+    onProgress: options.onProgress,
+  });
+}
 
-  // Single-app or update mode: existing sequential path (unchanged below)
+// Single-app or update mode: existing sequential path (unchanged below)
 ```
 
 - [ ] **Step 2: Run typecheck**
@@ -1686,6 +2009,7 @@ Expected: PASS — clean compile to dist/
 - [ ] **Step 5: Commit any remaining fixes**
 
 If any lint/type issues were found, stage only the affected files:
+
 ```bash
 git add src/core/patterns.ts src/core/model-builder.ts src/core/llm-model-builder.ts src/core/parallel-model-builder.ts src/config/schema.ts
 git commit -m "fix: address lint and type issues from parallel LLM implementation"

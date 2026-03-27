@@ -2,7 +2,18 @@
  * Shared terminal utilities used by Frame and ParallelProgress components.
  */
 
-export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+export const SPINNER_FRAMES = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+];
 export const SPINNER_INTERVAL = 80;
 
 export function getFrameWidth(): number {

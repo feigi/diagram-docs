@@ -25,9 +25,7 @@ This guide is designed for LLM-assisted fixture creation. Point an LLM at the so
       "isExternal": true
     }
   ],
-  "externalDependencies": [
-    { "name": "<dep name as parsed from build file>" }
-  ],
+  "externalDependencies": [{ "name": "<dep name as parsed from build file>" }],
   "metadata": {
     "<module name>": {
       "<key>": "<value, e.g. spring.stereotypes: @Service>"

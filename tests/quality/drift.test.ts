@@ -6,10 +6,7 @@ import { generateContextDiagram } from "../../src/generator/d2/context.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateComponentDiagram } from "../../src/generator/d2/component.js";
 import type { DriftReport } from "./helpers/types.js";
-import {
-  extractD2ShapeIds,
-  computeLineChurn,
-} from "./helpers/metrics.js";
+import { extractD2ShapeIds, computeLineChurn } from "./helpers/metrics.js";
 import {
   formatDriftReport,
   generateDriftSuggestions,
@@ -120,9 +117,7 @@ function measureDrift(
   // Stability: fraction of IDs that remained unchanged
   const stableIds = allIdsBefore.filter((id) => afterIdSet.has(id));
   const stabilityScore =
-    allIdsBefore.length === 0
-      ? 1
-      : stableIds.length / allIdsBefore.length;
+    allIdsBefore.length === 0 ? 1 : stableIds.length / allIdsBefore.length;
 
   // Would user files break? If any removed IDs were referenced
   const userFilesBroken = removedIds.length > 0;
@@ -178,12 +173,10 @@ describe("Drift: Additive changes", () => {
       technology: "Go",
     });
 
-    const report = measureDrift(
-      "Add a new container",
-      model,
-      after,
-      ["context", "container"],
-    );
+    const report = measureDrift("Add a new container", model, after, [
+      "context",
+      "container",
+    ]);
     reports.push(report);
 
     // Existing content should be mostly stable
@@ -202,12 +195,9 @@ describe("Drift: Additive changes", () => {
       moduleIds: [],
     });
 
-    const report = measureDrift(
-      "Add a new component",
-      model,
-      after,
-      ["component"],
-    );
+    const report = measureDrift("Add a new component", model, after, [
+      "component",
+    ]);
     reports.push(report);
 
     expect(report.stabilityScore).toBeGreaterThanOrEqual(0.8);
@@ -223,12 +213,10 @@ describe("Drift: Additive changes", () => {
       technology: "SMTP",
     });
 
-    const report = measureDrift(
-      "Add a new relationship",
-      model,
-      after,
-      ["context", "container"],
-    );
+    const report = measureDrift("Add a new relationship", model, after, [
+      "context",
+      "container",
+    ]);
     reports.push(report);
 
     expect(report.stabilityScore).toBeGreaterThanOrEqual(0.9);
@@ -324,12 +312,10 @@ describe("Drift: Removal scenarios", () => {
       (r) => r.sourceId !== "user" && r.targetId !== "user",
     );
 
-    const report = measureDrift(
-      "Remove all actors",
-      model,
-      after,
-      ["context", "container"],
-    );
+    const report = measureDrift("Remove all actors", model, after, [
+      "context",
+      "container",
+    ]);
     reports.push(report);
   });
 });

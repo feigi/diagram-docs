@@ -17,17 +17,22 @@
   ],
   "imports": [
     { "source": "express", "inModule": "api-gateway", "isExternal": true },
-    { "source": "./routes/index", "inModule": "api-gateway", "isExternal": false },
+    {
+      "source": "./routes/index",
+      "inModule": "api-gateway",
+      "isExternal": false
+    },
     { "source": "express", "inModule": "routes", "isExternal": true },
     { "source": "./users", "inModule": "routes", "isExternal": false },
     { "source": "express", "inModule": "middleware", "isExternal": true },
     { "source": "zod", "inModule": "routes", "isExternal": true },
-    { "source": "../middleware/auth", "inModule": "routes", "isExternal": false }
+    {
+      "source": "../middleware/auth",
+      "inModule": "routes",
+      "isExternal": false
+    }
   ],
-  "externalDependencies": [
-    { "name": "express" },
-    { "name": "zod" }
-  ],
+  "externalDependencies": [{ "name": "express" }, { "name": "zod" }],
   "metadata": {
     "routes": { "framework": "Express" }
   }

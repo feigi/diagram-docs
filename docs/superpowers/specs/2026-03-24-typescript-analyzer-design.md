@@ -36,6 +36,7 @@ This approach is framework-agnostic — works with `src/`, `lib/`, `app/`, flat 
 ### Export Extraction
 
 Scan files for these export forms:
+
 - `export class Foo` / `export default class Foo`
 - `export function foo` / `export default function foo`
 - `export const/let/var foo`
@@ -52,6 +53,7 @@ Regex-based parsing (consistent with all existing analyzers — no AST dependenc
 - `require("...")` (CommonJS)
 
 Classification:
+
 - Starts with `.` or `..` → internal
 - Otherwise → external
 
@@ -83,15 +85,15 @@ Supplementary metadata — the scanner works identically regardless of framework
 
 ```typescript
 const KNOWN_FRAMEWORKS: Record<string, string> = {
-  "express": "Express",
-  "fastify": "Fastify",
+  express: "Express",
+  fastify: "Fastify",
   "@nestjs/core": "NestJS",
-  "next": "Next.js",
-  "hono": "Hono",
+  next: "Next.js",
+  hono: "Hono",
   "@angular/core": "Angular",
-  "nuxt": "Nuxt",
-  "remix": "Remix",
-  "koa": "Koa",
+  nuxt: "Nuxt",
+  remix: "Remix",
+  koa: "Koa",
 };
 ```
 
@@ -133,6 +135,7 @@ Register `typescriptAnalyzer` in `src/analyzers/registry.ts` alongside existing 
 - Detects framework metadata from dependencies
 
 Separate import parser tests (`describe('TypeScript Imports Parser')`) covering:
+
 - ES static imports (`import X from "..."`)
 - Dynamic imports (`import("...")`)
 - Require calls (`require("...")`)
@@ -141,6 +144,7 @@ Separate import parser tests (`describe('TypeScript Imports Parser')`) covering:
 ### Fixture
 
 New TypeScript app fixture under `tests/fixtures/monorepo/` with:
+
 - `tsconfig.json` (with `rootDir` or `include`)
 - `package.json` (with Express dependency for framework detection)
 - `src/` with 2-3 modules containing `.ts` files with imports

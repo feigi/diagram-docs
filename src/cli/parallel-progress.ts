@@ -68,10 +68,14 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
 
   function stateIcon(state: AppState): string {
     switch (state) {
-      case "done": return chalk.green("✓");
-      case "failed": return chalk.red("✗");
-      case "queued": return chalk.dim("○");
-      default: return chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+      case "done":
+        return chalk.green("✓");
+      case "failed":
+        return chalk.red("✗");
+      case "queued":
+        return chalk.dim("○");
+      default:
+        return chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
     }
   }
 
@@ -83,26 +87,36 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     const MAX_APP_ID_LEN = Math.min(60, Math.max(32, inner - 50));
 
     function row(content: string): string {
-      return chalk.dim("│") + " " + padRight(content, inner - 2) + " " + chalk.dim("│");
+      return (
+        chalk.dim("│") +
+        " " +
+        padRight(content, inner - 2) +
+        " " +
+        chalk.dim("│")
+      );
     }
 
     const titleStr = " LLM Agents ";
     const topFill = inner - titleStr.length - 1;
-    const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
+    const top =
+      chalk.dim("┌─") +
+      chalk.bold(titleStr) +
+      chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
     const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
 
     // Header: spinner + "Modeling N apps" + overall elapsed
-    const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+    const spinner = chalk.cyan(
+      SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length],
+    );
     const headerText = statusText || `Modeling ${apps.length} apps`;
     const elapsed = overallElapsed();
     const maxHeaderText = inner - 10 - elapsed.length;
-    const headerRow = row(`${spinner} ${truncate(headerText, maxHeaderText)}  ${chalk.dim(elapsed)}`);
+    const headerRow = row(
+      `${spinner} ${truncate(headerText, maxHeaderText)}  ${chalk.dim(elapsed)}`,
+    );
 
     // Model line
     const modelRow = row(`  Model: ${llmModel}`);
-
-    // Blank separator
-    const blankRow = chalk.dim("│") + " ".repeat(inner) + chalk.dim("│");
 
     // App rows — limit to terminal height.
     // Scroll indicators are counted within the budget so the frame
@@ -145,16 +159,18 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     const appRows = visibleApps.map((app) => {
       const icon = stateIcon(app.state);
       const id = truncate(app.id, MAX_APP_ID_LEN);
-      const stateLabel = app.state === "done" || app.state === "failed"
-        ? app.state
-        : app.state === "queued"
-          ? "queued"
-          : `${app.state}...`;
-      const elapsedStr = app.elapsed != null
-        ? formatElapsed(app.elapsed)
-        : app.startTime != null
-          ? formatElapsed(Date.now() - app.startTime)
-          : "";
+      const stateLabel =
+        app.state === "done" || app.state === "failed"
+          ? app.state
+          : app.state === "queued"
+            ? "queued"
+            : `${app.state}...`;
+      const elapsedStr =
+        app.elapsed != null
+          ? formatElapsed(app.elapsed)
+          : app.startTime != null
+            ? formatElapsed(Date.now() - app.startTime)
+            : "";
       const leftPart = `${icon} ${padRight(id, MAX_APP_ID_LEN + 2)}${stateLabel}`;
       if (elapsedStr) {
         const maxLeft = inner - 4 - elapsedStr.length;
@@ -191,9 +207,17 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
   }
 
   function emergencyRestore() {
-    try { process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h"); } catch { /* best-effort during exit */ }
+    try {
+      process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h");
+    } catch {
+      /* best-effort during exit */
+    }
     if (stdinTTY) {
-      try { process.stdin.setRawMode(false); } catch { /* best-effort during exit */ }
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        /* best-effort during exit */
+      }
     }
   }
 
@@ -214,7 +238,11 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     try {
       process.stderr.write("\x1b[?1000h\x1b[?1006h");
     } catch {
-      try { process.stdin.setRawMode(wasRawMode); } catch { /* best-effort */ }
+      try {
+        process.stdin.setRawMode(wasRawMode);
+      } catch {
+        /* best-effort */
+      }
       return;
     }
     process.on("exit", emergencyRestore);
@@ -231,6 +259,7 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
         return;
       }
       // SGR mouse: \x1b[<btn;col;rowM  (64=wheel up, 65=wheel down)
+      // eslint-disable-next-line no-control-regex
       const match = str.match(/\x1b\[<(\d+);\d+;\d+[Mm]/);
       if (!match) return;
       const btn = parseInt(match[1], 10);
@@ -265,8 +294,16 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       stdinListener = null;
     }
     if (stdinTTY) {
-      try { process.stderr.write("\x1b[?1000l\x1b[?1006l"); } catch { /* stderr may be unavailable */ }
-      try { process.stdin.setRawMode(wasRawMode); } catch { /* stdin may be unavailable */ }
+      try {
+        process.stderr.write("\x1b[?1000l\x1b[?1006l");
+      } catch {
+        /* stderr may be unavailable */
+      }
+      try {
+        process.stdin.setRawMode(wasRawMode);
+      } catch {
+        /* stdin may be unavailable */
+      }
       process.stdin.unref();
     }
   }
@@ -291,12 +328,10 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     if (userScrolled) return; // don't override manual scroll position
     const maxStart = Math.max(0, apps.length - maxAppRows + 1);
     const firstActive = apps.findIndex(
-      (a) => a.state !== "done" && a.state !== "failed"
+      (a) => a.state !== "done" && a.state !== "failed",
     );
     const newStart =
-      firstActive === -1
-        ? maxStart
-        : Math.max(0, firstActive - 2);
+      firstActive === -1 ? maxStart : Math.max(0, firstActive - 2);
     viewportStart = Math.min(maxStart, Math.max(viewportStart, newStart));
   }
 
@@ -321,7 +356,11 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
         if (!isTTY) {
           printLine(warning);
         } else {
-          try { process.stderr.write(`\n${warning}\n`); } catch { /* best-effort */ }
+          try {
+            process.stderr.write(`\n${warning}\n`);
+          } catch {
+            /* best-effort */
+          }
         }
         return;
       }
@@ -340,7 +379,8 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       }
 
       if (!isTTY) {
-        const elapsedStr = entry.elapsed != null ? ` (${formatElapsed(entry.elapsed)})` : "";
+        const elapsedStr =
+          entry.elapsed != null ? ` (${formatElapsed(entry.elapsed)})` : "";
         printLine(`${appId}: ${state}${elapsedStr}`);
         return;
       }
@@ -373,12 +413,21 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       const inner = frameWidth - 2;
       const titleStr = " LLM Agents ";
       const topFill = inner - titleStr.length - 1;
-      const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
+      const top =
+        chalk.dim("┌─") +
+        chalk.bold(titleStr) +
+        chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
       const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
       const icon = isError ? chalk.red("✗") : chalk.green("✓");
-      const summaryRow = chalk.dim("│") + " " +
-        padRight(`${icon} ${truncate(summary, inner - 8)}  ${chalk.dim(elapsed)}`, inner - 2) +
-        " " + chalk.dim("│");
+      const summaryRow =
+        chalk.dim("│") +
+        " " +
+        padRight(
+          `${icon} ${truncate(summary, inner - 8)}  ${chalk.dim(elapsed)}`,
+          inner - 2,
+        ) +
+        " " +
+        chalk.dim("│");
 
       let output = "";
       if (prevTotalRows > 0) {
@@ -392,7 +441,11 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
         process.stderr.write(output);
       } finally {
         // Ensure cursor is restored even if the write partially fails
-        try { process.stderr.write("\x1b[?25h"); } catch { /* best-effort */ }
+        try {
+          process.stderr.write("\x1b[?25h");
+        } catch {
+          /* best-effort */
+        }
       }
     },
   };

@@ -8,7 +8,11 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import type { Config } from "../config/schema.js";
-import type { RawStructure, ScannedApplication, ArchitectureModel } from "../analyzers/types.js";
+import type {
+  RawStructure,
+  ScannedApplication,
+  ArchitectureModel,
+} from "../analyzers/types.js";
 import { architectureModelSchema } from "./model.js";
 import { buildModel } from "./model-builder.js";
 
@@ -32,16 +36,14 @@ export class LLMCallError extends Error {
 
 export class LLMOutputError extends Error {
   public readonly rawOutput?: string;
-  constructor(
-    message: string,
-    rawOutput?: string,
-    options?: ErrorOptions,
-  ) {
+  constructor(message: string, rawOutput?: string, options?: ErrorOptions) {
     super(message, options);
     this.name = "LLMOutputError";
-    this.rawOutput = rawOutput !== undefined && rawOutput.length > 500
-      ? rawOutput.slice(0, 500) + `\n... (${rawOutput.length - 500} more chars truncated)`
-      : rawOutput;
+    this.rawOutput =
+      rawOutput !== undefined && rawOutput.length > 500
+        ? rawOutput.slice(0, 500) +
+          `\n... (${rawOutput.length - 500} more chars truncated)`
+        : rawOutput;
   }
 }
 
@@ -70,7 +72,13 @@ export function isProgrammingError(err: unknown): boolean {
 }
 
 /** System-level error codes that indicate resource exhaustion, not LLM issues. */
-const SYSTEM_ERROR_CODES = new Set(["ENOMEM", "ENOSPC", "EMFILE", "ENFILE", "E2BIG"]);
+const SYSTEM_ERROR_CODES = new Set([
+  "ENOMEM",
+  "ENOSPC",
+  "EMFILE",
+  "ENFILE",
+  "E2BIG",
+]);
 
 /**
  * Returns true for OS-level resource errors that should propagate rather
@@ -99,111 +107,7 @@ export function rethrowIfFatal(err: unknown): void {
  * and should propagate as a bug.
  */
 export function isRecoverableLLMError(err: unknown): boolean {
-  return (
-    err instanceof LLMCallError ||
-    err instanceof LLMOutputError
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Async spawn helper
-// ---------------------------------------------------------------------------
-
-/**
- * Spawn a process, write data to stdin, and collect stdout.
- * Uses async spawn to avoid pipe buffer deadlocks with large inputs.
- */
-function spawnWithStdin(
-  cmd: string,
-  args: string[],
-  stdinData: string,
-  timeoutMs: number,
-  onStderr?: (line: string) => void,
-): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const child = spawn(cmd, args, { stdio: ["pipe", "pipe", "pipe"] });
-    const chunks: Buffer[] = [];
-    const errChunks: Buffer[] = [];
-    let settled = false;
-    let epipeSeen = false;
-    let stderrBuf = "";
-
-    const timer = setTimeout(() => {
-      if (settled) return;
-      settled = true;
-      child.kill("SIGTERM");
-      reject(new LLMCallError(`${cmd} timed out after ${timeoutMs / 1000}s`));
-    }, timeoutMs);
-
-    child.stdout.on("data", (chunk) => chunks.push(chunk));
-    child.stderr.on("data", (chunk) => {
-      errChunks.push(chunk);
-      if (onStderr) {
-        stderrBuf += chunk.toString();
-        const lines = stderrBuf.split("\n");
-        stderrBuf = lines.pop() ?? "";
-        for (const line of lines) {
-          const trimmed = line.trim();
-          if (trimmed) onStderr(trimmed);
-        }
-      }
-    });
-
-    child.on("error", (err) => {
-      if (settled) return;
-      settled = true;
-      clearTimeout(timer);
-      reject(new LLMCallError(`Failed to spawn ${cmd}: ${err.message}`));
-    });
-
-    child.on("close", (code) => {
-      clearTimeout(timer);
-      if (settled) return;
-      settled = true;
-      if (code !== 0) {
-        const stderr = Buffer.concat(errChunks).toString().trim();
-        const stdout = Buffer.concat(chunks).toString().trim();
-        reject(
-          new LLMCallError(
-            `${cmd} exited with code ${code}: ${stderr || stdout || "(no output)"}`,
-          ),
-        );
-        return;
-      }
-      if (epipeSeen) {
-        const warning = `Warning: child process (${cmd}) did not consume full stdin (EPIPE) — output may be based on truncated input`;
-        onStderr?.(warning);
-      }
-      resolve(Buffer.concat(chunks).toString("utf-8"));
-    });
-
-    // EPIPE is expected when the child exits before consuming all stdin.
-    // If the child exits non-zero, the close handler reports the real failure.
-    // If it exits successfully, we warn that the output may be based on truncated input.
-    child.stdin.on("error", (err) => {
-      if ((err as NodeJS.ErrnoException).code === "EPIPE") {
-        epipeSeen = true;
-        const warning = `Warning: EPIPE writing to ${cmd} stdin — child may not have consumed full input`;
-        if (onStderr) {
-          onStderr(warning);
-        } else {
-          try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
-        }
-        return;
-      }
-      if (!settled) {
-        settled = true;
-        clearTimeout(timer);
-        reject(new LLMCallError(`Failed to write to ${cmd} stdin: ${err.message}`));
-      } else {
-        onStderr?.(`Warning: late stdin error for ${cmd}: ${err.message}`);
-      }
-    });
-    child.stdin.write(stdinData, (err) => {
-      if (err) return; // error event handler will fire separately
-      child.stdin.end();
-    });
-  });
+  return err instanceof LLMCallError || err instanceof LLMOutputError;
 }
 
 // ---------------------------------------------------------------------------
@@ -247,10 +151,14 @@ function spawnStreamJson(
       if (settled) return;
       settled = true;
       child.kill("SIGTERM");
-      reject(new LLMCallError(
-        `${cmd} timed out after ${timeoutMs / 1000}s` +
-          (resultText ? ` (${resultText.length} chars of partial output were received)` : ""),
-      ));
+      reject(
+        new LLMCallError(
+          `${cmd} timed out after ${timeoutMs / 1000}s` +
+            (resultText
+              ? ` (${resultText.length} chars of partial output were received)`
+              : ""),
+        ),
+      );
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {
@@ -271,13 +179,23 @@ function spawnStreamJson(
               const lastLine = lines[lines.length - 1]?.trim();
               // New line(s) started → push all completed lines as finished
               if (lines.length > lastTextLineCount) {
-                for (let li = lastTextLineCount - 1; li < lines.length - 1; li++) {
+                for (
+                  let li = lastTextLineCount - 1;
+                  li < lines.length - 1;
+                  li++
+                ) {
                   const completed = lines[li]?.trim();
-                  if (completed) onProgress({ line: completed, final: true, kind: "output" });
+                  if (completed)
+                    onProgress({
+                      line: completed,
+                      final: true,
+                      kind: "output",
+                    });
                 }
                 lastTextLineCount = lines.length;
               }
-              if (lastLine) onProgress({ line: lastLine, final: false, kind: "output" });
+              if (lastLine)
+                onProgress({ line: lastLine, final: false, kind: "output" });
             }
           }
           // Thinking delta — accumulate and show last line
@@ -287,19 +205,33 @@ function spawnStreamJson(
               const lines = thinkingText.trimEnd().split("\n");
               const lastLine = lines[lines.length - 1]?.trim();
               if (lines.length > lastThinkLineCount) {
-                for (let li = lastThinkLineCount - 1; li < lines.length - 1; li++) {
+                for (
+                  let li = lastThinkLineCount - 1;
+                  li < lines.length - 1;
+                  li++
+                ) {
                   const completed = lines[li]?.trim();
-                  if (completed) onProgress({ line: completed, final: true, kind: "thinking" });
+                  if (completed)
+                    onProgress({
+                      line: completed,
+                      final: true,
+                      kind: "thinking",
+                    });
                 }
                 lastThinkLineCount = lines.length;
               }
-              if (lastLine) onProgress({ line: lastLine, final: false, kind: "thinking" });
+              if (lastLine)
+                onProgress({ line: lastLine, final: false, kind: "thinking" });
             }
           }
           // Result event — use as fallback only if no deltas were accumulated.
           // The result field may be truncated for large outputs, while the
           // accumulated text_delta stream is the ground truth.
-          if (event.type === "result" && typeof event.result === "string" && !resultText) {
+          if (
+            event.type === "result" &&
+            typeof event.result === "string" &&
+            !resultText
+          ) {
             resultText = event.result;
           }
           syntaxErrors = 0;
@@ -309,34 +241,54 @@ function spawnStreamJson(
             clearTimeout(timer);
             const msg = err instanceof Error ? err.message : String(err);
             const stack = err instanceof Error ? `\n${err.stack}` : "";
-            reject(new LLMCallError(
-              `Unexpected error parsing ${cmd} output: ${msg}\n` +
-                `Offending line: ${line.slice(0, 200)}${stack}`,
-            ));
-            try { child.kill("SIGTERM"); } catch { /* best-effort — promise already rejected */ }
+            reject(
+              new LLMCallError(
+                `Unexpected error parsing ${cmd} output: ${msg}\n` +
+                  `Offending line: ${line.slice(0, 200)}${stack}`,
+              ),
+            );
+            try {
+              child.kill("SIGTERM");
+            } catch {
+              /* best-effort — promise already rejected */
+            }
             return;
           }
           syntaxErrors++;
           totalSyntaxErrors++;
           if (totalSyntaxErrors === 1) firstBadLine = line;
           // Emit progressive warnings so the user sees accumulating failures
-          if (totalSyntaxErrors === 1 || totalSyntaxErrors === 10 || totalSyntaxErrors === 50) {
+          if (
+            totalSyntaxErrors === 1 ||
+            totalSyntaxErrors === 10 ||
+            totalSyntaxErrors === 50
+          ) {
             const warn = `Warning: ${totalSyntaxErrors} unparseable JSON line(s) from ${cmd} so far`;
             if (onProgress) {
               onProgress({ line: warn, final: true, kind: "thinking" });
             } else {
-              try { process.stderr.write(`${warn}\n`); } catch { /* best-effort */ }
+              try {
+                process.stderr.write(`${warn}\n`);
+              } catch {
+                /* best-effort */
+              }
             }
           }
           if (syntaxErrors >= 100 || totalSyntaxErrors >= 500) {
             settled = true;
             clearTimeout(timer);
-            reject(new LLMCallError(
-              `${cmd} produced ${totalSyntaxErrors} unparseable JSON lines ` +
-                `(${syntaxErrors} consecutive) — aborting. ` +
-                `First bad line: ${firstBadLine.slice(0, 200)}`,
-            ));
-            try { child.kill("SIGTERM"); } catch { /* best-effort — promise already rejected */ }
+            reject(
+              new LLMCallError(
+                `${cmd} produced ${totalSyntaxErrors} unparseable JSON lines ` +
+                  `(${syntaxErrors} consecutive) — aborting. ` +
+                  `First bad line: ${firstBadLine.slice(0, 200)}`,
+              ),
+            );
+            try {
+              child.kill("SIGTERM");
+            } catch {
+              /* best-effort — promise already rejected */
+            }
             return;
           }
         }
@@ -379,9 +331,7 @@ function spawnStreamJson(
       }
       if (!resultText) {
         reject(
-          new LLMCallError(
-            `${cmd} exited successfully but produced no output`,
-          ),
+          new LLMCallError(`${cmd} exited successfully but produced no output`),
         );
         return;
       }
@@ -390,7 +340,11 @@ function spawnStreamJson(
         if (onProgress) {
           onProgress({ line: warning, final: true, kind: "thinking" });
         } else {
-          try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
+          try {
+            process.stderr.write(`${warning}\n`);
+          } catch (e) {
+            if (isProgrammingError(e)) throw e;
+          }
         }
       }
       if (totalSyntaxErrors > 0) {
@@ -398,7 +352,11 @@ function spawnStreamJson(
         if (onProgress) {
           onProgress({ line: msg, final: true, kind: "thinking" });
         } else {
-          try { process.stderr.write(`${msg}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
+          try {
+            process.stderr.write(`${msg}\n`);
+          } catch (e) {
+            if (isProgrammingError(e)) throw e;
+          }
         }
       }
       resolve(resultText);
@@ -414,16 +372,26 @@ function spawnStreamJson(
         if (onProgress) {
           onProgress({ line: warning, final: true, kind: "thinking" });
         } else {
-          try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
+          try {
+            process.stderr.write(`${warning}\n`);
+          } catch (e) {
+            if (isProgrammingError(e)) throw e;
+          }
         }
         return;
       }
       if (!settled) {
         settled = true;
         clearTimeout(timer);
-        reject(new LLMCallError(`Failed to write to ${cmd} stdin: ${err.message}`));
+        reject(
+          new LLMCallError(`Failed to write to ${cmd} stdin: ${err.message}`),
+        );
       } else {
-        onProgress?.({ line: `Warning: late stdin error for ${cmd}: ${err.message}`, final: true, kind: "thinking" });
+        onProgress?.({
+          line: `Warning: late stdin error for ${cmd}: ${err.message}`,
+          final: true,
+          kind: "thinking",
+        });
       }
     });
     child.stdin.write(stdinData, (err) => {
@@ -457,11 +425,17 @@ export function commandExists(cmd: string): boolean {
   } catch (err: unknown) {
     rethrowIfFatal(err);
     // `which` exiting non-zero means the command was not found — expected.
-    if (err instanceof Error && "status" in err && typeof (err as { status: unknown }).status === "number") {
+    if (
+      err instanceof Error &&
+      "status" in err &&
+      typeof (err as { status: unknown }).status === "number"
+    ) {
       return false;
     }
     const msg = err instanceof Error ? err.message : String(err);
-    throw new LLMCallError(`Failed to check if ${cmd} exists: ${msg}`, { cause: err });
+    throw new LLMCallError(`Failed to check if ${cmd} exists: ${msg}`, {
+      cause: err,
+    });
   }
 }
 
@@ -476,13 +450,19 @@ const claudeCodeProvider: LLMProvider = {
   async generate(systemPrompt, userMessage, model, onProgress) {
     // Write system prompt to a temp file to avoid arg length limits.
     // User message goes via stdin using async spawn to handle large data.
-    const tmpFile = path.join(os.tmpdir(), `diagram-docs-sysprompt-${Date.now()}.txt`);
+    const tmpFile = path.join(
+      os.tmpdir(),
+      `diagram-docs-sysprompt-${Date.now()}.txt`,
+    );
     try {
       fs.writeFileSync(tmpFile, systemPrompt, "utf-8");
     } catch (err: unknown) {
       rethrowIfFatal(err);
       const msg = err instanceof Error ? err.message : String(err);
-      throw new LLMCallError(`Failed to write system prompt to temp file: ${msg}`, { cause: err });
+      throw new LLMCallError(
+        `Failed to write system prompt to temp file: ${msg}`,
+        { cause: err },
+      );
     }
     try {
       return await spawnStreamJson(
@@ -490,11 +470,17 @@ const claudeCodeProvider: LLMProvider = {
         [
           "-p",
           "--verbose",
-          "--output-format", "stream-json",
+          "--output-format",
+          "stream-json",
           "--include-partial-messages",
-          "--system-prompt-file", tmpFile,
-          "--model", model,
-          "--allowedTools", "Write", "Read", "Edit",
+          "--system-prompt-file",
+          tmpFile,
+          "--model",
+          model,
+          "--allowedTools",
+          "Write",
+          "Read",
+          "Edit",
         ],
         userMessage,
         900_000, // 15 minutes
@@ -510,7 +496,12 @@ const claudeCodeProvider: LLMProvider = {
           if (onProgress) {
             onProgress({ line: warning, final: true, kind: "thinking" });
           } else {
-            try { process.stderr.write(`${warning}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
+            try {
+              process.stderr.write(`${warning}\n`);
+            } catch (e) {
+              // eslint-disable-next-line no-unsafe-finally
+              if (isProgrammingError(e)) throw e;
+            }
           }
         }
       }
@@ -548,23 +539,32 @@ function spawnCopilotJsonl(
   // don't exceed the OS ARG_MAX limit (E2BIG).
   let tmpFile: string | undefined;
   if (Buffer.byteLength(prompt, "utf8") > COPILOT_MAX_INLINE_PROMPT_BYTES) {
-    tmpFile = path.join(os.tmpdir(), `diagram-docs-copilot-prompt-${Date.now()}.txt`);
+    tmpFile = path.join(
+      os.tmpdir(),
+      `diagram-docs-copilot-prompt-${Date.now()}.txt`,
+    );
     try {
       fs.writeFileSync(tmpFile, prompt, "utf-8");
     } catch (err: unknown) {
       rethrowIfFatal(err);
       const msg = err instanceof Error ? err.message : String(err);
-      throw new LLMCallError(`Failed to write copilot prompt to temp file: ${msg}`, { cause: err });
+      throw new LLMCallError(
+        `Failed to write copilot prompt to temp file: ${msg}`,
+        { cause: err },
+      );
     }
   }
 
   const promptArg = tmpFile ?? prompt;
   return new Promise<string>((resolve, reject) => {
     const args = [
-      "-p", promptArg,
-      "--output-format", "json",
+      "-p",
+      promptArg,
+      "--output-format",
+      "json",
       "--allow-all-tools",
-      "--model", model,
+      "--model",
+      model,
       ...(tmpFile ? ["--allow-all-paths"] : []),
     ];
     const child = spawn("copilot", args, { stdio: ["pipe", "pipe", "pipe"] });
@@ -581,10 +581,14 @@ function spawnCopilotJsonl(
       if (settled) return;
       settled = true;
       child.kill("SIGTERM");
-      reject(new LLMCallError(
-        `copilot timed out after ${timeoutMs / 1000}s` +
-          (resultText ? ` (${resultText.length} chars of partial output were received)` : ""),
-      ));
+      reject(
+        new LLMCallError(
+          `copilot timed out after ${timeoutMs / 1000}s` +
+            (resultText
+              ? ` (${resultText.length} chars of partial output were received)`
+              : ""),
+        ),
+      );
     }, timeoutMs);
 
     child.stdout.on("data", (chunk) => {
@@ -607,7 +611,8 @@ function spawnCopilotJsonl(
               if (onProgress) {
                 const contentLines = content.trimEnd().split("\n");
                 const lastLine = contentLines[contentLines.length - 1]?.trim();
-                if (lastLine) onProgress({ line: lastLine, final: true, kind: "output" });
+                if (lastLine)
+                  onProgress({ line: lastLine, final: true, kind: "output" });
               }
             }
             // Report reasoning / thinking text as progress
@@ -615,7 +620,8 @@ function spawnCopilotJsonl(
             if (typeof reasoning === "string" && reasoning && onProgress) {
               const reasonLines = reasoning.trimEnd().split("\n");
               const lastLine = reasonLines[reasonLines.length - 1]?.trim();
-              if (lastLine) onProgress({ line: lastLine, final: true, kind: "thinking" });
+              if (lastLine)
+                onProgress({ line: lastLine, final: true, kind: "thinking" });
             }
           }
 
@@ -623,7 +629,11 @@ function spawnCopilotJsonl(
           if (event.type === "assistant.turn_start" && onProgress) {
             const turnId = event.data?.turnId;
             if (turnId && Number(turnId) > 0) {
-              onProgress({ line: `Turn ${turnId} started`, final: true, kind: "thinking" });
+              onProgress({
+                line: `Turn ${turnId} started`,
+                final: true,
+                kind: "thinking",
+              });
             }
           }
 
@@ -633,32 +643,52 @@ function spawnCopilotJsonl(
             settled = true;
             clearTimeout(timer);
             const msg = err instanceof Error ? err.message : String(err);
-            reject(new LLMCallError(
-              `Unexpected error parsing copilot output: ${msg}\nOffending line: ${line.slice(0, 200)}`,
-            ));
-            try { child.kill("SIGTERM"); } catch { /* best-effort */ }
+            reject(
+              new LLMCallError(
+                `Unexpected error parsing copilot output: ${msg}\nOffending line: ${line.slice(0, 200)}`,
+              ),
+            );
+            try {
+              child.kill("SIGTERM");
+            } catch {
+              /* best-effort */
+            }
             return;
           }
           syntaxErrors++;
           totalSyntaxErrors++;
           if (totalSyntaxErrors === 1) firstBadLine = line;
-          if (totalSyntaxErrors === 1 || totalSyntaxErrors === 10 || totalSyntaxErrors === 50) {
+          if (
+            totalSyntaxErrors === 1 ||
+            totalSyntaxErrors === 10 ||
+            totalSyntaxErrors === 50
+          ) {
             const warn = `Warning: ${totalSyntaxErrors} unparseable JSON line(s) from copilot so far`;
             if (onProgress) {
               onProgress({ line: warn, final: true, kind: "thinking" });
             } else {
-              try { process.stderr.write(`${warn}\n`); } catch { /* best-effort */ }
+              try {
+                process.stderr.write(`${warn}\n`);
+              } catch {
+                /* best-effort */
+              }
             }
           }
           if (syntaxErrors >= 100 || totalSyntaxErrors >= 500) {
             settled = true;
             clearTimeout(timer);
-            reject(new LLMCallError(
-              `copilot produced ${totalSyntaxErrors} unparseable JSON lines ` +
-                `(${syntaxErrors} consecutive) — aborting. ` +
-                `First bad line: ${firstBadLine.slice(0, 200)}`,
-            ));
-            try { child.kill("SIGTERM"); } catch { /* best-effort */ }
+            reject(
+              new LLMCallError(
+                `copilot produced ${totalSyntaxErrors} unparseable JSON lines ` +
+                  `(${syntaxErrors} consecutive) — aborting. ` +
+                  `First bad line: ${firstBadLine.slice(0, 200)}`,
+              ),
+            );
+            try {
+              child.kill("SIGTERM");
+            } catch {
+              /* best-effort */
+            }
             return;
           }
         }
@@ -700,7 +730,11 @@ function spawnCopilotJsonl(
         return;
       }
       if (!resultText) {
-        reject(new LLMCallError("copilot exited successfully but produced no output"));
+        reject(
+          new LLMCallError(
+            "copilot exited successfully but produced no output",
+          ),
+        );
         return;
       }
       if (totalSyntaxErrors > 0) {
@@ -708,7 +742,11 @@ function spawnCopilotJsonl(
         if (onProgress) {
           onProgress({ line: msg, final: true, kind: "thinking" });
         } else {
-          try { process.stderr.write(`${msg}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
+          try {
+            process.stderr.write(`${msg}\n`);
+          } catch (e) {
+            if (isProgrammingError(e)) throw e;
+          }
         }
       }
       resolve(resultText);
@@ -728,7 +766,11 @@ function spawnCopilotJsonl(
           if (onProgress) {
             onProgress({ line: warning, final: true, kind: "thinking" });
           } else {
-            try { process.stderr.write(`${warning}\n`); } catch (e2) { if (isProgrammingError(e2)) throw e2; }
+            try {
+              process.stderr.write(`${warning}\n`);
+            } catch (e2) {
+              if (isProgrammingError(e2)) throw e2;
+            }
           }
         }
       }
@@ -984,12 +1026,15 @@ export function buildUserMessage(options: {
 
 export function buildPerAppSystemPrompt(outputPath?: string): string {
   const base = buildSystemPrompt(outputPath);
-  return base + `\n\n### Single-App Mode
+  return (
+    base +
+    `\n\n### Single-App Mode
 You are modeling a SINGLE APPLICATION within a larger multi-app system.
 - Focus only on this application's internal architecture.
 - Do NOT produce cross-container relationships. These are handled separately.
 - The internalImports field is provided for context only (to inform descriptions). Do not create relationships from it.
-- Produce: containers (just this one), components, intra-app relationships, actors, externalSystems relevant to this app.`;
+- Produce: containers (just this one), components, intra-app relationships, actors, externalSystems relevant to this app.`
+  );
 }
 
 export function buildPerAppUserMessage(options: {
@@ -1001,24 +1046,32 @@ export function buildPerAppUserMessage(options: {
   // Build single-app raw structure summary (same format as summarizeForLLM but for one app)
   const singleAppStructure = {
     version: 1,
-    applications: [{
-      id: options.app.id,
-      path: options.app.path,
-      name: options.app.name,
-      language: options.app.language,
-      modules: options.app.modules.map((mod) => {
-        const annotations = mod.metadata["annotations"];
-        return {
-          id: mod.id,
-          name: mod.name,
-          ...(annotations ? { annotations } : {}),
-        };
-      }),
-      externalDependencies: options.app.externalDependencies.map((d) => d.name),
-      internalImports: options.app.internalImports,
-      ...(options.app.publishedAs ? { publishedAs: options.app.publishedAs } : {}),
-      ...(options.app.configFiles?.length ? { configFiles: options.app.configFiles } : {}),
-    }],
+    applications: [
+      {
+        id: options.app.id,
+        path: options.app.path,
+        name: options.app.name,
+        language: options.app.language,
+        modules: options.app.modules.map((mod) => {
+          const annotations = mod.metadata["annotations"];
+          return {
+            id: mod.id,
+            name: mod.name,
+            ...(annotations ? { annotations } : {}),
+          };
+        }),
+        externalDependencies: options.app.externalDependencies.map(
+          (d) => d.name,
+        ),
+        internalImports: options.app.internalImports,
+        ...(options.app.publishedAs
+          ? { publishedAs: options.app.publishedAs }
+          : {}),
+        ...(options.app.configFiles?.length
+          ? { configFiles: options.app.configFiles }
+          : {}),
+      },
+    ],
   };
 
   const parts: string[] = [];
@@ -1080,7 +1133,12 @@ Only include relationships that were provided to you. Do not invent new ones. Re
 }
 
 export function buildSynthesisUserMessage(options: {
-  containers: Array<{ id: string; name: string; description: string; technology: string }>;
+  containers: Array<{
+    id: string;
+    name: string;
+    description: string;
+    technology: string;
+  }>;
   actors: ArchitectureModel["actors"];
   externalSystems: ArchitectureModel["externalSystems"];
   crossAppRelationships: ArchitectureModel["relationships"];
@@ -1148,9 +1206,7 @@ export function repairLLMYaml(yaml: string): RepairResult {
     // Also handle the case where the first item's quote is unclosed because
     // the LLM started a new list item mid-string:
     // `      - "los-      - "los-charging-infrastructure-dynamodb"`
-    const smashedUnquoted = line.match(
-      /^(\s*)-\s+"[^"]*\s{2,}(-\s+"[^"]*")/,
-    );
+    const smashedUnquoted = line.match(/^(\s*)-\s+"[^"]*\s{2,}(-\s+"[^"]*")/);
     if (smashedUnquoted) {
       // Drop the broken first item, keep the second (which has a closing quote)
       repaired.push(indent + smashedUnquoted[2]);
@@ -1209,14 +1265,15 @@ export async function buildModelWithLLM(
 ): Promise<ArchitectureModel> {
   // 1. Resolve provider
   const resolvedProvider = resolveProvider(options.config);
-  const emit = (status: string) => options.onStatus?.(status, resolvedProvider.name);
+  const emit = (status: string) =>
+    options.onStatus?.(status, resolvedProvider.name);
 
   // Parallel path: anchor mode dispatches per-app LLM calls concurrently (even for a single app)
   const isAnchorMode = !options.existingModelYaml?.trim();
   if (isAnchorMode) {
     // Dynamic import is separated from the call so module resolution
     // errors are not accidentally wrapped as LLMCallError.
-    let buildModelParallel: typeof import("./parallel-model-builder.js")["buildModelParallel"];
+    let buildModelParallel: (typeof import("./parallel-model-builder.js"))["buildModelParallel"];
     try {
       ({ buildModelParallel } = await import("./parallel-model-builder.js"));
     } catch (err) {
@@ -1238,7 +1295,12 @@ export async function buildModelWithLLM(
         onProgress: options.onProgress,
       });
     } catch (err) {
-      if (err instanceof LLMCallError || err instanceof LLMOutputError || err instanceof LLMUnavailableError) throw err;
+      if (
+        err instanceof LLMCallError ||
+        err instanceof LLMOutputError ||
+        err instanceof LLMUnavailableError
+      )
+        throw err;
       rethrowIfFatal(err);
       throw new LLMCallError(
         `Parallel model builder failed: ${err instanceof Error ? err.message : String(err)}`,
@@ -1252,12 +1314,18 @@ export async function buildModelWithLLM(
   let existingModelYaml = options.existingModelYaml;
   if (isAnchorMode) {
     try {
-      const anchor = buildModel({ config: options.config, rawStructure: options.rawStructure });
+      const anchor = buildModel({
+        config: options.config,
+        rawStructure: options.rawStructure,
+      });
       existingModelYaml = stringifyYaml(anchor, { lineWidth: 120 });
     } catch (err: unknown) {
       rethrowIfFatal(err);
       const msg = err instanceof Error ? err.message : String(err);
-      throw new LLMCallError(`Failed to generate deterministic anchor for LLM: ${msg}`, { cause: err });
+      throw new LLMCallError(
+        `Failed to generate deterministic anchor for LLM: ${msg}`,
+        { cause: err },
+      );
     }
   }
 
@@ -1285,7 +1353,9 @@ export async function buildModelWithLLM(
     );
   } catch (err) {
     if (outputPath) {
-      try { fs.unlinkSync(outputPath); } catch (e) {
+      try {
+        fs.unlinkSync(outputPath);
+      } catch (e) {
         rethrowIfFatal(e);
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
           const warning = `Failed to clean up temp file ${outputPath}: ${(e as Error).message}`;
@@ -1304,7 +1374,8 @@ export async function buildModelWithLLM(
       rawOutput = fs.readFileSync(outputPath, "utf-8");
       if (!rawOutput.trim()) {
         if (textOutput.trim()) {
-          const warning = "Warning: agent output file was empty, using text stream as fallback";
+          const warning =
+            "Warning: agent output file was empty, using text stream as fallback";
           emit(warning);
           if (!options.onStatus) process.stderr.write(`${warning}\n`);
           rawOutput = textOutput;
@@ -1337,7 +1408,9 @@ export async function buildModelWithLLM(
       emit(warning);
       rawOutput = textOutput;
     } finally {
-      try { fs.unlinkSync(outputPath); } catch (e) {
+      try {
+        fs.unlinkSync(outputPath);
+      } catch (e) {
         rethrowIfFatal(e);
         if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
           const warning = `Failed to clean up temp file ${outputPath}: ${(e as Error).message}`;

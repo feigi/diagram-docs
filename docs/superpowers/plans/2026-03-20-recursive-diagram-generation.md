@@ -15,6 +15,7 @@
 ## File Structure
 
 ### New files
+
 - `src/core/classifier.ts` — Signal collection + heuristic `inferRole` classification
 - `src/core/agent-assist.ts` — LLM integration for classification refinement + naming
 - `src/core/recursive-runner.ts` — The `processFolder` recursive descent orchestrator
@@ -33,6 +34,7 @@
 - `tests/analyzers/c-symbols.test.ts` — C symbol extraction tests
 
 ### Modified files
+
 - `src/config/schema.ts` — Replace `levels`/`submodules` with `agent`/`overrides`/`codeLevel`
 - `src/analyzers/types.ts` — Add `Symbol`, `SymbolRelationship`, `analyzeModule` to `LanguageAnalyzer`
 - `src/cli/index.ts` — Register `run` command
@@ -43,6 +45,7 @@
 - `src/generator/d2/scaffold.ts` — Role-aware scaffolding (context, container, component, code)
 
 ### Removed files
+
 - `src/generator/d2/submodule-scaffold.ts` — Subsumed by recursive descent
 
 ---
@@ -52,6 +55,7 @@
 Update the Zod config schema to replace `levels` and `submodules` with the new recursive model.
 
 **Files:**
+
 - Modify: `src/config/schema.ts:1-72`
 - Modify: `src/cli/commands/init.ts:6-36`
 - Test: `tests/core/config.test.ts` (new)
@@ -130,7 +134,13 @@ Replace the full content of `src/config/schema.ts`:
 ```ts
 import { z } from "zod";
 
-const roleEnum = z.enum(["system", "container", "component", "code-only", "skip"]);
+const roleEnum = z.enum([
+  "system",
+  "container",
+  "component",
+  "code-only",
+  "skip",
+]);
 
 export const configSchema = z
   .object({
@@ -277,6 +287,7 @@ git commit -m "feat: migrate config schema — replace levels/submodules with ag
 Implement signal collection and heuristic classification.
 
 **Files:**
+
 - Create: `src/core/classifier.ts`
 - Test: `tests/core/classifier.test.ts`
 
@@ -409,15 +420,31 @@ const INFRA_FILE_PATTERNS = [
 const INFRA_DIR_PATTERNS = ["k8s", "kubernetes", "terraform", ".terraform"];
 
 const SOURCE_EXTENSIONS = new Set([
-  ".java", ".py", ".c", ".h", ".ts", ".js",
-  ".go", ".rs", ".kt", ".scala", ".cs",
+  ".java",
+  ".py",
+  ".c",
+  ".h",
+  ".ts",
+  ".js",
+  ".go",
+  ".rs",
+  ".kt",
+  ".scala",
+  ".cs",
 ]);
 
 const PACKAGE_MARKERS = ["__init__.py"];
 
 const EXCLUDE_DIRS = new Set([
-  "node_modules", ".git", "build", "dist", "target",
-  ".diagram-docs", "__pycache__", ".venv", "venv",
+  "node_modules",
+  ".git",
+  "build",
+  "dist",
+  "target",
+  ".diagram-docs",
+  "__pycache__",
+  ".venv",
+  "venv",
 ]);
 
 export interface FolderSignals {
@@ -452,16 +479,16 @@ export async function collectSignals(
   for (const dir of dirNames) {
     const childPath = path.join(folderPath, dir);
     const childEntries = fs.readdirSync(childPath, { withFileTypes: true });
-    const childFiles = childEntries.filter((e) => e.isFile()).map((e) => e.name);
+    const childFiles = childEntries
+      .filter((e) => e.isFile())
+      .map((e) => e.name);
     if (childFiles.some((f) => BUILD_FILE_PATTERNS.includes(f))) {
       childrenWithBuildFiles++;
     }
   }
 
   // Infrastructure files
-  const infraFiles = fileNames.filter((f) =>
-    INFRA_FILE_PATTERNS.includes(f),
-  );
+  const infraFiles = fileNames.filter((f) => INFRA_FILE_PATTERNS.includes(f));
   // Also check for infra directories
   for (const dir of dirNames) {
     if (INFRA_DIR_PATTERNS.includes(dir)) {
@@ -473,9 +500,15 @@ export async function collectSignals(
   let sourceFileCount = 0;
   const sourceLanguages = new Set<string>();
   const langMap: Record<string, string> = {
-    ".java": "java", ".py": "python", ".c": "c", ".h": "c",
-    ".ts": "typescript", ".js": "javascript", ".go": "go",
-    ".rs": "rust", ".kt": "kotlin",
+    ".java": "java",
+    ".py": "python",
+    ".c": "c",
+    ".h": "c",
+    ".ts": "typescript",
+    ".js": "javascript",
+    ".go": "go",
+    ".rs": "rust",
+    ".kt": "kotlin",
   };
 
   for (const f of fileNames) {
@@ -517,12 +550,16 @@ export async function collectSignals(
     );
 
   // Is this itself a package directory?
-  const isPackageDir = fileNames.includes("__init__.py") ||
+  const isPackageDir =
+    fileNames.includes("__init__.py") ||
     // Java package: parent has src/main/java ancestor
     folderPath.includes(path.join("src", "main", "java"));
 
   // Depth
-  const depth = path.relative(rootPath, folderPath).split(path.sep).filter(Boolean).length;
+  const depth = path
+    .relative(rootPath, folderPath)
+    .split(path.sep)
+    .filter(Boolean).length;
 
   // README snippet
   let readmeSnippet: string | null = null;
@@ -590,6 +627,7 @@ git commit -m "feat: add folder classifier with signal collection and heuristic 
 Add `Symbol`, `SymbolRelationship`, and `analyzeModule` to the analyzer types.
 
 **Files:**
+
 - Modify: `src/analyzers/types.ts:86-98`
 
 - [ ] **Step 1: Extend types**
@@ -634,7 +672,10 @@ export interface LanguageAnalyzer {
   name: string;
   buildFilePatterns: string[];
   analyze(appPath: string, config: ScanConfig): Promise<ScannedApplication>;
-  analyzeModule?(modulePath: string, config: ScanConfig): Promise<ModuleSymbols>;
+  analyzeModule?(
+    modulePath: string,
+    config: ScanConfig,
+  ): Promise<ModuleSymbols>;
 }
 ```
 
@@ -657,6 +698,7 @@ git commit -m "feat: add CodeSymbol, SymbolRelationship, and analyzeModule types
 Implement `analyzeModule` for the Java analyzer — extract classes, interfaces, enums, records and their relationships.
 
 **Files:**
+
 - Create: `src/analyzers/java/symbols.ts`
 - Modify: `src/analyzers/java/index.ts` (add analyzeModule)
 - Test: `tests/analyzers/java-symbols.test.ts`
@@ -680,9 +722,15 @@ public class OrderService {
     return repo.save(new Order(request));
   }
 }`;
-    const result = extractJavaSymbols([{ path: "OrderService.java", content: source }]);
+    const result = extractJavaSymbols([
+      { path: "OrderService.java", content: source },
+    ]);
     expect(result.symbols).toContainEqual(
-      expect.objectContaining({ name: "OrderService", kind: "class", visibility: "public" }),
+      expect.objectContaining({
+        name: "OrderService",
+        kind: "class",
+        visibility: "public",
+      }),
     );
   });
 
@@ -694,7 +742,9 @@ public interface OrderRepository {
   Order save(Order order);
   Order findById(String id);
 }`;
-    const result = extractJavaSymbols([{ path: "OrderRepository.java", content: source }]);
+    const result = extractJavaSymbols([
+      { path: "OrderRepository.java", content: source },
+    ]);
     expect(result.symbols).toContainEqual(
       expect.objectContaining({ name: "OrderRepository", kind: "interface" }),
     );
@@ -707,7 +757,9 @@ package com.example;
 public enum OrderStatus {
   PENDING, CONFIRMED, SHIPPED, DELIVERED
 }`;
-    const result = extractJavaSymbols([{ path: "OrderStatus.java", content: source }]);
+    const result = extractJavaSymbols([
+      { path: "OrderStatus.java", content: source },
+    ]);
     expect(result.symbols).toContainEqual(
       expect.objectContaining({ name: "OrderStatus", kind: "enum" }),
     );
@@ -732,7 +784,10 @@ public class PremiumOrder extends Order {
 public class OrderServiceImpl implements OrderService {
 }`;
     const result = extractJavaSymbols([
-      { path: "OrderService.java", content: "public interface OrderService {}" },
+      {
+        path: "OrderService.java",
+        content: "public interface OrderService {}",
+      },
       { path: "OrderServiceImpl.java", content: source },
     ]);
     const rel = result.relationships.find((r) => r.kind === "implements");
@@ -745,7 +800,10 @@ public class OrderService {
   private OrderRepository repository;
 }`;
     const result = extractJavaSymbols([
-      { path: "OrderRepository.java", content: "public interface OrderRepository {}" },
+      {
+        path: "OrderRepository.java",
+        content: "public interface OrderRepository {}",
+      },
       { path: "OrderService.java", content: source },
     ]);
     const rel = result.relationships.find((r) => r.kind === "field-type");
@@ -762,6 +820,7 @@ Expected: FAIL
 - [ ] **Step 3: Implement Java symbol extraction**
 
 Create `src/analyzers/java/symbols.ts` — use regex-based parsing to extract:
+
 - Class/interface/enum/record declarations with visibility
 - `extends` and `implements` relationships
 - Field type references to known symbols
@@ -787,6 +846,7 @@ git commit -m "feat: add Java symbol extraction for Code-level diagrams"
 Implement `analyzeModule` for the Python analyzer.
 
 **Files:**
+
 - Create: `src/analyzers/python/symbols.ts`
 - Modify: `src/analyzers/python/index.ts` (add analyzeModule)
 - Test: `tests/analyzers/python-symbols.test.ts`
@@ -808,7 +868,9 @@ class OrderService(BaseService):
     def create_order(self, request: dict) -> Order:
         return self.repo.save(request)
 `;
-    const result = extractPythonSymbols([{ path: "service.py", content: source }]);
+    const result = extractPythonSymbols([
+      { path: "service.py", content: source },
+    ]);
     expect(result.symbols).toContainEqual(
       expect.objectContaining({ name: "OrderService", kind: "class" }),
     );
@@ -824,7 +886,9 @@ def process_payment(order_id: str, amount: float) -> bool:
 def validate_order(order: dict) -> bool:
     return True
 `;
-    const result = extractPythonSymbols([{ path: "utils.py", content: source }]);
+    const result = extractPythonSymbols([
+      { path: "utils.py", content: source },
+    ]);
     expect(result.symbols).toHaveLength(2);
     expect(result.symbols[0].kind).toBe("function");
   });
@@ -854,6 +918,7 @@ Expected: FAIL
 - [ ] **Step 3: Implement Python symbol extraction**
 
 Create `src/analyzers/python/symbols.ts` — regex-based parsing for:
+
 - `class Foo(Bar):` declarations and inheritance
 - Top-level `def` functions (not indented = top-level)
 - Skip class-internal methods (indented defs)
@@ -879,6 +944,7 @@ git commit -m "feat: add Python symbol extraction for Code-level diagrams"
 Implement `analyzeModule` for the C analyzer.
 
 **Files:**
+
 - Create: `src/analyzers/c/symbols.ts`
 - Modify: `src/analyzers/c/index.ts` (add analyzeModule)
 - Test: `tests/analyzers/c-symbols.test.ts`
@@ -935,6 +1001,7 @@ Expected: FAIL
 - [ ] **Step 3: Implement C symbol extraction**
 
 Create `src/analyzers/c/symbols.ts` — parse:
+
 - `typedef struct { ... } Name;` declarations
 - Function declarations from headers
 - `param-type` and `return-type` relationships to known struct names
@@ -960,6 +1027,7 @@ git commit -m "feat: add C symbol extraction for Code-level diagrams"
 Generate D2 diagrams from `ModuleSymbols` — the fourth C4 level.
 
 **Files:**
+
 - Create: `src/generator/d2/code.ts`
 - Modify: `src/generator/d2/styles.ts:19-61` (add `code` class)
 - Test: `tests/generator/code.test.ts`
@@ -977,7 +1045,12 @@ describe("generateCodeDiagram", () => {
     const symbols: ModuleSymbols = {
       symbols: [
         { id: "order", name: "Order", kind: "class", visibility: "public" },
-        { id: "premium-order", name: "PremiumOrder", kind: "class", visibility: "public" },
+        {
+          id: "premium-order",
+          name: "PremiumOrder",
+          kind: "class",
+          visibility: "public",
+        },
       ],
       relationships: [
         { sourceId: "premium-order", targetId: "order", kind: "extends" },
@@ -1007,9 +1080,7 @@ describe("generateCodeDiagram", () => {
 
   it("uses code class for styling", () => {
     const symbols: ModuleSymbols = {
-      symbols: [
-        { id: "foo", name: "Foo", kind: "class" },
-      ],
+      symbols: [{ id: "foo", name: "Foo", kind: "class" }],
       relationships: [],
     };
     const d2 = generateCodeDiagram(symbols, "Test");
@@ -1051,7 +1122,11 @@ export function generateCodeDiagram(
     const id = toD2Id(sym.id);
     const kindLabel = sym.kind.charAt(0).toUpperCase() + sym.kind.slice(1);
     const visPrefix =
-      sym.visibility === "private" ? "- " : sym.visibility === "public" ? "+ " : "";
+      sym.visibility === "private"
+        ? "- "
+        : sym.visibility === "public"
+          ? "+ "
+          : "";
     w.shape(id, `${visPrefix}${sym.name}\\n\\n[${kindLabel}]`, {
       class: "code",
     });
@@ -1106,6 +1181,7 @@ git commit -m "feat: add Code-level D2 diagram generator"
 LLM integration for classification refinement and naming. On by default, cached.
 
 **Files:**
+
 - Create: `src/core/agent-assist.ts`
 - Test: `tests/core/agent-assist.test.ts`
 
@@ -1201,9 +1277,7 @@ export function computeSignalHash(signals: FolderSignals): string {
   return crypto.createHash("sha256").update(data).digest("hex").slice(0, 16);
 }
 
-export function loadAgentCache(
-  rootDir: string,
-): Map<string, CacheEntry> {
+export function loadAgentCache(rootDir: string): Map<string, CacheEntry> {
   const cachePath = path.join(rootDir, CACHE_FILE);
   if (!fs.existsSync(cachePath)) return new Map();
   try {
@@ -1245,7 +1319,12 @@ export async function agentClassify(
   }
 
   // Build prompt
-  const prompt = buildClassificationPrompt(relPath, signals, heuristicRole, parentContext);
+  const prompt = buildClassificationPrompt(
+    relPath,
+    signals,
+    heuristicRole,
+    parentContext,
+  );
 
   // Call LLM
   const result = await callLLM(prompt, config);
@@ -1370,6 +1449,7 @@ git commit -m "feat: add agent assist for LLM-powered folder classification and 
 The core `processFolder` function that drives the recursive descent.
 
 **Files:**
+
 - Create: `src/core/recursive-runner.ts`
 - Test: `tests/core/recursive-runner.test.ts`
 
@@ -1396,7 +1476,9 @@ describe("processFolder", () => {
     //   service-b/ (has pom.xml + src/main/java/)
     for (const svc of ["service-a", "service-b"]) {
       const svcDir = path.join(tmpDir, svc);
-      fs.mkdirSync(path.join(svcDir, "src", "main", "java"), { recursive: true });
+      fs.mkdirSync(path.join(svcDir, "src", "main", "java"), {
+        recursive: true,
+      });
       fs.writeFileSync(path.join(svcDir, "pom.xml"), "<project/>");
       fs.writeFileSync(
         path.join(svcDir, "src", "main", "java", "App.java"),
@@ -1404,7 +1486,8 @@ describe("processFolder", () => {
       );
     }
 
-    const { processFolder } = await import("../../src/core/recursive-runner.js");
+    const { processFolder } =
+      await import("../../src/core/recursive-runner.js");
     const configSchema = await import("../../src/config/schema.js");
     const config = configSchema.configSchema.parse({
       agent: { enabled: false },
@@ -1414,20 +1497,27 @@ describe("processFolder", () => {
 
     // Root should have context + container diagrams
     const rootDocs = path.join(tmpDir, "docs", "architecture");
-    expect(fs.existsSync(path.join(rootDocs, "_generated", "context.d2"))).toBe(true);
-    expect(fs.existsSync(path.join(rootDocs, "_generated", "container.d2"))).toBe(true);
+    expect(fs.existsSync(path.join(rootDocs, "_generated", "context.d2"))).toBe(
+      true,
+    );
+    expect(
+      fs.existsSync(path.join(rootDocs, "_generated", "container.d2")),
+    ).toBe(true);
   });
 
   it("classifies a single-app folder as container and generates component diagram", async () => {
     // Single app with package structure
     fs.writeFileSync(path.join(tmpDir, "pom.xml"), "<project/>");
-    fs.mkdirSync(path.join(tmpDir, "src", "main", "java", "com", "example"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, "src", "main", "java", "com", "example"), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(tmpDir, "src", "main", "java", "com", "example", "App.java"),
       "public class App {}",
     );
 
-    const { processFolder } = await import("../../src/core/recursive-runner.js");
+    const { processFolder } =
+      await import("../../src/core/recursive-runner.js");
     const configSchema = await import("../../src/config/schema.js");
     const config = configSchema.configSchema.parse({
       agent: { enabled: false },
@@ -1436,7 +1526,9 @@ describe("processFolder", () => {
     await processFolder(tmpDir, tmpDir, config);
 
     const docs = path.join(tmpDir, "docs", "architecture");
-    expect(fs.existsSync(path.join(docs, "_generated", "component.d2"))).toBe(true);
+    expect(fs.existsSync(path.join(docs, "_generated", "component.d2"))).toBe(
+      true,
+    );
   });
 
   it("respects config overrides for role", async () => {
@@ -1448,7 +1540,8 @@ describe("processFolder", () => {
       fs.writeFileSync(path.join(svcDir, "App.java"), "public class App {}");
     }
 
-    const { processFolder } = await import("../../src/core/recursive-runner.js");
+    const { processFolder } =
+      await import("../../src/core/recursive-runner.js");
     const configSchema = await import("../../src/config/schema.js");
     const config = configSchema.configSchema.parse({
       agent: { enabled: false },
@@ -1495,8 +1588,15 @@ import { discoverApplications } from "./discovery.js";
 // Dynamically exclude the configured docs dir to avoid recursing into output
 function getExcludeDirs(config: Config): Set<string> {
   return new Set([
-    "node_modules", ".git", "build", "dist", "target",
-    ".diagram-docs", "__pycache__", ".venv", "venv",
+    "node_modules",
+    ".git",
+    "build",
+    "dist",
+    "target",
+    ".diagram-docs",
+    "__pycache__",
+    ".venv",
+    "venv",
     config.output.docsDir, // exclude output directory
   ]);
 }
@@ -1550,8 +1650,10 @@ export async function processFolder(
         : undefined,
     );
     role = result.role;
-    name = override?.name ?? result.name || humanizeName(path.basename(folderPath));
-    description = override?.description ?? result.description || "";
+    name =
+      (override?.name ?? result.name) ||
+      humanizeName(path.basename(folderPath));
+    description = (override?.description ?? result.description) || "";
   } else {
     role = inferRole(signals);
     name = override?.name ?? humanizeName(path.basename(folderPath));
@@ -1562,10 +1664,19 @@ export async function processFolder(
 
   // 4. Pre-scan children for links
   const excludeDirs = getExcludeDirs(config);
-  const childPreviews = await prescanChildren(folderPath, rootPath, config, excludeDirs);
+  const childPreviews = await prescanChildren(
+    folderPath,
+    rootPath,
+    config,
+    excludeDirs,
+  );
 
   // 5. Generate diagrams for this folder based on role
-  const outputDir = path.join(folderPath, config.output.docsDir, "architecture");
+  const outputDir = path.join(
+    folderPath,
+    config.output.docsDir,
+    "architecture",
+  );
   const generatedDir = path.join(outputDir, "_generated");
 
   if (!fs.existsSync(generatedDir)) {
@@ -1586,14 +1697,33 @@ export async function processFolder(
   );
 
   // Scaffold user-facing files
-  scaffoldForRole(outputDir, role, name, config,
-    parentContext ? { outputDir: path.join(parentContext.parentPath, config.output.docsDir, "architecture") } : undefined,
+  scaffoldForRole(
+    outputDir,
+    role,
+    name,
+    config,
+    parentContext
+      ? {
+          outputDir: path.join(
+            parentContext.parentPath,
+            config.output.docsDir,
+            "architecture",
+          ),
+        }
+      : undefined,
   );
 
   console.error(`Generated ${role} diagrams: ${relPath}/`);
 
   // Collect user-facing D2 files for rendering
-  const userD2 = path.join(outputDir, role === "system" ? "context.d2" : role === "container" ? "component.d2" : "code.d2");
+  const userD2 = path.join(
+    outputDir,
+    role === "system"
+      ? "context.d2"
+      : role === "container"
+        ? "component.d2"
+        : "code.d2",
+  );
   if (fs.existsSync(userD2)) collectedD2Files.push(userD2);
   if (role === "system") {
     const containerD2 = path.join(outputDir, "container.d2");
@@ -1630,11 +1760,14 @@ async function prescanChildren(
 
   const dirs = entries
     .filter((e) => e.isDirectory() && !excludeDirs.has(e.name))
-    .filter((e) => !config.scan.exclude.some((pat) => {
-      // Simple prefix match for excluded patterns
-      const normalized = pat.replace(/\*\*/g, "").replace(/\*/g, "");
-      return e.name === normalized.replace(/\//g, "");
-    }));
+    .filter(
+      (e) =>
+        !config.scan.exclude.some((pat) => {
+          // Simple prefix match for excluded patterns
+          const normalized = pat.replace(/\*\*/g, "").replace(/\*/g, "");
+          return e.name === normalized.replace(/\//g, "");
+        }),
+    );
 
   for (const dir of dirs) {
     const childPath = path.join(folderPath, dir.name);
@@ -1673,26 +1806,49 @@ async function generateForRole(
   switch (role) {
     case "system":
       await generateSystemDiagrams(
-        folderPath, rootPath, outputDir, generatedDir,
-        name, description, config, childPreviews,
+        folderPath,
+        rootPath,
+        outputDir,
+        generatedDir,
+        name,
+        description,
+        config,
+        childPreviews,
       );
       break;
     case "container":
       await generateContainerDiagrams(
-        folderPath, rootPath, outputDir, generatedDir,
-        name, description, config, childPreviews, parentContext,
+        folderPath,
+        rootPath,
+        outputDir,
+        generatedDir,
+        name,
+        description,
+        config,
+        childPreviews,
+        parentContext,
       );
       break;
     case "component":
       await generateComponentDiagrams(
-        folderPath, rootPath, outputDir, generatedDir,
-        name, config, parentContext,
+        folderPath,
+        rootPath,
+        outputDir,
+        generatedDir,
+        name,
+        config,
+        parentContext,
       );
       break;
     case "code-only":
       await generateCodeOnlyDiagrams(
-        folderPath, rootPath, outputDir, generatedDir,
-        name, config, parentContext,
+        folderPath,
+        rootPath,
+        outputDir,
+        generatedDir,
+        name,
+        config,
+        parentContext,
       );
       break;
   }
@@ -1716,10 +1872,10 @@ async function generateSystemDiagrams(
   for (const app of discovered) {
     const analyzer = getAnalyzer(app.analyzerId);
     if (!analyzer) continue;
-    const result = await analyzer.analyze(
-      path.resolve(folderPath, app.path),
-      { exclude: config.scan.exclude, abstraction: config.abstraction },
-    );
+    const result = await analyzer.analyze(path.resolve(folderPath, app.path), {
+      exclude: config.scan.exclude,
+      abstraction: config.abstraction,
+    });
     result.path = app.path;
     result.id = slugify(app.path);
     applications.push(result);
@@ -1748,7 +1904,11 @@ async function generateSystemDiagrams(
         return childSlug === containerId || c.name === containerId;
       });
       if (!child) return null;
-      const childOutputDir = path.join(child.path, config.output.docsDir, "architecture");
+      const childOutputDir = path.join(
+        child.path,
+        config.output.docsDir,
+        "architecture",
+      );
       const rel = path.relative(outputDir, childOutputDir);
       return `${rel}/component.${config.output.format}`;
     },
@@ -1776,10 +1936,10 @@ async function generateContainerDiagrams(
   const analyzer = getAnalyzer(app.analyzerId);
   if (!analyzer) return;
 
-  const result = await analyzer.analyze(
-    path.resolve(folderPath, app.path),
-    { exclude: config.scan.exclude, abstraction: config.abstraction },
-  );
+  const result = await analyzer.analyze(path.resolve(folderPath, app.path), {
+    exclude: config.scan.exclude,
+    abstraction: config.abstraction,
+  });
   result.path = app.path === "." ? path.basename(folderPath) : app.path;
   result.id = slugify(result.path);
 
@@ -1810,7 +1970,10 @@ async function generateComponentDiagrams(
   // Find the language analyzer for this module
   const entries = fs.readdirSync(folderPath);
   const langMap: Record<string, string> = {
-    ".java": "java", ".py": "python", ".c": "c", ".h": "c",
+    ".java": "java",
+    ".py": "python",
+    ".c": "c",
+    ".h": "c",
   };
 
   let analyzerId: string | null = null;
@@ -1849,7 +2012,13 @@ async function generateCodeOnlyDiagrams(
 ): Promise<void> {
   // Same as component but generates code.d2 at the top level
   await generateComponentDiagrams(
-    folderPath, rootPath, outputDir, generatedDir, name, config, parentContext,
+    folderPath,
+    rootPath,
+    outputDir,
+    generatedDir,
+    name,
+    config,
+    parentContext,
   );
 }
 
@@ -1882,6 +2051,7 @@ git commit -m "feat: add recursive runner — processFolder drives the recursive
 Wire the recursive runner into a new CLI command.
 
 **Files:**
+
 - Create: `src/cli/commands/run.ts`
 - Modify: `src/cli/index.ts:1-23`
 
@@ -1958,6 +2128,7 @@ git commit -m "feat: add 'diagram-docs run' CLI command for recursive diagram ge
 Update the user-facing file scaffolding to work with any role.
 
 **Files:**
+
 - Modify: `src/generator/d2/scaffold.ts:1-89`
 
 - [ ] **Step 1: Update scaffold to be role-aware**
@@ -1983,8 +2154,14 @@ export function scaffoldForRole(
 ): void {
   // Styles file
   const stylesPath = path.join(outputDir, "styles.d2");
-  const stylesContent = generateStyles(config.output.theme, config.output.layout);
-  if (!fs.existsSync(stylesPath) || fs.readFileSync(stylesPath, "utf-8") !== stylesContent) {
+  const stylesContent = generateStyles(
+    config.output.theme,
+    config.output.layout,
+  );
+  if (
+    !fs.existsSync(stylesPath) ||
+    fs.readFileSync(stylesPath, "utf-8") !== stylesContent
+  ) {
     if (!fs.existsSync(outputDir)) fs.mkdirSync(outputDir, { recursive: true });
     fs.writeFileSync(stylesPath, stylesContent, "utf-8");
   }
@@ -2087,6 +2264,7 @@ git commit -m "feat: update scaffold for role-aware user-facing D2 files"
 The existing `renderD2Files` function lives inside `src/cli/commands/generate.ts` as a private function. Extract it to a shared module so both `generate` and `run` commands can use it.
 
 **Files:**
+
 - Create: `src/generator/d2/render.ts`
 - Modify: `src/cli/commands/generate.ts` (import from shared module)
 
@@ -2097,6 +2275,7 @@ Move `renderD2Files` and `isUpToDate` from `src/cli/commands/generate.ts:209-292
 - [ ] **Step 2: Update generate.ts to import from shared module**
 
 Replace the local `renderD2Files` / `isUpToDate` in `generate.ts` with:
+
 ```ts
 import { renderD2Files } from "../../generator/d2/render.js";
 ```
@@ -2124,6 +2303,7 @@ git commit -m "refactor: extract renderD2Files to shared module"
 Remove the old submodule scaffolding code now that recursive descent handles it.
 
 **Files:**
+
 - Delete: `src/generator/d2/submodule-scaffold.ts`
 - Modify: `src/cli/commands/generate.ts` (remove submodule import and usage)
 
@@ -2134,6 +2314,7 @@ Delete the file `src/generator/d2/submodule-scaffold.ts`.
 - [ ] **Step 2: Remove submodule references from generate command**
 
 In `src/cli/commands/generate.ts`:
+
 - Remove the import of `generateSubmoduleDocs`
 - Remove the `--submodules` CLI option
 - Remove the submodule generation block (lines 123-134)
@@ -2161,6 +2342,7 @@ git commit -m "refactor: remove submodule-scaffold — subsumed by recursive des
 Add the Anthropic SDK as an optional dependency for agent assist.
 
 **Files:**
+
 - Modify: `package.json`
 
 - [ ] **Step 1: Install the SDK**
@@ -2183,6 +2365,7 @@ git commit -m "chore: add @anthropic-ai/sdk dependency for agent assist"
 Full recursive descent test on a realistic fixture.
 
 **Files:**
+
 - Create: `tests/integration/recursive.test.ts`
 
 - [ ] **Step 1: Write integration test**
@@ -2247,13 +2430,19 @@ describe("recursive descent integration", () => {
 
     // Root: system level — context + container
     const rootDocs = path.join(tmpDir, "docs", "architecture");
-    expect(fs.existsSync(path.join(rootDocs, "_generated", "context.d2"))).toBe(true);
-    expect(fs.existsSync(path.join(rootDocs, "_generated", "container.d2"))).toBe(true);
+    expect(fs.existsSync(path.join(rootDocs, "_generated", "context.d2"))).toBe(
+      true,
+    );
+    expect(
+      fs.existsSync(path.join(rootDocs, "_generated", "container.d2")),
+    ).toBe(true);
 
     // Each service: container level — component
     for (const svc of ["service-a", "service-b"]) {
       const svcDocs = path.join(tmpDir, svc, "docs", "architecture");
-      expect(fs.existsSync(path.join(svcDocs, "_generated", "component.d2"))).toBe(true);
+      expect(
+        fs.existsSync(path.join(svcDocs, "_generated", "component.d2")),
+      ).toBe(true);
     }
   });
 
@@ -2282,8 +2471,12 @@ describe("recursive descent integration", () => {
     const docs = path.join(tmpDir, "docs", "architecture");
     expect(fs.existsSync(path.join(docs, "_generated", "code.d2"))).toBe(true);
     // Should NOT have context or container diagrams
-    expect(fs.existsSync(path.join(docs, "_generated", "context.d2"))).toBe(false);
-    expect(fs.existsSync(path.join(docs, "_generated", "container.d2"))).toBe(false);
+    expect(fs.existsSync(path.join(docs, "_generated", "context.d2"))).toBe(
+      false,
+    );
+    expect(fs.existsSync(path.join(docs, "_generated", "container.d2"))).toBe(
+      false,
+    );
   });
 });
 ```

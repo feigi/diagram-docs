@@ -10,7 +10,8 @@ export interface TypeScriptModule {
 }
 
 // Matches: export class/function/const/let/var/interface/type/enum Name
-const NAMED_EXPORT = /^\s*export\s+(?:default\s+)?(?:class|function|const|let|var|interface|type|enum)\s+([A-Za-z_$]\w*)/gm;
+const NAMED_EXPORT =
+  /^\s*export\s+(?:default\s+)?(?:class|function|const|let|var|interface|type|enum)\s+([A-Za-z_$]\w*)/gm;
 
 /**
  * Read tsconfig.json and resolve the source root directory.

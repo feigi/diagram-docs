@@ -47,7 +47,12 @@ export function generateContainerDiagram(
   // Build deduplicated edge list and collect connected container IDs
   const seenEdges = new Set<string>();
   const connectedContainerIds = new Set<string>();
-  interface ResolvedRel { sourceId: string; targetId: string; label: string; technology?: string }
+  interface ResolvedRel {
+    sourceId: string;
+    targetId: string;
+    label: string;
+    technology?: string;
+  }
   const resolvedRels: ResolvedRel[] = [];
 
   for (const rel of sortRelationships(candidateRels)) {
@@ -60,7 +65,12 @@ export function generateContainerDiagram(
     if (seenEdges.has(edgeKey)) continue;
     seenEdges.add(edgeKey);
 
-    resolvedRels.push({ sourceId, targetId, label: rel.label, technology: rel.technology });
+    resolvedRels.push({
+      sourceId,
+      targetId,
+      label: rel.label,
+      technology: rel.technology,
+    });
 
     // Track which containers participate in at least one edge
     for (const container of model.containers) {
@@ -81,9 +91,13 @@ export function generateContainerDiagram(
   // Actors
   for (const actor of sortById(model.actors)) {
     const id = toD2Id(actor.id);
-    w.shape(id, `${actor.name}\\n\\n[Person]\\n${wrapText(actor.description)}`, {
-      "class": "person",
-    });
+    w.shape(
+      id,
+      `${actor.name}\\n\\n[Person]\\n${wrapText(actor.description)}`,
+      {
+        class: "person",
+      },
+    );
   }
 
   if (model.actors.length > 0) w.blank();
@@ -97,7 +111,7 @@ export function generateContainerDiagram(
       if (!connectedContainerIds.has(container.id)) continue;
 
       const id = toD2Id(container.id);
-      const props: Record<string, string> = { "class": "container" };
+      const props: Record<string, string> = { class: "container" };
 
       // Link resolution: submodule resolver takes priority, then standard componentLinks
       if (options?.submoduleLinkResolver) {
@@ -122,9 +136,13 @@ export function generateContainerDiagram(
   for (const ext of sortById(model.externalSystems)) {
     const id = toD2Id(ext.id);
     const tech = ext.technology ? `\\n[${ext.technology}]` : "";
-    w.shape(id, `${ext.name}\\n\\n[External System]${tech}\\n${wrapText(ext.description)}`, {
-      "class": "external-system",
-    });
+    w.shape(
+      id,
+      `${ext.name}\\n\\n[External System]${tech}\\n${wrapText(ext.description)}`,
+      {
+        class: "external-system",
+      },
+    );
   }
 
   if (model.externalSystems.length > 0) w.blank();
@@ -132,7 +150,12 @@ export function generateContainerDiagram(
   // Relationships
   for (const rel of resolvedRels) {
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(rel.sourceId, rel.targetId, wrapText(`${rel.label}${tech}`, 40, 1), { "style.font-size": "13" });
+    w.connection(
+      rel.sourceId,
+      rel.targetId,
+      wrapText(`${rel.label}${tech}`, 40, 1),
+      { "style.font-size": "13" },
+    );
   }
 
   return w.toString();

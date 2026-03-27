@@ -17,6 +17,7 @@
 A small TypeScript app under the monorepo fixtures to test against.
 
 **Files:**
+
 - Create: `tests/fixtures/monorepo/services/api-gateway/tsconfig.json`
 - Create: `tests/fixtures/monorepo/services/api-gateway/package.json`
 - Create: `tests/fixtures/monorepo/services/api-gateway/src/routes/index.ts`
@@ -107,7 +108,11 @@ export type User = z.infer<typeof UserSchema>;
 ```typescript
 import type { Request, Response, NextFunction } from "express";
 
-export function authenticate(req: Request, _res: Response, next: NextFunction): void {
+export function authenticate(
+  req: Request,
+  _res: Response,
+  next: NextFunction,
+): void {
   const token = req.headers.authorization;
   if (token) {
     next();
@@ -129,6 +134,7 @@ git commit -m "test: add TypeScript fixture for api-gateway"
 ### Task 2: Add `"typescript"` to the language union type
 
 **Files:**
+
 - Modify: `src/analyzers/types.ts:16`
 
 - [ ] **Step 1: Update the `language` field on `ScannedApplication`**
@@ -136,13 +142,13 @@ git commit -m "test: add TypeScript fixture for api-gateway"
 In `src/analyzers/types.ts`, change line 16 from:
 
 ```typescript
-  language: "java" | "python" | "c";
+language: "java" | "python" | "c";
 ```
 
 to:
 
 ```typescript
-  language: "java" | "python" | "c" | "typescript";
+language: "java" | "python" | "c" | "typescript";
 ```
 
 - [ ] **Step 2: Run typecheck to verify**
@@ -162,6 +168,7 @@ git commit -m "feat: add typescript to ScannedApplication language union"
 ### Task 3: Implement import parser (`imports.ts`)
 
 **Files:**
+
 - Create: `src/analyzers/typescript/imports.ts`
 - Test: `tests/analyzers/typescript.test.ts`
 
@@ -243,7 +250,8 @@ export interface TypeScriptImportInfo {
 }
 
 // import ... from "source"  /  import type ... from "source"
-const STATIC_IMPORT = /^\s*import\s+(?:type\s+)?(?:[^\n]*?)\s+from\s+["']([^"']+)["']/gm;
+const STATIC_IMPORT =
+  /^\s*import\s+(?:type\s+)?(?:[^\n]*?)\s+from\s+["']([^"']+)["']/gm;
 
 // import("source")
 const DYNAMIC_IMPORT = /import\(\s*["']([^"']+)["']\s*\)/g;
@@ -252,9 +260,12 @@ const DYNAMIC_IMPORT = /import\(\s*["']([^"']+)["']\s*\)/g;
 const REQUIRE = /require\(\s*["']([^"']+)["']\s*\)/g;
 
 // export ... from "source"  /  export type ... from "source"
-const REEXPORT = /^\s*export\s+(?:type\s+)?(?:\{[^}]*\}|\*)\s+from\s+["']([^"']+)["']/gm;
+const REEXPORT =
+  /^\s*export\s+(?:type\s+)?(?:\{[^}]*\}|\*)\s+from\s+["']([^"']+)["']/gm;
 
-export function parseTypeScriptImports(filePath: string): TypeScriptImportInfo[] {
+export function parseTypeScriptImports(
+  filePath: string,
+): TypeScriptImportInfo[] {
   const content = fs.readFileSync(filePath, "utf-8");
   const imports: TypeScriptImportInfo[] = [];
   const seen = new Set<string>();
@@ -293,6 +304,7 @@ git commit -m "feat: add TypeScript import parser with tests"
 ### Task 4: Implement module discovery (`modules.ts`)
 
 **Files:**
+
 - Create: `src/analyzers/typescript/modules.ts`
 - Modify: `tests/analyzers/typescript.test.ts`
 
@@ -305,7 +317,10 @@ import { extractTypeScriptModules } from "../../src/analyzers/typescript/modules
 
 describe("TypeScript Module Discovery", () => {
   it("discovers modules from tsconfig source roots", async () => {
-    const modules = await extractTypeScriptModules(FIXTURES, defaultConfig.exclude);
+    const modules = await extractTypeScriptModules(
+      FIXTURES,
+      defaultConfig.exclude,
+    );
 
     expect(modules.length).toBeGreaterThan(0);
     const moduleNames = modules.map((m) => m.name);
@@ -314,7 +329,10 @@ describe("TypeScript Module Discovery", () => {
   });
 
   it("groups root-level files into a root module", async () => {
-    const modules = await extractTypeScriptModules(FIXTURES, defaultConfig.exclude);
+    const modules = await extractTypeScriptModules(
+      FIXTURES,
+      defaultConfig.exclude,
+    );
 
     const rootModule = modules.find((m) => m.path === ".");
     expect(rootModule).toBeTruthy();
@@ -322,7 +340,10 @@ describe("TypeScript Module Discovery", () => {
   });
 
   it("extracts exports from TypeScript files", async () => {
-    const modules = await extractTypeScriptModules(FIXTURES, defaultConfig.exclude);
+    const modules = await extractTypeScriptModules(
+      FIXTURES,
+      defaultConfig.exclude,
+    );
 
     const routesModule = modules.find((m) => m.name === "routes");
     expect(routesModule).toBeTruthy();
@@ -353,7 +374,8 @@ export interface TypeScriptModule {
 }
 
 // Matches: export class/function/const/let/var/interface/type/enum Name
-const NAMED_EXPORT = /^\s*export\s+(?:default\s+)?(?:class|function|const|let|var|interface|type|enum)\s+([A-Za-z_$]\w*)/gm;
+const NAMED_EXPORT =
+  /^\s*export\s+(?:default\s+)?(?:class|function|const|let|var|interface|type|enum)\s+([A-Za-z_$]\w*)/gm;
 
 /**
  * Read tsconfig.json and resolve the source root directory.
@@ -472,6 +494,7 @@ git commit -m "feat: add TypeScript module discovery from tsconfig source roots"
 ### Task 5: Implement the analyzer (`index.ts`) and register it
 
 **Files:**
+
 - Create: `src/analyzers/typescript/index.ts`
 - Modify: `src/analyzers/registry.ts`
 - Modify: `tests/analyzers/typescript.test.ts`
@@ -503,17 +526,27 @@ describe("TypeScript Analyzer", () => {
   it("extracts external dependencies from package.json", async () => {
     const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
 
-    expect(result.externalDependencies.some((d) => d.name === "express")).toBe(true);
-    expect(result.externalDependencies.some((d) => d.name === "zod")).toBe(true);
+    expect(result.externalDependencies.some((d) => d.name === "express")).toBe(
+      true,
+    );
+    expect(result.externalDependencies.some((d) => d.name === "zod")).toBe(
+      true,
+    );
     // devDependencies should NOT appear
-    expect(result.externalDependencies.some((d) => d.name === "typescript")).toBe(false);
+    expect(
+      result.externalDependencies.some((d) => d.name === "typescript"),
+    ).toBe(false);
   });
 
   it("excludes file: deps from externalDependencies and writes internalImports", async () => {
     const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
 
     // file: dep should not be in external deps
-    expect(result.externalDependencies.some((d) => d.name === "@monorepo/shared-lib")).toBe(false);
+    expect(
+      result.externalDependencies.some(
+        (d) => d.name === "@monorepo/shared-lib",
+      ),
+    ).toBe(false);
 
     // Should have an internalImport for the file: dep
     expect(result.internalImports.length).toBeGreaterThan(0);
@@ -541,7 +574,9 @@ describe("TypeScript Analyzer", () => {
     const internalImports = routesModule!.imports.filter((i) => !i.isExternal);
 
     expect(externalImports.some((i) => i.source === "express")).toBe(true);
-    expect(internalImports.some((i) => i.source === "../middleware/auth")).toBe(true);
+    expect(internalImports.some((i) => i.source === "../middleware/auth")).toBe(
+      true,
+    );
   });
 });
 ```
@@ -571,15 +606,15 @@ import { extractTypeScriptModules, resolveSourceRoot } from "./modules.js";
 import { collectConfigFiles } from "../config-files.js";
 
 const KNOWN_FRAMEWORKS: Record<string, string> = {
-  "express": "Express",
-  "fastify": "Fastify",
+  express: "Express",
+  fastify: "Fastify",
   "@nestjs/core": "NestJS",
-  "next": "Next.js",
-  "hono": "Hono",
+  next: "Next.js",
+  hono: "Hono",
   "@angular/core": "Angular",
-  "nuxt": "Nuxt",
-  "remix": "Remix",
-  "koa": "Koa",
+  nuxt: "Nuxt",
+  remix: "Remix",
+  koa: "Koa",
 };
 
 interface PackageJson {
@@ -619,7 +654,10 @@ function parseDependencies(
         targetPath: targetRelPath,
       });
     } else {
-      external.push({ name, version: version.replace(/^(?:workspace:|[\^~>=<]+)/, "") || undefined });
+      external.push({
+        name,
+        version: version.replace(/^(?:workspace:|[\^~>=<]+)/, "") || undefined,
+      });
     }
   }
 
@@ -678,7 +716,9 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
 
           // Check if this import references a detected framework
           if (isExternal) {
-            for (const [depName, frameworkName] of Object.entries(KNOWN_FRAMEWORKS)) {
+            for (const [depName, frameworkName] of Object.entries(
+              KNOWN_FRAMEWORKS,
+            )) {
               if (
                 detectedFrameworks.has(frameworkName) &&
                 (imp.source === depName || imp.source.startsWith(depName + "/"))
@@ -708,8 +748,9 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
     }
 
     // Parse dependencies
-    const { external: externalDependencies, internal: internalImports } =
-      pkg ? parseDependencies(appPath, pkg) : { external: [], internal: [] };
+    const { external: externalDependencies, internal: internalImports } = pkg
+      ? parseDependencies(appPath, pkg)
+      : { external: [], internal: [] };
 
     // Collect config files
     const configFiles = collectConfigFiles(appPath, appPath);
@@ -750,7 +791,12 @@ import { typescriptAnalyzer } from "./typescript/index.js";
 Add `typescriptAnalyzer` to the `analyzers` array:
 
 ```typescript
-const analyzers: LanguageAnalyzer[] = [javaAnalyzer, pythonAnalyzer, cAnalyzer, typescriptAnalyzer];
+const analyzers: LanguageAnalyzer[] = [
+  javaAnalyzer,
+  pythonAnalyzer,
+  cAnalyzer,
+  typescriptAnalyzer,
+];
 ```
 
 - [ ] **Step 5: Run tests to verify they pass**
@@ -775,6 +821,7 @@ git commit -m "feat: implement TypeScript analyzer with framework detection and 
 ### Task 6: Add quality fixture and register in correctness tests
 
 **Files:**
+
 - Create: `tests/quality/fixtures/typescript-express/expected.json`
 - Modify: `tests/quality/correctness.test.ts`
 - Modify: `tests/quality/fixtures/TEMPLATE.md`
@@ -803,17 +850,22 @@ Hand-verified ground truth matching the api-gateway fixture:
   ],
   "imports": [
     { "source": "express", "inModule": "api-gateway", "isExternal": true },
-    { "source": "./routes/index", "inModule": "api-gateway", "isExternal": false },
+    {
+      "source": "./routes/index",
+      "inModule": "api-gateway",
+      "isExternal": false
+    },
     { "source": "express", "inModule": "routes", "isExternal": true },
     { "source": "./users", "inModule": "routes", "isExternal": false },
     { "source": "express", "inModule": "middleware", "isExternal": true },
     { "source": "zod", "inModule": "routes", "isExternal": true },
-    { "source": "../middleware/auth", "inModule": "routes", "isExternal": false }
+    {
+      "source": "../middleware/auth",
+      "inModule": "routes",
+      "isExternal": false
+    }
   ],
-  "externalDependencies": [
-    { "name": "express" },
-    { "name": "zod" }
-  ],
+  "externalDependencies": [{ "name": "express" }, { "name": "zod" }],
   "metadata": {
     "routes": { "framework": "Express" }
   }

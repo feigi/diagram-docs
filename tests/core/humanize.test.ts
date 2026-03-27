@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { humanizeName, lastSegment, inferTechnology } from "../../src/core/humanize.js";
+import {
+  humanizeName,
+  lastSegment,
+  inferTechnology,
+} from "../../src/core/humanize.js";
 
 describe("humanizeName", () => {
   it("converts kebab-case to Title Case", () => {
@@ -43,9 +47,9 @@ describe("lastSegment", () => {
 
 describe("inferTechnology", () => {
   it("detects Spring Boot from dependencies", () => {
-    expect(
-      inferTechnology("java", ["spring-boot-starter-web"]),
-    ).toBe("Java / Spring Boot");
+    expect(inferTechnology("java", ["spring-boot-starter-web"])).toBe(
+      "Java / Spring Boot",
+    );
   });
 
   it("detects FastAPI from dependencies", () => {

@@ -7,7 +7,7 @@
     "diagram-docs": "./dist/cli/index.js"
   },
   "scripts": {
-    "prepare": "tsc && chmod +x dist/cli/index.js",
+    "prepare": "test -z \"$CI\" && husky || true",
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -17,6 +17,8 @@
     "test:tokens": "vitest run tests/quality/token-efficiency.test.ts",
     "bench": "vitest bench",
     "lint": "eslint src/",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
@@ -27,14 +29,19 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/diff": "^7.0.2",
     "@types/node": "^22.13.0",
     "diff": "^8.0.3",
     "eslint": "^9.19.0",
+    "eslint-config-prettier": "^10.1.8",
     "gpt-tokenizer": "^3.4.0",
+    "husky": "^9.1.7",
     "jsondiffpatch": "^0.7.3",
+    "prettier": "^3.8.1",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
+    "typescript-eslint": "^8.57.2",
     "vitest": "^3.0.0"
   },
   "engines": {

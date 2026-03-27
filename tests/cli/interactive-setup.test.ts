@@ -7,7 +7,11 @@ import { parse as parseYaml } from "yaml";
 // We test the interactive-setup module by mocking commandExists and readline
 // and verify the config-writing helpers directly.
 
-import { writeDefaultConfig, updateConfigLLM, loadConfig } from "../../src/config/loader.js";
+import {
+  writeDefaultConfig,
+  updateConfigLLM,
+  loadConfig,
+} from "../../src/config/loader.js";
 import {
   parseCopilotHelpConfigOutput,
   parseClaudeModelListOutput,
@@ -72,7 +76,7 @@ describe("parseCopilotHelpConfigOutput", () => {
       "",
       "  `allowed_urls`: list of URLs ...",
       "",
-      '  `model`: AI model to use for Copilot CLI; can be changed with /model.',
+      "  `model`: AI model to use for Copilot CLI; can be changed with /model.",
       '    - "claude-sonnet-4.6"',
       '    - "gpt-5.2"',
       '    - "gpt-4.1"',
@@ -89,14 +93,17 @@ describe("parseCopilotHelpConfigOutput", () => {
 
   it("stops collecting at the next config key", () => {
     const output = [
-      '  `model`: AI model to use.',
+      "  `model`: AI model to use.",
       '    - "gpt-5.2"',
       '    - "gpt-4.1"',
       "  `mouse`: whether to enable mouse.",
       '    - "not-a-model"',
     ].join("\n");
 
-    expect(parseCopilotHelpConfigOutput(output)).toEqual(["gpt-5.2", "gpt-4.1"]);
+    expect(parseCopilotHelpConfigOutput(output)).toEqual([
+      "gpt-5.2",
+      "gpt-4.1",
+    ]);
   });
 
   it("returns empty array when no model section exists", () => {
@@ -114,7 +121,11 @@ describe("parseClaudeModelListOutput", () => {
       "opus      Claude Opus",
     ].join("\n");
 
-    expect(parseClaudeModelListOutput(output)).toEqual(["sonnet", "haiku", "opus"]);
+    expect(parseClaudeModelListOutput(output)).toEqual([
+      "sonnet",
+      "haiku",
+      "opus",
+    ]);
   });
 
   it("returns empty array for empty output", () => {

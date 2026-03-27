@@ -15,7 +15,10 @@ export function scaffoldUserFiles(
 ): void {
   // Styles file — overwrite only if content changed (preserves mtime)
   const stylesPath = path.join(outputDir, "styles.d2");
-  if (!fs.existsSync(stylesPath) || fs.readFileSync(stylesPath, "utf-8") !== STYLES_D2) {
+  if (
+    !fs.existsSync(stylesPath) ||
+    fs.readFileSync(stylesPath, "utf-8") !== STYLES_D2
+  ) {
     fs.writeFileSync(stylesPath, STYLES_D2, "utf-8");
   }
 

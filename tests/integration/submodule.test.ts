@@ -9,7 +9,10 @@ import { generateSubmoduleDocs } from "../../src/generator/d2/submodule-scaffold
 import { configSchema } from "../../src/config/schema.js";
 import { discoverApplications } from "../../src/core/discovery.js";
 import { getAnalyzer } from "../../src/analyzers/registry.js";
-import type { RawStructure, ScannedApplication } from "../../src/analyzers/types.js";
+import type {
+  RawStructure,
+  ScannedApplication,
+} from "../../src/analyzers/types.js";
 
 const MONOREPO = path.resolve(__dirname, "../fixtures/monorepo");
 const CONFIG_PATH = path.join(MONOREPO, "diagram-docs.yaml");
@@ -39,10 +42,10 @@ describe("Integration: Submodule per-folder docs", () => {
 
     for (const app of discovered) {
       const analyzer = getAnalyzer(app.analyzerId);
-      const result = await analyzer!.analyze(
-        path.resolve(MONOREPO, app.path),
-        { exclude: baseConfig.scan.exclude, abstraction: baseConfig.abstraction },
-      );
+      const result = await analyzer!.analyze(path.resolve(MONOREPO, app.path), {
+        exclude: baseConfig.scan.exclude,
+        abstraction: baseConfig.abstraction,
+      });
       result.path = app.path;
       applications.push(result);
     }
@@ -160,12 +163,10 @@ describe("Integration: Submodule per-folder docs", () => {
     }
 
     // order-service should be excluded
-    expect(
-      subResults.some((s) => s.containerId === "order-service"),
-    ).toBe(false);
+    expect(subResults.some((s) => s.containerId === "order-service")).toBe(
+      false,
+    );
     // user-api should still be included
-    expect(
-      subResults.some((s) => s.containerId === "user-api"),
-    ).toBe(true);
+    expect(subResults.some((s) => s.containerId === "user-api")).toBe(true);
   });
 });

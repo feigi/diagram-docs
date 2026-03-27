@@ -15,15 +15,15 @@ import { extractTypeScriptModules, resolveSourceRoot } from "./modules.js";
 import { collectConfigFiles } from "../config-files.js";
 
 const KNOWN_FRAMEWORKS: Record<string, string> = {
-  "express": "Express",
-  "fastify": "Fastify",
+  express: "Express",
+  fastify: "Fastify",
   "@nestjs/core": "NestJS",
-  "next": "Next.js",
-  "hono": "Hono",
+  next: "Next.js",
+  hono: "Hono",
   "@angular/core": "Angular",
-  "nuxt": "Nuxt",
-  "remix": "Remix",
-  "koa": "Koa",
+  nuxt: "Nuxt",
+  remix: "Remix",
+  koa: "Koa",
 };
 
 interface PackageJson {
@@ -70,7 +70,10 @@ function parseDependencies(
         targetPath: targetRelPath,
       });
     } else {
-      external.push({ name, version: version.replace(/^(?:workspace:|[\^~>=<]+)/, "") || undefined });
+      external.push({
+        name,
+        version: version.replace(/^(?:workspace:|[\^~>=<]+)/, "") || undefined,
+      });
     }
   }
 
@@ -137,7 +140,9 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
 
           // Check if this import references a detected framework
           if (isExternal) {
-            for (const [depName, frameworkName] of Object.entries(KNOWN_FRAMEWORKS)) {
+            for (const [depName, frameworkName] of Object.entries(
+              KNOWN_FRAMEWORKS,
+            )) {
               if (
                 detectedFrameworks.has(frameworkName) &&
                 (imp.source === depName || imp.source.startsWith(depName + "/"))
@@ -167,8 +172,9 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
     }
 
     // Parse dependencies
-    const { external: externalDependencies, internal: internalImports } =
-      pkg ? parseDependencies(appPath, pkg) : { external: [], internal: [] };
+    const { external: externalDependencies, internal: internalImports } = pkg
+      ? parseDependencies(appPath, pkg)
+      : { external: [], internal: [] };
 
     // Collect config files
     const configFiles = collectConfigFiles(appPath, appPath);

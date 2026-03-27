@@ -31,7 +31,8 @@ export async function extractPackages(
 
   for (const file of javaFiles) {
     const fullPath = path.join(searchBase, file);
-    const pkg = parseJavaPackage(fullPath) ?? path.dirname(file).replace(/\//g, ".");
+    const pkg =
+      parseJavaPackage(fullPath) ?? path.dirname(file).replace(/\//g, ".");
     const pkgPath = path.dirname(file);
 
     if (!packageMap.has(pkg)) {
@@ -49,9 +50,11 @@ export async function extractPackages(
     // Extract public class name (simple heuristic)
     const className = path.basename(file, ".java");
     const content = fs.readFileSync(fullPath, "utf-8");
-    if (content.includes(`public class ${className}`) ||
-        content.includes(`public interface ${className}`) ||
-        content.includes(`public enum ${className}`)) {
+    if (
+      content.includes(`public class ${className}`) ||
+      content.includes(`public interface ${className}`) ||
+      content.includes(`public enum ${className}`)
+    ) {
       entry.publicClasses.push(className);
     }
   }

@@ -16,18 +16,26 @@ export function generateContextDiagram(model: ArchitectureModel): string {
   // Actors
   for (const actor of sortById(model.actors)) {
     const id = toD2Id(actor.id);
-    w.shape(id, `${actor.name}\\n\\n[Person]\\n${wrapText(actor.description)}`, {
-      "class": "person",
-    });
+    w.shape(
+      id,
+      `${actor.name}\\n\\n[Person]\\n${wrapText(actor.description)}`,
+      {
+        class: "person",
+      },
+    );
   }
 
   if (model.actors.length > 0) w.blank();
 
   // System boundary
   const sysId = toD2Id("system");
-  w.shape(sysId, `${model.system.name}\\n\\n[Software System]\\n${wrapText(model.system.description)}`, {
-    "class": "system",
-  });
+  w.shape(
+    sysId,
+    `${model.system.name}\\n\\n[Software System]\\n${wrapText(model.system.description)}`,
+    {
+      class: "system",
+    },
+  );
 
   w.blank();
 
@@ -35,9 +43,13 @@ export function generateContextDiagram(model: ArchitectureModel): string {
   for (const ext of sortById(model.externalSystems)) {
     const id = toD2Id(ext.id);
     const tech = ext.technology ? `\\n[${ext.technology}]` : "";
-    w.shape(id, `${ext.name}\\n\\n[External System]${tech}\\n${wrapText(ext.description)}`, {
-      "class": "external-system",
-    });
+    w.shape(
+      id,
+      `${ext.name}\\n\\n[External System]${tech}\\n${wrapText(ext.description)}`,
+      {
+        class: "external-system",
+      },
+    );
   }
 
   if (model.externalSystems.length > 0) w.blank();
@@ -84,7 +96,9 @@ export function generateContextDiagram(model: ArchitectureModel): string {
     seenEdges.add(edgeKey);
 
     const tech = rel.technology ? ` [${rel.technology}]` : "";
-    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`, 40, 1), { "style.font-size": "13" });
+    w.connection(sourceId, targetId, wrapText(`${rel.label}${tech}`, 40, 1), {
+      "style.font-size": "13",
+    });
   }
 
   return w.toString();

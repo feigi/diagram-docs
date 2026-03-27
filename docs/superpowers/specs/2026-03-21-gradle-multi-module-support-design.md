@@ -19,7 +19,7 @@ Add an optional `publishedAs` field to `ScannedApplication` in `src/analyzers/ty
 ```ts
 export interface ScannedApplication {
   // ... existing fields ...
-  publishedAs?: string;  // "group:artifactName", e.g. "com.bmw.losnext:los-chargingdb-model"
+  publishedAs?: string; // "group:artifactName", e.g. "com.bmw.losnext:los-chargingdb-model"
 }
 ```
 
@@ -32,6 +32,7 @@ Two parsing functions:
 **`parseSettingsGradle(appPath: string)`**
 
 Reads `settings.gradle` or `settings.gradle.kts` and extracts:
+
 - `rootProjectName: string | null` — from `rootProject.name = '...'`
 - `subprojects: Array<{ name: string; dir: string }>` — from `include('...')` / `include '...'` lines, with optional `projectDir` overrides (e.g., `project(':los-chargingdb-model').projectDir = file('model')`)
 
@@ -40,6 +41,7 @@ Returns `null` if no settings file exists.
 **`parseGradleDependencies(buildFilePath: string)`**
 
 Reads `build.gradle` or `build.gradle.kts` and extracts:
+
 - `group: string | null` — from `group = '...'` or `group '...'`
 - `projectDeps: string[]` — from `implementation project(':...')` → the project name
 - `mavenDeps: Array<{ group: string; artifact: string; version?: string }>` — from `implementation 'group:artifact:version'` lines in the `dependencies` block
@@ -70,6 +72,7 @@ This handles cross-repo Maven coordinate references like `los-cha/app` depending
 ### No Model-Builder Changes Needed
 
 The model-builder already:
+
 - Creates containers 1:1 from apps (root shells with 0 modules become empty containers — acceptable, users can remove them from the model)
 - Converts `internalImports` to container-level relationships (model-builder.ts:295)
 - Promotes cross-container component relationships (model-builder.ts:344)
@@ -103,12 +106,12 @@ Update `src/schemas/raw-structure.schema.json` to include the optional `publishe
 
 ## Files Changed
 
-| File | Change |
-|------|--------|
-| `src/analyzers/types.ts` | Add optional `publishedAs` to `ScannedApplication` |
-| `src/schemas/raw-structure.schema.json` | Add `publishedAs` field |
-| `src/analyzers/java/gradle.ts` | New — `parseSettingsGradle`, `parseGradleDependencies` |
-| `src/analyzers/java/index.ts` | Use gradle.ts to exclude subproject dirs, parse deps, set publishedAs |
-| `src/cli/commands/scan.ts` | Post-scan cross-app coordinate matching |
-| `tests/analyzers/java/gradle.test.ts` | New — gradle parsing tests |
-| `tests/analyzers/java.test.ts` | Multi-module fixture tests |
+| File                                    | Change                                                                |
+| --------------------------------------- | --------------------------------------------------------------------- |
+| `src/analyzers/types.ts`                | Add optional `publishedAs` to `ScannedApplication`                    |
+| `src/schemas/raw-structure.schema.json` | Add `publishedAs` field                                               |
+| `src/analyzers/java/gradle.ts`          | New — `parseSettingsGradle`, `parseGradleDependencies`                |
+| `src/analyzers/java/index.ts`           | Use gradle.ts to exclude subproject dirs, parse deps, set publishedAs |
+| `src/cli/commands/scan.ts`              | Post-scan cross-app coordinate matching                               |
+| `tests/analyzers/java/gradle.test.ts`   | New — gradle parsing tests                                            |
+| `tests/analyzers/java.test.ts`          | Multi-module fixture tests                                            |

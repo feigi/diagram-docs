@@ -14,9 +14,7 @@
           "id": "libs-mathlib-src",
           "path": "src",
           "name": "src",
-          "files": [
-            "src/math.c"
-          ],
+          "files": ["src/math.c"],
           "exports": [],
           "imports": [
             {
@@ -34,12 +32,8 @@
           "id": "libs-mathlib-include",
           "path": "include",
           "name": "include",
-          "files": [
-            "include/math_ops.h"
-          ],
-          "exports": [
-            "math_ops"
-          ],
+          "files": ["include/math_ops.h"],
+          "exports": ["math_ops"],
           "imports": [],
           "metadata": {}
         }
@@ -58,12 +52,8 @@
           "id": "services-api-gateway",
           "path": ".",
           "name": "api-gateway",
-          "files": [
-            "index.ts"
-          ],
-          "exports": [
-            "app"
-          ],
+          "files": ["index.ts"],
+          "exports": ["app"],
           "imports": [
             {
               "source": "express",
@@ -82,15 +72,8 @@
           "id": "services-api-gateway-routes",
           "path": "routes",
           "name": "routes",
-          "files": [
-            "routes/users.ts",
-            "routes/index.ts"
-          ],
-          "exports": [
-            "usersRouter",
-            "User",
-            "registerRoutes"
-          ],
+          "files": ["routes/users.ts", "routes/index.ts"],
+          "exports": ["usersRouter", "User", "registerRoutes"],
           "imports": [
             {
               "source": "express",
@@ -117,13 +100,8 @@
           "id": "services-api-gateway-middleware",
           "path": "middleware",
           "name": "middleware",
-          "files": [
-            "middleware/auth.ts"
-          ],
-          "exports": [
-            "authenticate",
-            "AUTH_HEADER"
-          ],
+          "files": ["middleware/auth.ts"],
+          "exports": ["authenticate", "AUTH_HEADER"],
           "imports": [
             {
               "source": "express",
@@ -181,10 +159,7 @@
             "orders/api.py",
             "orders/__init__.py"
           ],
-          "exports": [
-            "Order",
-            "OrderHandler"
-          ],
+          "exports": ["Order", "OrderHandler"],
           "imports": [
             {
               "source": "sqlalchemy",
@@ -242,12 +217,8 @@
           "id": "services-user-api-com-example-user",
           "path": "com/example/user",
           "name": "com.example.user",
-          "files": [
-            "com/example/user/UserController.java"
-          ],
-          "exports": [
-            "UserController"
-          ],
+          "files": ["com/example/user/UserController.java"],
+          "exports": ["UserController"],
           "imports": [
             {
               "source": "com.example.repo.UserRepository",
@@ -270,12 +241,8 @@
           "id": "services-user-api-com-example-repo",
           "path": "com/example/repo",
           "name": "com.example.repo",
-          "files": [
-            "com/example/repo/UserRepository.java"
-          ],
-          "exports": [
-            "UserRepository"
-          ],
+          "files": ["com/example/repo/UserRepository.java"],
+          "exports": ["UserRepository"],
           "imports": [
             {
               "source": "org.springframework.stereotype.Repository",

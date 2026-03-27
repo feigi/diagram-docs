@@ -47,9 +47,9 @@ describe("extractFragment", () => {
     const fragment = extractFragment(model, "user-api");
 
     // user-api -> email-provider relationship exists
-    expect(fragment.externalSystems.some((e) => e.id === "email-provider")).toBe(
-      true,
-    );
+    expect(
+      fragment.externalSystems.some((e) => e.id === "email-provider"),
+    ).toBe(true);
   });
 
   it("excludes unrelated external systems", () => {

@@ -93,20 +93,14 @@ export function mergePartialModels(
 
     for (const actor of partial.actors) {
       const existing = actorMap.get(actor.id);
-      if (
-        !existing ||
-        actor.description.length > existing.description.length
-      ) {
+      if (!existing || actor.description.length > existing.description.length) {
         actorMap.set(actor.id, actor);
       }
     }
 
     for (const ext of partial.externalSystems) {
       const existing = externalMap.get(ext.id);
-      if (
-        !existing ||
-        ext.description.length > existing.description.length
-      ) {
+      if (!existing || ext.description.length > existing.description.length) {
         externalMap.set(ext.id, ext);
       }
     }
@@ -128,27 +122,42 @@ export function mergePartialModels(
 // ---------------------------------------------------------------------------
 
 const synthesisSchema = z.object({
-  system: z.object({
-    name: z.string().min(1),
-    description: z.string(),
-  }).partial().optional(),
-  actors: z.array(z.object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    description: z.string(),
-  })).optional(),
-  externalSystems: z.array(z.object({
-    id: z.string().min(1),
-    name: z.string().min(1),
-    description: z.string(),
-    technology: z.string().optional(),
-  })).optional(),
-  relationships: z.array(z.object({
-    sourceId: z.string().min(1),
-    targetId: z.string().min(1),
-    label: z.string().min(1),
-    technology: z.string().optional(),
-  })).optional(),
+  system: z
+    .object({
+      name: z.string().min(1),
+      description: z.string(),
+    })
+    .partial()
+    .optional(),
+  actors: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        description: z.string(),
+      }),
+    )
+    .optional(),
+  externalSystems: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        name: z.string().min(1),
+        description: z.string(),
+        technology: z.string().optional(),
+      }),
+    )
+    .optional(),
+  relationships: z
+    .array(
+      z.object({
+        sourceId: z.string().min(1),
+        targetId: z.string().min(1),
+        label: z.string().min(1),
+        technology: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 
 // ---------------------------------------------------------------------------
@@ -188,7 +197,7 @@ export async function buildModelParallel(
       rethrowIfFatal(err);
       throw new LLMCallError(
         `Failed to create log directory "${logsDir}": ${err instanceof Error ? err.message : String(err)}. ` +
-        `Check filesystem permissions or remove the path if it is not a directory.`,
+          `Check filesystem permissions or remove the path if it is not a directory.`,
         { cause: err },
       );
     }
@@ -203,7 +212,9 @@ export async function buildModelParallel(
           );
         }
       }
-    } catch (e) { rethrowIfFatal(e); /* gitignore check is advisory */ }
+    } catch (e) {
+      rethrowIfFatal(e); /* gitignore check is advisory */
+    }
   }
 
   const warn = (msg: string) => {
@@ -212,7 +223,11 @@ export async function buildModelParallel(
     } else if (progress) {
       progress.setStatus(msg);
     } else {
-      try { process.stderr.write(`${msg}\n`); } catch (e) { if (isProgrammingError(e)) throw e; }
+      try {
+        process.stderr.write(`${msg}\n`);
+      } catch (e) {
+        if (isProgrammingError(e)) throw e;
+      }
     }
   };
 
@@ -269,10 +284,14 @@ export async function buildModelParallel(
   /** Best-effort removal of a temp file; warns on non-ENOENT errors. */
   function cleanupFile(filePath: string | undefined): void {
     if (!filePath) return;
-    try { fs.unlinkSync(filePath); } catch (e) {
+    try {
+      fs.unlinkSync(filePath);
+    } catch (e) {
       rethrowIfFatal(e);
       if ((e as NodeJS.ErrnoException).code !== "ENOENT") {
-        warn(`Failed to clean up temp file ${filePath}: ${(e as Error).message}`);
+        warn(
+          `Failed to clean up temp file ${filePath}: ${(e as Error).message}`,
+        );
       }
     }
   }
@@ -288,16 +307,16 @@ export async function buildModelParallel(
     const safeAppId = app.id.replace(/[^a-zA-Z0-9_-]/g, "_");
 
     const logger = manageOwnUI
-      ? new AgentLogger(
-          path.join(logsDir, `agent-${safeAppId}.log`),
-          { appId: app.id, model: config.llm.model, provider: provider.name },
-        )
+      ? new AgentLogger(path.join(logsDir, `agent-${safeAppId}.log`), {
+          appId: app.id,
+          model: config.llm.model,
+          provider: provider.name,
+        })
       : undefined;
 
     const appStartTime = Date.now();
 
     try {
-
       let currentAppState: "queued" | "thinking" | "output" = "queued";
       const appOnProgress = manageOwnUI
         ? (event: ProgressEvent) => {
@@ -344,7 +363,8 @@ export async function buildModelParallel(
         );
       } catch (err) {
         cleanupFile(outputPath);
-        if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
+        if (err instanceof LLMCallError || err instanceof LLMOutputError)
+          throw err;
         rethrowIfFatal(err);
         throw new LLMCallError(
           `Provider error: ${err instanceof Error ? err.message : String(err)}`,
@@ -360,10 +380,14 @@ export async function buildModelParallel(
           rawOutput = fs.readFileSync(outputPath, "utf-8");
           if (!rawOutput.trim()) {
             if (textOutput.trim()) {
-              warn(`App ${slice.applications[0].id}: agent output file was empty, using text stream`);
+              warn(
+                `App ${slice.applications[0].id}: agent output file was empty, using text stream`,
+              );
               rawOutput = textOutput;
             } else {
-              throw new LLMOutputError("Agent wrote an empty output file and no text output was streamed");
+              throw new LLMOutputError(
+                "Agent wrote an empty output file and no text output was streamed",
+              );
             }
           }
         } catch (err: unknown) {
@@ -381,7 +405,9 @@ export async function buildModelParallel(
               { cause: err },
             );
           }
-          warn(`App ${slice.applications[0].id}: failed to read output file (${errCode}), using text stream`);
+          warn(
+            `App ${slice.applications[0].id}: failed to read output file (${errCode}), using text stream`,
+          );
           rawOutput = textOutput;
         } finally {
           cleanupFile(outputPath);
@@ -397,13 +423,12 @@ export async function buildModelParallel(
         .replace(/\n?```\s*$/i, "");
 
       // Find YAML start
-      if (
-        !rawOutput.startsWith("version:") &&
-        !rawOutput.startsWith("---")
-      ) {
+      if (!rawOutput.startsWith("version:") && !rawOutput.startsWith("---")) {
         const yamlStart = rawOutput.indexOf("\nversion:");
         if (yamlStart !== -1) {
-          warn(`App ${app.id}: Stripped ${yamlStart} characters of preamble text before YAML`);
+          warn(
+            `App ${app.id}: Stripped ${yamlStart} characters of preamble text before YAML`,
+          );
           rawOutput = rawOutput.slice(yamlStart + 1);
         }
       }
@@ -419,7 +444,10 @@ export async function buildModelParallel(
       }
 
       if (!rawOutput.trim()) {
-        throw new LLMOutputError("LLM output was empty after cleanup", rawOutput);
+        throw new LLMOutputError(
+          "LLM output was empty after cleanup",
+          rawOutput,
+        );
       }
 
       let parsed: unknown;
@@ -433,7 +461,9 @@ export async function buildModelParallel(
         );
       }
       try {
-        const model = architectureModelSchema.parse(parsed) as ArchitectureModel;
+        const model = architectureModelSchema.parse(
+          parsed,
+        ) as ArchitectureModel;
         progress?.updateApp(app.id, "done");
         logger?.logDone(Date.now() - appStartTime);
         return { model, fellBack: false };
@@ -457,7 +487,10 @@ export async function buildModelParallel(
       }
       // Non-recoverable: still mark UI as failed so the app doesn't appear stuck
       progress?.updateApp(app.id, "failed");
-      logger?.logFailed(err instanceof Error ? err.message : String(err), Date.now() - appStartTime);
+      logger?.logFailed(
+        err instanceof Error ? err.message : String(err),
+        Date.now() - appStartTime,
+      );
       throw err;
     } finally {
       releaseSlot();
@@ -484,9 +517,14 @@ export async function buildModelParallel(
   if (rejections.length > 0) {
     // Log additional rejections so they are not silently lost
     for (let i = 1; i < rejections.length; i++) {
-      warn(`Additional app error (${i + 1}/${rejections.length}): ${rejections[i] instanceof Error ? (rejections[i] as Error).message : String(rejections[i])}`);
+      warn(
+        `Additional app error (${i + 1}/${rejections.length}): ${rejections[i] instanceof Error ? (rejections[i] as Error).message : String(rejections[i])}`,
+      );
     }
-    progress?.stop(`${results.filter(r => !r.fellBack).length}/${slices.length} apps modeled`, true);
+    progress?.stop(
+      `${results.filter((r) => !r.fellBack).length}/${slices.length} apps modeled`,
+      true,
+    );
     throw rejections[0];
   }
 
@@ -495,13 +533,13 @@ export async function buildModelParallel(
     progress?.stop(`0/${slices.length} apps modeled`, true);
     throw new LLMCallError(
       `All ${slices.length} per-app LLM calls failed. ` +
-      `The result would be identical to --deterministic mode. ` +
-      `Check LLM provider availability and authentication.`,
+        `The result would be identical to --deterministic mode. ` +
+        `Check LLM provider availability and authentication.`,
     );
   }
   if (fallbackCount > 0) {
     const fellBackIds = results
-      .map((r, i) => r.fellBack ? slices[i].applications[0].id : null)
+      .map((r, i) => (r.fellBack ? slices[i].applications[0].id : null))
       .filter((id): id is string => id !== null);
     warn(
       `WARNING: ${fallbackCount}/${slices.length} apps fell back to deterministic modeling: [${fellBackIds.join(", ")}]`,
@@ -540,7 +578,10 @@ export async function buildModelParallel(
 
   // Cross-app container-level relationships
   const crossAppContainerRels = fullDeterministic.relationships.filter(
-    (r) => containerIds.has(r.sourceId) && containerIds.has(r.targetId) && r.sourceId !== r.targetId,
+    (r) =>
+      containerIds.has(r.sourceId) &&
+      containerIds.has(r.targetId) &&
+      r.sourceId !== r.targetId,
   );
 
   // Cross-app component-level relationships (source and target in different containers)
@@ -548,23 +589,36 @@ export async function buildModelParallel(
   for (const comp of merged.components) {
     componentToContainer.set(comp.id, comp.containerId);
   }
-  const deterministicCrossAppComponentRels = fullDeterministic.relationships.filter((r) => {
-    const srcContainer = componentToContainer.get(r.sourceId) ?? (containerIds.has(r.sourceId) ? r.sourceId : undefined);
-    const tgtContainer = componentToContainer.get(r.targetId) ?? (containerIds.has(r.targetId) ? r.targetId : undefined);
-    // Both endpoints must be components (not containers, not external systems)
-    if (!r.sourceId || !r.targetId) return false;
-    if (containerIds.has(r.sourceId) || containerIds.has(r.targetId)) return false;
-    return srcContainer != null && tgtContainer != null && srcContainer !== tgtContainer;
-  });
+  const deterministicCrossAppComponentRels =
+    fullDeterministic.relationships.filter((r) => {
+      const srcContainer =
+        componentToContainer.get(r.sourceId) ??
+        (containerIds.has(r.sourceId) ? r.sourceId : undefined);
+      const tgtContainer =
+        componentToContainer.get(r.targetId) ??
+        (containerIds.has(r.targetId) ? r.targetId : undefined);
+      // Both endpoints must be components (not containers, not external systems)
+      if (!r.sourceId || !r.targetId) return false;
+      if (containerIds.has(r.sourceId) || containerIds.has(r.targetId))
+        return false;
+      return (
+        srcContainer != null &&
+        tgtContainer != null &&
+        srcContainer !== tgtContainer
+      );
+    });
   const crossAppComponentRels = deterministicCrossAppComponentRels.filter(
     (r) => componentIds.has(r.sourceId) && componentIds.has(r.targetId),
   );
 
   // Warn if deterministic model had cross-app component rels but LLM changed component IDs
-  if (crossAppComponentRels.length === 0 && deterministicCrossAppComponentRels.length > 0) {
+  if (
+    crossAppComponentRels.length === 0 &&
+    deterministicCrossAppComponentRels.length > 0
+  ) {
     warn(
       `WARNING: ${deterministicCrossAppComponentRels.length} cross-app component relationship(s) ` +
-      `could not be injected because LLM-generated component IDs do not match the deterministic model`,
+        `could not be injected because LLM-generated component IDs do not match the deterministic model`,
     );
   }
 
@@ -580,13 +634,15 @@ export async function buildModelParallel(
   const synthesisFrame = manageOwnUI ? createFrame("LLM Synthesis") : undefined;
   let synthesisSucceeded = false;
   const synthesisOnStatus = manageOwnUI
-    ? (status: string) => synthesisFrame!.update([
-        { text: status, spinner: true },
-        { text: `Model: ${config.llm.model}` },
-      ])
+    ? (status: string) =>
+        synthesisFrame!.update([
+          { text: status, spinner: true },
+          { text: `Model: ${config.llm.model}` },
+        ])
     : onStatus;
   const synthesisOnProgress = manageOwnUI
-    ? (event: ProgressEvent) => synthesisFrame!.log(event.line, event.final, event.kind)
+    ? (event: ProgressEvent) =>
+        synthesisFrame!.log(event.line, event.final, event.kind)
     : onProgress;
 
   synthesisOnStatus?.("Running synthesis pass...");
@@ -606,7 +662,11 @@ export async function buildModelParallel(
         ? r.targetId
         : componentToContainer.get(r.targetId);
       // Both endpoints must resolve to a container — exclude external system rels
-      return srcContainer != null && tgtContainer != null && srcContainer !== tgtContainer;
+      return (
+        srcContainer != null &&
+        tgtContainer != null &&
+        srcContainer !== tgtContainer
+      );
     });
 
     const synthesisSystem = buildSynthesisSystemPrompt();
@@ -631,7 +691,8 @@ export async function buildModelParallel(
         synthesisOnProgress,
       );
     } catch (err) {
-      if (err instanceof LLMCallError || err instanceof LLMOutputError) throw err;
+      if (err instanceof LLMCallError || err instanceof LLMOutputError)
+        throw err;
       rethrowIfFatal(err);
       throw new LLMCallError(
         `Provider error during synthesis: ${err instanceof Error ? err.message : String(err)}`,
@@ -651,7 +712,9 @@ export async function buildModelParallel(
     ) {
       const start = synthesisYaml.indexOf("\nsystem:");
       if (start !== -1) {
-        warn(`Synthesis: Stripped ${start} characters of preamble text before YAML`);
+        warn(
+          `Synthesis: Stripped ${start} characters of preamble text before YAML`,
+        );
         synthesisYaml = synthesisYaml.slice(start + 1);
       }
     }
@@ -688,14 +751,18 @@ export async function buildModelParallel(
     // Apply all mutations atomically — collect first, then apply
     const newSystemName = synthesis.system?.name;
     const newSystemDesc = synthesis.system?.description;
-    const newActors = synthesis.actors && synthesis.actors.length > 0
-      ? synthesis.actors
-      : undefined;
-    const newExternalSystems = synthesis.externalSystems && synthesis.externalSystems.length > 0
-      ? synthesis.externalSystems
-      : undefined;
+    const newActors =
+      synthesis.actors && synthesis.actors.length > 0
+        ? synthesis.actors
+        : undefined;
+    const newExternalSystems =
+      synthesis.externalSystems && synthesis.externalSystems.length > 0
+        ? synthesis.externalSystems
+        : undefined;
 
-    let relUpdates: Map<string, { label: string; technology?: string }> | undefined;
+    let relUpdates:
+      | Map<string, { label: string; technology?: string }>
+      | undefined;
     if (synthesis.relationships) {
       relUpdates = new Map();
       for (const rel of synthesis.relationships) {
@@ -742,8 +809,8 @@ export async function buildModelParallel(
       synthesisFrame?.stop([{ text: `Synthesis failed: ${msg}` }]);
       warn(
         `Synthesis failed (${msg}): rolling back system name/description to config defaults, ` +
-        `actors and external systems to pre-synthesis state, ` +
-        `and relationship labels to pre-synthesis values`,
+          `actors and external systems to pre-synthesis state, ` +
+          `and relationship labels to pre-synthesis values`,
       );
       merged.system.name = config.system.name;
       merged.system.description = config.system.description;
@@ -763,7 +830,8 @@ export async function buildModelParallel(
   // Fallback: if system name/description are still empty (synthesis succeeded
   // but omitted the system fields, or synthesis rolled back), use config defaults.
   if (!merged.system.name) merged.system.name = config.system.name;
-  if (!merged.system.description) merged.system.description = config.system.description;
+  if (!merged.system.description)
+    merged.system.description = config.system.description;
 
   return merged;
 }

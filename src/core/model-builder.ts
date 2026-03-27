@@ -11,14 +11,24 @@ import type {
 import type { Config } from "../config/schema.js";
 import { slugify } from "./slugify.js";
 import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
-import { detectRole, detectExternalSystems, inferRelationshipLabel, inferExternalRelationshipLabel, inferComponentTech, type Role } from "./patterns.js";
+import {
+  detectRole,
+  detectExternalSystems,
+  inferRelationshipLabel,
+  inferExternalRelationshipLabel,
+  inferComponentTech,
+  type Role,
+} from "./patterns.js";
 
 export interface BuildModelOptions {
   readonly config: Config;
   readonly rawStructure: RawStructure;
 }
 
-export function buildModel({ config, rawStructure }: BuildModelOptions): ArchitectureModel {
+export function buildModel({
+  config,
+  rawStructure,
+}: BuildModelOptions): ArchitectureModel {
   const apps = rawStructure.applications;
   const granularity = config.abstraction.granularity;
   const excludePatterns = config.abstraction.excludePatterns;
@@ -36,7 +46,8 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
         (app) =>
           app.modules.length === 0 &&
           apps.some(
-            (other) => other.path !== app.path && isChildPath(app.path, other.path),
+            (other) =>
+              other.path !== app.path && isChildPath(app.path, other.path),
           ),
       )
       .map((a) => a.id),
@@ -86,8 +97,14 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
         id: group.representative.id,
         containerId: app.id,
         name: group.displayName,
-        description: roleDescription(group.displayName, group.representative.metadata["annotations"] ?? ""),
-        technology: inferComponentTechnology(group.representative, app.language),
+        description: roleDescription(
+          group.displayName,
+          group.representative.metadata["annotations"] ?? "",
+        ),
+        technology: inferComponentTechnology(
+          group.representative,
+          app.language,
+        ),
         moduleIds: group.moduleIds,
       }));
     }
@@ -112,7 +129,10 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
         id: mod.id,
         containerId: app.id,
         name: displayName,
-        description: roleDescription(displayName, String(mod.metadata["annotations"] ?? "")),
+        description: roleDescription(
+          displayName,
+          String(mod.metadata["annotations"] ?? ""),
+        ),
         technology: inferComponentTechnology(mod, app.language),
         moduleIds: [mod.id],
       };
@@ -122,10 +142,18 @@ export function buildModel({ config, rawStructure }: BuildModelOptions): Archite
   // External systems: merge config-declared with auto-detected from deps
   const configExternalSystems = buildExternalSystems(config.externalSystems);
   const detectedExternalSystems = detectExternalSystemsFromApps(apps);
-  const externalSystems = mergeExternalSystems(configExternalSystems, detectedExternalSystems);
+  const externalSystems = mergeExternalSystems(
+    configExternalSystems,
+    detectedExternalSystems,
+  );
 
   // Relationships
-  const relationships = buildRelationships(apps, components, externalSystems, config.externalSystems);
+  const relationships = buildRelationships(
+    apps,
+    components,
+    externalSystems,
+    config.externalSystems,
+  );
 
   return {
     version: 1,
@@ -152,8 +180,7 @@ function filterModules(
 
   // "balanced" — filter by excludePatterns only; grouping handled by groupModulesBalanced
   return modules.filter(
-    (m) =>
-      !excludePatterns.some((pat) => m.name.toLowerCase().includes(pat)),
+    (m) => !excludePatterns.some((pat) => m.name.toLowerCase().includes(pat)),
   );
 }
 
@@ -327,7 +354,8 @@ function inferActors(apps: ScannedApplication[]): ArchitectureModel["actors"] {
     actors.push({
       id: "upstream-system",
       name: "Upstream System",
-      description: "External system that produces messages consumed by the system",
+      description:
+        "External system that produces messages consumed by the system",
     });
   }
   return actors;
@@ -340,7 +368,9 @@ function inferActors(apps: ScannedApplication[]): ArchitectureModel["actors"] {
 function detectExternalSystemsFromApps(
   apps: ScannedApplication[],
 ): ArchitectureModel["externalSystems"] {
-  const allDepNames = apps.flatMap((app) => app.externalDependencies.map((d) => d.name));
+  const allDepNames = apps.flatMap((app) =>
+    app.externalDependencies.map((d) => d.name),
+  );
   const detected = detectExternalSystems(allDepNames);
   return detected.map((d) => ({
     id: slugify(d.technology),
@@ -509,7 +539,6 @@ function buildRelationships(
         }
       }
     }
-
   }
 
   // Config-driven external system relationships (from usedBy)

@@ -8,7 +8,8 @@ const originalWrite = process.stderr.write;
 function captureStderr() {
   stderrOutput = "";
   process.stderr.write = ((chunk: string | Uint8Array) => {
-    stderrOutput += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
+    stderrOutput +=
+      typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
     return true;
   }) as typeof process.stderr.write;
 }
@@ -40,7 +41,8 @@ describe("ParallelProgress", () => {
 
   it("prints app state transitions in non-TTY mode", async () => {
     // Dynamic import after stubbing process
-    const { createParallelProgress } = await import("../../src/cli/parallel-progress.js");
+    const { createParallelProgress } =
+      await import("../../src/cli/parallel-progress.js");
     captureStderr();
 
     const progress = createParallelProgress("sonnet");
@@ -56,7 +58,8 @@ describe("ParallelProgress", () => {
   });
 
   it("tracks per-app state correctly", async () => {
-    const { createParallelProgress } = await import("../../src/cli/parallel-progress.js");
+    const { createParallelProgress } =
+      await import("../../src/cli/parallel-progress.js");
     captureStderr();
 
     const progress = createParallelProgress("sonnet");
