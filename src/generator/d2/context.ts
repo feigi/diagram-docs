@@ -39,8 +39,10 @@ export function generateContextDiagram(model: ArchitectureModel): string {
 
   w.blank();
 
-  // External systems
-  for (const ext of sortById(model.externalSystems)) {
+  // External systems (libraries are internal — excluded from context diagram)
+  for (const ext of sortById(
+    model.externalSystems.filter((e) => !e.tags?.includes("library")),
+  )) {
     const id = toD2Id(ext.id);
     const tech = ext.technology ? `\\n[${ext.technology}]` : "";
     w.shape(
@@ -52,14 +54,21 @@ export function generateContextDiagram(model: ArchitectureModel): string {
     );
   }
 
-  if (model.externalSystems.length > 0) w.blank();
+  if (
+    model.externalSystems.filter((e) => !e.tags?.includes("library")).length > 0
+  )
+    w.blank();
 
   // Relationships (only context-level: between actors, system, and external systems)
   // Include actors, external systems, containers, and components — the latter two
   // are all mapped to "system" so that any relationship reaching an external system
   // (even from a deeply nested component) surfaces at the context level.
   const actorIds = new Set(model.actors.map((a) => a.id));
-  const externalIds = new Set(model.externalSystems.map((e) => e.id));
+  const externalIds = new Set(
+    model.externalSystems
+      .filter((e) => !e.tags?.includes("library"))
+      .map((e) => e.id),
+  );
   const containerIds = new Set(model.containers.map((c) => c.id));
   const componentIds = new Set((model.components ?? []).map((c) => c.id));
   const internalIds = new Set([...containerIds, ...componentIds]);
