@@ -132,7 +132,7 @@ export async function runScan({
   );
   if (spinnerTimer) {
     clearInterval(spinnerTimer);
-    process.stderr.write("\r✔ Checksum computed\n");
+    process.stderr.write("\r\x1b[K✔ Checksum computed\n");
   }
 
   if (!force && manifest.lastScan?.checksum === checksum) {
