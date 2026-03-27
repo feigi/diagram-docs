@@ -87,15 +87,14 @@ export interface GradleDependencies {
 export function parseGradleDependencies(
   buildFilePath: string,
 ): GradleDependencies {
-  if (!fs.existsSync(buildFilePath)) {
-    return { group: null, projectDeps: [], mavenDeps: [] };
-  }
-
   let content: string;
   try {
     content = fs.readFileSync(buildFilePath, "utf-8");
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      process.stderr.write(
+        `Warning: build file not found during Gradle scan, skipping: ${buildFilePath}\n`,
+      );
       return { group: null, projectDeps: [], mavenDeps: [] };
     }
     throw err;
