@@ -382,7 +382,7 @@ function renderD2Files(d2Files: string[], config: Config): void {
           d2Path,
           outPath,
         ],
-        { stdio: "pipe", timeout: 30_000 },
+        { stdio: "pipe", timeout: config.output.renderTimeout * 1_000 },
       );
       rendered++;
       console.error(`Rendered: ${relPath}`);
