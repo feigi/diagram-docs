@@ -84,17 +84,16 @@ export function parseCopilotHelpConfigOutput(output: string): string[] {
   return models;
 }
 
+/**
+ * Known Claude model identifiers.
+ * Claude Code CLI has no `model list` command, so we maintain a static list.
+ * The `--model` flag accepts any valid model ID — users can also enter one
+ * manually if their desired model isn't listed here.
+ */
+const CLAUDE_MODELS = ["sonnet", "opus", "haiku"];
+
 function queryClaudeModels(): string[] {
-  try {
-    const output = execFileSync("claude", ["model", "list"], {
-      stdio: ["pipe", "pipe", "pipe"],
-      timeout: 15_000,
-      encoding: "utf-8",
-    });
-    return parseClaudeModelListOutput(output);
-  } catch {
-    return [];
-  }
+  return CLAUDE_MODELS;
 }
 
 function queryCopilotModels(): string[] {
