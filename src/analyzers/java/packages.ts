@@ -53,9 +53,10 @@ export async function extractPackages(
     try {
       content = fs.readFileSync(fullPath, "utf-8");
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "EACCES") {
         process.stderr.write(
-          `Warning: source file not found during package scan, skipping: ${fullPath}\n`,
+          `Warning: source file not readable during package scan, skipping: ${fullPath}\n`,
         );
         continue;
       }
@@ -82,9 +83,10 @@ export function detectClassAnnotations(filePath: string): string[] {
   try {
     content = fs.readFileSync(filePath, "utf-8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EACCES") {
       process.stderr.write(
-        `Warning: source file not found during annotation scan, skipping: ${filePath}\n`,
+        `Warning: source file not readable during annotation scan, skipping: ${filePath}\n`,
       );
       return [];
     }

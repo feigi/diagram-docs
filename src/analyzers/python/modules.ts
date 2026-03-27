@@ -57,9 +57,10 @@ export async function extractPythonModules(
     try {
       content = fs.readFileSync(fullPath, "utf-8");
     } catch (err) {
-      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === "ENOENT" || code === "EACCES") {
         process.stderr.write(
-          `Warning: source file not found during module scan, skipping: ${fullPath}\n`,
+          `Warning: source file not readable during module scan, skipping: ${fullPath}\n`,
         );
         continue;
       }
@@ -91,9 +92,10 @@ export function detectPythonFramework(filePath: string): string | null {
   try {
     content = fs.readFileSync(filePath, "utf-8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EACCES") {
       process.stderr.write(
-        `Warning: source file not found during framework detection, skipping: ${filePath}\n`,
+        `Warning: source file not readable during framework detection, skipping: ${filePath}\n`,
       );
       return null;
     }

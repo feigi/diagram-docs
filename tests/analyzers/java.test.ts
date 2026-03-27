@@ -131,4 +131,14 @@ describe("Java Imports Parser", () => {
     const pkg = parseJavaPackage(controllerPath);
     expect(pkg).toBe("com.example.user");
   });
+
+  it("returns [] for a non-existent file", () => {
+    const result = parseJavaImports("/nonexistent/path/Foo.java");
+    expect(result).toEqual([]);
+  });
+
+  it("returns null for a non-existent file in parseJavaPackage", () => {
+    const result = parseJavaPackage("/nonexistent/path/Foo.java");
+    expect(result).toBeNull();
+  });
 });

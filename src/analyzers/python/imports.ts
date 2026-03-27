@@ -13,9 +13,10 @@ export function parsePythonImports(filePath: string): PythonImportInfo[] {
   try {
     content = fs.readFileSync(filePath, "utf-8");
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "EACCES") {
       process.stderr.write(
-        `Warning: source file not found during import scan, skipping: ${filePath}\n`,
+        `Warning: source file not readable during import scan, skipping: ${filePath}\n`,
       );
       return [];
     }

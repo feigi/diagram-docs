@@ -7,5 +7,5 @@ npm run format
 npm run lint -- --fix
 
 if [ -n "$STAGED_FILES" ]; then
-  while IFS= read -r f; do git add -- "$f"; done <<< "$STAGED_FILES"
+  printf '%s\n' "$STAGED_FILES" | while IFS= read -r f; do git add -- "$f"; done
 fi
