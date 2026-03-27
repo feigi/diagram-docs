@@ -135,6 +135,18 @@ describe("collectRemovePaths — with --all", () => {
     const result = await collectRemovePaths(tmpDir, configPath, config, true);
     expect(result).toContain(expectedArchDir);
   });
+
+  it("fallback discovers submodule dirs with only model fragment (no component diagram)", async () => {
+    const configPath = touch("diagram-docs.yaml");
+    // Submodule dir has only a model fragment — component diagrams disabled
+    mkdir("apps/api/docs/architecture");
+    touch("apps/api/docs/architecture/architecture-model.yaml");
+    const expectedArchDir = path.join(tmpDir, "apps/api/docs/architecture");
+
+    const config = makeConfig();
+    const result = await collectRemovePaths(tmpDir, configPath, config, true);
+    expect(result).toContain(expectedArchDir);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -89,15 +89,30 @@ async function discoverSubmoduleDirs(
     }
   }
 
-  // Filesystem walk fallback: find any architecture/_generated/c3-component.d2
-  const matches = await glob("**/architecture/_generated/c3-component.d2", {
+  // Filesystem walk fallback: find submodule architecture dirs by looking for
+  // well-known diagram-docs markers. We search for both the generated component
+  // diagram AND the model fragment since the latter is always written even when
+  // component-level diagrams are disabled.
+  const ignoreOpts = {
     cwd: configDir,
     ignore: ["**/node_modules/**", "**/.git/**"],
     absolute: true,
-  });
+  };
 
-  // Return the parent architecture/ dirs (strip /_generated/c3-component.d2)
-  return [...new Set(matches.map((m) => path.dirname(path.dirname(m))))];
+  const [componentMatches, fragmentMatches] = await Promise.all([
+    glob("**/architecture/_generated/c3-component.d2", ignoreOpts),
+    glob("**/architecture/architecture-model.yaml", ignoreOpts),
+  ]);
+
+  const archDirs = new Set<string>();
+  for (const m of componentMatches) {
+    archDirs.add(path.dirname(path.dirname(m)));
+  }
+  for (const m of fragmentMatches) {
+    archDirs.add(path.dirname(m));
+  }
+
+  return [...archDirs];
 }
 
 // ---------------------------------------------------------------------------
