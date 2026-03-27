@@ -102,7 +102,18 @@ export async function extractTypeScriptModules(
 
     // Extract exports
     const fullPath = path.join(sourceRoot, file);
-    const content = fs.readFileSync(fullPath, "utf-8");
+    let content: string;
+    try {
+      content = fs.readFileSync(fullPath, "utf-8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        process.stderr.write(
+          `Warning: source file not found during export scan, skipping: ${fullPath}\n`,
+        );
+        continue;
+      }
+      throw err;
+    }
 
     for (const match of content.matchAll(NAMED_EXPORT)) {
       const name = match[1];
