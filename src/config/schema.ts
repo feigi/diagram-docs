@@ -8,6 +8,8 @@ export const configSchema = z.object({
     })
     .default({}),
 
+  type: z.enum(["container", "library"]).optional(),
+
   scan: z
     .object({
       include: z.array(z.string()).default(["**"]),

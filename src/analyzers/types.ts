@@ -2,6 +2,16 @@ import type { Config } from "../config/schema.js";
 
 /** Raw scan output types */
 
+export type ProjectType = "container" | "library";
+
+export interface DiscoveredProject {
+  path: string;
+  buildFile: string;
+  language: string;
+  analyzerId: string;
+  type: ProjectType;
+}
+
 export interface RawStructure {
   version: 1;
   scannedAt: string;
@@ -61,6 +71,7 @@ export interface ArchitectureModel {
     name: string;
     description: string;
     technology?: string;
+    tags?: string[];
   }>;
   containers: Array<{
     id: string;
