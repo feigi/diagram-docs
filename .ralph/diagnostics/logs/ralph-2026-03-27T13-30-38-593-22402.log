@@ -1,0 +1,5 @@
+2026-03-27T12:30:38.593976Z  WARN ralph::preflight: Config file "ralph.yml" not found, using defaults
+2026-03-27T12:30:38.594101Z  INFO ralph: Creating scratchpad directory: /Users/chris/dev/diagram-docs/.ralph/agent
+2026-03-27T12:30:38.594158Z  INFO ralph: Spawning subprocess for TUI mode child_args=["-c", "ralph.yml", "run", "--rpc", "-p", "using pr review skill, perform pr review on main, fix all issues, commit, repeat"]
+2026-03-27T12:30:38.594220Z  INFO ralph: TUI subprocess stderr redirected to log file log_file=/Users/chris/dev/diagram-docs/.ralph/diagnostics/logs/ralph-2026-03-27T13-30-38-594-22402.log
+2026-03-27T12:30:38.594380Z  INFO ralph: TUI running in subprocess RPC mode
