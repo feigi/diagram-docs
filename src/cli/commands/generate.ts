@@ -23,6 +23,7 @@ import {
   LLMOutputError,
 } from "../../core/llm-model-builder.js";
 import { createFrame } from "../frame.js";
+import { formatElapsed } from "../terminal-utils.js";
 import { promptLLMSetup } from "../interactive-setup.js";
 
 export const generateCommand = new Command("generate")
@@ -32,6 +33,7 @@ export const generateCommand = new Command("generate")
   .option("--submodules", "Generate per-folder docs for each application")
   .option("--deterministic", "Use deterministic model builder (skip LLM)")
   .action(async (options) => {
+    const startTime = Date.now();
     let { config, configDir, configCreated } = loadConfig(options.config);
 
     // Interactive LLM setup when config was just created and not deterministic.
@@ -173,6 +175,7 @@ export const generateCommand = new Command("generate")
     }
 
     renderD2Files(d2Files, config);
+    console.error(`Done in ${formatElapsed(Date.now() - startTime)}.`);
   });
 
 /**
