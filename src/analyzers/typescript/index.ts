@@ -109,7 +109,13 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
 
       for (const file of mod.files) {
         const fullPath = path.join(sourceRoot, file);
-        const tsImports = parseTypeScriptImports(fullPath);
+        let tsImports;
+        try {
+          tsImports = parseTypeScriptImports(fullPath);
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code === "ENOENT") continue;
+          throw err;
+        }
 
         for (const imp of tsImports) {
           const isExternal = !imp.isRelative;
