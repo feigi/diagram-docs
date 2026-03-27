@@ -53,7 +53,18 @@ export async function extractPythonModules(
     mod.files.push(file);
 
     const fullPath = path.join(appPath, file);
-    const content = fs.readFileSync(fullPath, "utf-8");
+    let content: string;
+    try {
+      content = fs.readFileSync(fullPath, "utf-8");
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+        process.stderr.write(
+          `Warning: source file not found during module scan, skipping: ${fullPath}\n`,
+        );
+        continue;
+      }
+      throw err;
+    }
 
     // Extract __all__ exports
     const allMatch = content.match(/__all__\s*=\s*\[([^\]]+)\]/);
@@ -76,7 +87,18 @@ export async function extractPythonModules(
 }
 
 export function detectPythonFramework(filePath: string): string | null {
-  const content = fs.readFileSync(filePath, "utf-8");
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      process.stderr.write(
+        `Warning: source file not found during framework detection, skipping: ${filePath}\n`,
+      );
+      return null;
+    }
+    throw err;
+  }
   for (const [framework, markers] of Object.entries(FRAMEWORK_MARKERS)) {
     if (markers.some((m) => content.includes(m))) {
       return framework;

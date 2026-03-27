@@ -13,7 +13,18 @@ export function parseSettingsGradle(appPath: string): GradleSettings | null {
   ]);
   if (!settingsFile) return null;
 
-  const content = fs.readFileSync(settingsFile, "utf-8");
+  let content: string;
+  try {
+    content = fs.readFileSync(settingsFile, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      process.stderr.write(
+        `Warning: settings file not found during Gradle scan, skipping: ${settingsFile}\n`,
+      );
+      return null;
+    }
+    throw err;
+  }
 
   // Extract rootProject.name
   const nameMatch = content.match(/rootProject\.name\s*=\s*['"]([^'"]+)['"]/);
@@ -80,7 +91,15 @@ export function parseGradleDependencies(
     return { group: null, projectDeps: [], mavenDeps: [] };
   }
 
-  const content = fs.readFileSync(buildFilePath, "utf-8");
+  let content: string;
+  try {
+    content = fs.readFileSync(buildFilePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      return { group: null, projectDeps: [], mavenDeps: [] };
+    }
+    throw err;
+  }
 
   // Extract group: handles both `group = '...'` and `group '...'` (Groovy shorthand)
   const groupMatch = content.match(/^group\b\s*=?\s*['"]([^'"]+)['"]/m);

@@ -10,7 +10,18 @@ export interface JavaImportInfo {
 }
 
 export function parseJavaImports(filePath: string): JavaImportInfo[] {
-  const content = fs.readFileSync(filePath, "utf-8");
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      process.stderr.write(
+        `Warning: source file not found during import scan, skipping: ${filePath}\n`,
+      );
+      return [];
+    }
+    throw err;
+  }
   const imports: JavaImportInfo[] = [];
 
   for (const match of content.matchAll(IMPORT_PATTERN)) {
@@ -24,7 +35,18 @@ export function parseJavaImports(filePath: string): JavaImportInfo[] {
 }
 
 export function parseJavaPackage(filePath: string): string | null {
-  const content = fs.readFileSync(filePath, "utf-8");
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") {
+      process.stderr.write(
+        `Warning: source file not found during package scan, skipping: ${filePath}\n`,
+      );
+      return null;
+    }
+    throw err;
+  }
   const match = content.match(PACKAGE_PATTERN);
   return match ? match[1] : null;
 }

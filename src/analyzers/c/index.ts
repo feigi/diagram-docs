@@ -42,7 +42,12 @@ export const cAnalyzer: LanguageAnalyzer = {
 
       for (const file of allFiles) {
         const fullPath = path.join(appPath, file);
-        if (!fs.existsSync(fullPath)) continue;
+        if (!fs.existsSync(fullPath)) {
+          process.stderr.write(
+            `Warning: source file not found during C scan, skipping: ${fullPath}\n`,
+          );
+          continue;
+        }
 
         const includes = parseCIncludes(fullPath);
         for (const inc of includes) {
