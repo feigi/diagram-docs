@@ -8,6 +8,7 @@
   },
   "scripts": {
     "prepare": "test -z \"$CI\" && husky || true",
+    "prepack": "tsc",
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
