@@ -149,7 +149,7 @@ output:
 llm:
   provider: auto                # auto | claude-code | copilot
   model: sonnet
-  concurrency: 4                # Max parallel LLM calls
+  concurrency: 10               # Max parallel LLM calls
 
 submodules:
   enabled: true

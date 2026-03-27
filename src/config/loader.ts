@@ -44,6 +44,9 @@ export function buildDefaultConfig(dir: string): { config: Config; configPath: s
       theme: 0,
       layout: "elk",
     },
+    llm: {
+      concurrency: 10,
+    },
   };
 
   const configPath = path.join(dir, "diagram-docs.yaml");
