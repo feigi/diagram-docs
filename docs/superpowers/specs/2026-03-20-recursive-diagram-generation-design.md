@@ -21,15 +21,15 @@ The core intelligence is deciding what C4 role each folder plays. This uses a sc
 
 #### Structural signals collected per folder
 
-| Signal | How detected | What it suggests |
-|--------|-------------|-----------------|
-| Build file present | Glob for pom.xml, package.json, pyproject.toml, etc. | Deployable unit or library (Container) |
-| Multiple children with build files | Count children with their own build files | Aggregator level (System) |
-| Infrastructure files | Dockerfile, docker-compose.yml, k8s/, terraform/ | Deployment boundary (System or Container) |
-| Source files present | *.java, *.py, *.c, *.ts | Has code (Component or Code) |
-| Package/module structure | Subdirs with `__init__.py`, Java package dirs, header dirs | Component with internal structure |
-| File count / code volume | Count source files recursively | Distinguishes trivial from meaningful |
-| Depth relative to root | How deep in the tree | Tiebreaker — deeper = less likely to be System |
+| Signal                             | How detected                                               | What it suggests                               |
+| ---------------------------------- | ---------------------------------------------------------- | ---------------------------------------------- |
+| Build file present                 | Glob for pom.xml, package.json, pyproject.toml, etc.       | Deployable unit or library (Container)         |
+| Multiple children with build files | Count children with their own build files                  | Aggregator level (System)                      |
+| Infrastructure files               | Dockerfile, docker-compose.yml, k8s/, terraform/           | Deployment boundary (System or Container)      |
+| Source files present               | _.java, _.py, _.c, _.ts                                    | Has code (Component or Code)                   |
+| Package/module structure           | Subdirs with `__init__.py`, Java package dirs, header dirs | Component with internal structure              |
+| File count / code volume           | Count source files recursively                             | Distinguishes trivial from meaningful          |
+| Depth relative to root             | How deep in the tree                                       | Tiebreaker — deeper = less likely to be System |
 
 #### Heuristic classification (fallback when agent is disabled)
 
@@ -52,12 +52,12 @@ function inferRole(folder, signals):
 
 #### What each role generates
 
-| Role | Diagrams produced | Links to |
-|------|------------------|----------|
-| `system` | Context + Container | Children classified as `container` or `code-only` |
-| `container` | Component | Children classified as `component` |
-| `component` | Code (class/function diagram) | Nothing (leaf) |
-| `code-only` | Code only | Nothing (leaf) |
+| Role        | Diagrams produced             | Links to                                          |
+| ----------- | ----------------------------- | ------------------------------------------------- |
+| `system`    | Context + Container           | Children classified as `container` or `code-only` |
+| `container` | Component                     | Children classified as `component`                |
+| `component` | Code (class/function diagram) | Nothing (leaf)                                    |
+| `code-only` | Code only                     | Nothing (leaf)                                    |
 
 ### Recursive Descent — `processFolder`
 
@@ -111,6 +111,7 @@ function processFolder(folderPath, parentContext?):
 **relevantSubdirs**: Filters out noise (node_modules, build output, .git, etc.) using existing `scan.exclude` patterns.
 
 **Scoping scan per role**:
+
 - `system`: Don't analyze source code — just identify children as containers
 - `container`: Analyze source code to extract modules/packages (existing behavior)
 - `component`: Analyze source code within this module to extract classes/functions
@@ -141,11 +142,11 @@ New functionality. Existing analyzers extract modules and imports but don't look
 
 #### What Code diagrams show per language
 
-| Language | Extracted elements | Relationships |
-|----------|-------------------|---------------|
-| Java | Classes, interfaces, enums, records | Inheritance, implementation, field types, method params |
-| Python | Classes, top-level functions, module-level constants | Inheritance, imports between symbols, decorators |
-| C | Structs, typedefs, function declarations, function definitions | Struct field types, function param/return types, call graph (best-effort) |
+| Language | Extracted elements                                             | Relationships                                                             |
+| -------- | -------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| Java     | Classes, interfaces, enums, records                            | Inheritance, implementation, field types, method params                   |
+| Python   | Classes, top-level functions, module-level constants           | Inheritance, imports between symbols, decorators                          |
+| C        | Structs, typedefs, function declarations, function definitions | Struct field types, function param/return types, call graph (best-effort) |
 
 #### Analyzer interface extension
 
@@ -184,6 +185,7 @@ The `kind` field captures language-specific semantics: Java uses `extends`/`impl
 #### Scope control
 
 Not every module warrants a Code diagram:
+
 - Skip if module has fewer than `codeLevel.minSymbols` symbols (default: 2)
 - Skip if module matches `abstraction.excludePatterns`
 - Agent assist can flag modules as too trivial to diagram
@@ -278,6 +280,7 @@ overrides:
 ## Changes to Existing Code
 
 ### Kept as-is
+
 - Language analyzers (`src/analyzers/`) — existing `analyze()` methods
 - D2 writer (`src/generator/d2/writer.ts`)
 - D2 styles (`src/generator/d2/styles.ts`) — add `code` class only
@@ -285,6 +288,7 @@ overrides:
 - Humanize, slugify, checksum utilities
 
 ### Modified
+
 - **Config schema** (`src/config/schema.ts`): Add `agent`, `overrides`, `codeLevel` sections. Remove `levels` (context/container/component toggles) and `submodules` — these are replaced by the role-based recursive descent. The `overrides` map subsumes `submodules.overrides`, and diagram levels are determined per-folder by classification rather than global toggles.
 - **CLI commands** (`src/cli/commands/`): Existing scan/model/generate still work individually; new `diagram-docs run` command orchestrates recursive descent
 - **Discovery** (`src/core/discovery.ts`): Refactored into signal collection — same glob logic, returns signals instead of just app list
@@ -292,6 +296,7 @@ overrides:
 - **Container/Component generators**: Add breadcrumb links to parent, drill-down links from `childPreviews`
 
 ### New code
+
 - `src/core/classifier.ts` — signal collection + heuristic classification
 - `src/core/recursive-runner.ts` — the `processFolder` recursive descent
 - `src/core/agent-assist.ts` — LLM integration for classification + naming
@@ -300,6 +305,7 @@ overrides:
 - Agent result cache management
 
 ### Removed
+
 - `src/generator/d2/submodule-scaffold.ts` — subsumed by recursive descent; each folder's diagrams are generated naturally during recursion
 
 ## Testing Strategy

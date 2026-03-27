@@ -206,15 +206,31 @@ describe("buildModel", () => {
     // Simulate a Java app with 25+ modules sharing a deep common prefix
     const prefix = "com.example.app";
     const packages = [
-      "api", "api.controller", "api.mapper", "api.model", "api.filter",
-      "api.config", "api.validator", "api.serializer",
-      "domain", "domain.model", "domain.service", "domain.exceptions",
-      "domain.events", "domain.context",
-      "infrastructure", "infrastructure.db", "infrastructure.db.mapper",
-      "infrastructure.db.model", "infrastructure.cache",
-      "infrastructure.search", "infrastructure.search.mapper",
+      "api",
+      "api.controller",
+      "api.mapper",
+      "api.model",
+      "api.filter",
+      "api.config",
+      "api.validator",
+      "api.serializer",
+      "domain",
+      "domain.model",
+      "domain.service",
+      "domain.exceptions",
+      "domain.events",
+      "domain.context",
+      "infrastructure",
+      "infrastructure.db",
+      "infrastructure.db.mapper",
+      "infrastructure.db.model",
+      "infrastructure.cache",
+      "infrastructure.search",
+      "infrastructure.search.mapper",
       "infrastructure.search.model",
-      "config", "metrics", "utils",
+      "config",
+      "metrics",
+      "utils",
     ];
 
     const modules = packages.map((pkg) => ({
@@ -337,13 +353,19 @@ describe("buildModel", () => {
 
     expect(model.externalSystems).toHaveLength(2);
     expect(model.externalSystems.some((e) => e.name === "Redis")).toBe(true);
-    expect(model.externalSystems.some((e) => e.name === "OpenSearch")).toBe(true);
+    expect(model.externalSystems.some((e) => e.name === "OpenSearch")).toBe(
+      true,
+    );
   });
 
   it("creates relationships from config usedBy", () => {
     const config = makeConfig({
       externalSystems: [
-        { name: "PostgreSQL", technology: "Database", usedBy: ["app-a", "app-b"] },
+        {
+          name: "PostgreSQL",
+          technology: "Database",
+          usedBy: ["app-a", "app-b"],
+        },
       ],
     });
     const raw = makeRawStructure([
@@ -373,7 +395,9 @@ describe("buildModel", () => {
     expect(model.externalSystems).toHaveLength(1);
     expect(model.externalSystems[0].name).toBe("PostgreSQL");
     // Both apps should have relationships to PostgreSQL
-    const pgRels = model.relationships.filter((r) => r.targetId === "postgresql");
+    const pgRels = model.relationships.filter(
+      (r) => r.targetId === "postgresql",
+    );
     expect(pgRels).toHaveLength(2);
     expect(pgRels.map((r) => r.sourceId).sort()).toEqual(["app-a", "app-b"]);
   });
@@ -482,8 +506,7 @@ describe("buildModel", () => {
 
     expect(
       model.relationships.some(
-        (r) =>
-          r.sourceId === "app-controller" && r.targetId === "app-repo",
+        (r) => r.sourceId === "app-controller" && r.targetId === "app-repo",
       ),
     ).toBe(true);
   });
@@ -577,7 +600,9 @@ describe("buildModel", () => {
 
   it("is deterministic across runs", () => {
     const config = makeConfig({
-      externalSystems: [{ name: "Redis", technology: "Cache", usedBy: ["app-a"] }],
+      externalSystems: [
+        { name: "Redis", technology: "Cache", usedBy: ["app-a"] },
+      ],
     });
     const raw = makeRawStructure([
       {
@@ -659,7 +684,10 @@ describe("buildModel", () => {
     const model = buildModel({ config, rawStructure: raw });
 
     expect(model.actors).toContainEqual(
-      expect.objectContaining({ id: "upstream-system", name: "Upstream System" }),
+      expect.objectContaining({
+        id: "upstream-system",
+        name: "Upstream System",
+      }),
     );
   });
 
@@ -736,8 +764,12 @@ describe("buildModel", () => {
     ]);
     const model = buildModel({ config, rawStructure: raw });
 
-    expect(model.externalSystems.some((e) => e.name === "PostgreSQL")).toBe(true);
-    expect(model.externalSystems.some((e) => e.name === "Apache Kafka")).toBe(true);
+    expect(model.externalSystems.some((e) => e.name === "PostgreSQL")).toBe(
+      true,
+    );
+    expect(model.externalSystems.some((e) => e.name === "Apache Kafka")).toBe(
+      true,
+    );
   });
 
   it("merges config-declared and detected external systems without duplicates", () => {
@@ -764,7 +796,9 @@ describe("buildModel", () => {
     const model = buildModel({ config, rawStructure: raw });
 
     // Redis from config + PostgreSQL from deps, no duplicate Redis
-    const redisEntries = model.externalSystems.filter((e) => e.name === "Redis");
+    const redisEntries = model.externalSystems.filter(
+      (e) => e.name === "Redis",
+    );
     expect(redisEntries).toHaveLength(1);
     const pgSystem = model.externalSystems.find((e) => e.name === "PostgreSQL");
     expect(pgSystem).toBeDefined();
@@ -783,9 +817,7 @@ describe("buildModel", () => {
         language: "java",
         buildFile: "pom.xml",
         modules: [],
-        externalDependencies: [
-          { name: "org.postgresql:postgresql" },
-        ],
+        externalDependencies: [{ name: "org.postgresql:postgresql" }],
         internalImports: [],
       },
     ]);
@@ -959,9 +991,13 @@ describe("buildModel", () => {
 
     const byId = (id: string) => model.components.find((c) => c.id === id)!;
     expect(byId("app-user-ctrl").description).toContain("REST API controller");
-    expect(byId("app-user-svc").description).toContain("Business logic service");
+    expect(byId("app-user-svc").description).toContain(
+      "Business logic service",
+    );
     expect(byId("app-user-repo").description).toContain("Data access layer");
-    expect(byId("app-order-listener").description).toContain("Message listener");
+    expect(byId("app-order-listener").description).toContain(
+      "Message listener",
+    );
     expect(byId("app-plain").description).toContain("module");
   });
 });

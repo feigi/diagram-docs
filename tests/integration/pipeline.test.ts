@@ -9,7 +9,10 @@ import { loadModel } from "../../src/core/model.js";
 import { generateContextDiagram } from "../../src/generator/d2/context.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateComponentDiagram } from "../../src/generator/d2/component.js";
-import type { RawStructure, ScannedApplication } from "../../src/analyzers/types.js";
+import type {
+  RawStructure,
+  ScannedApplication,
+} from "../../src/analyzers/types.js";
 
 const MONOREPO = path.resolve(__dirname, "../fixtures/monorepo");
 const CONFIG_PATH = path.join(MONOREPO, "diagram-docs.yaml");
@@ -45,13 +48,10 @@ describe("Integration: Scan → Generate pipeline", () => {
       const analyzer = getAnalyzer(app.analyzerId);
       expect(analyzer).toBeTruthy();
 
-      const result = await analyzer!.analyze(
-        path.resolve(MONOREPO, app.path),
-        {
-          exclude: config.scan.exclude,
-          abstraction: config.abstraction,
-        },
-      );
+      const result = await analyzer!.analyze(path.resolve(MONOREPO, app.path), {
+        exclude: config.scan.exclude,
+        abstraction: config.abstraction,
+      });
       // Normalize IDs the same way the scan command does
       const relativeId = slugify(app.path);
       const absolutePrefix = slugify(path.resolve(MONOREPO, app.path));
@@ -178,7 +178,8 @@ describe("Integration: Post-scan cross-app coordinate matching", () => {
       },
     ];
 
-    const { matchCrossAppCoordinates } = await import("../../src/cli/commands/scan.js");
+    const { matchCrossAppCoordinates } =
+      await import("../../src/cli/commands/scan.js");
     matchCrossAppCoordinates(apps);
 
     // The matching dep should be promoted
@@ -209,7 +210,8 @@ describe("Integration: Post-scan cross-app coordinate matching", () => {
       },
     ];
 
-    const { matchCrossAppCoordinates } = await import("../../src/cli/commands/scan.js");
+    const { matchCrossAppCoordinates } =
+      await import("../../src/cli/commands/scan.js");
     matchCrossAppCoordinates(apps);
 
     expect(apps[0].internalImports).toHaveLength(0);

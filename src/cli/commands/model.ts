@@ -4,7 +4,11 @@ import * as path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
 import { loadConfig, updateConfigLLM } from "../../config/loader.js";
 import { buildModel } from "../../core/model-builder.js";
-import { readManifest, writeManifest, createDefaultManifest } from "../../core/manifest.js";
+import {
+  readManifest,
+  writeManifest,
+  createDefaultManifest,
+} from "../../core/manifest.js";
 import {
   buildModelWithLLM,
   serializeModel,
@@ -17,23 +21,25 @@ import type { RawStructure } from "../../analyzers/types.js";
 import { promptLLMSetup } from "../interactive-setup.js";
 
 export const modelCommand = new Command("model")
-  .description(
-    "Generate architecture-model.yaml from raw scan output",
-  )
+  .description("Generate architecture-model.yaml from raw scan output")
   .option(
     "-i, --input <path>",
     "Path to raw-structure.json",
     ".diagram-docs/raw-structure.json",
   )
-  .option(
-    "-o, --output <path>",
-    "Output path",
-    "architecture-model.yaml",
-  )
+  .option("-o, --output <path>", "Output path", "architecture-model.yaml")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
-  .option("--llm", "Use LLM to generate model (requires Claude Code or Copilot CLI)")
+  .option(
+    "--llm",
+    "Use LLM to generate model (requires Claude Code or Copilot CLI)",
+  )
   .action(async (options) => {
-    let { config, configDir, configCreated } = loadConfig(options.config);
+    const {
+      config: initialConfig,
+      configDir,
+      configCreated,
+    } = loadConfig(options.config);
+    let config = initialConfig;
 
     // Interactive LLM setup when config was just created and using LLM mode
     if (configCreated && options.llm) {
@@ -87,7 +93,9 @@ export const modelCommand = new Command("model")
           yamlContent = serializeModel(model);
 
           fs.writeFileSync(outputPath, yamlContent, "utf-8");
-          console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+          console.error(
+            `Model written to ${path.relative(process.cwd(), outputPath)}`,
+          );
         } else {
           // Update mode: use Frame for the single iterative LLM call
           const frame = createFrame("LLM Agent");
@@ -108,7 +116,8 @@ export const modelCommand = new Command("model")
           });
           frame.stop([
             {
-              text: `${model.containers.length} container(s), ` +
+              text:
+                `${model.containers.length} container(s), ` +
                 `${model.components.length} component(s), ` +
                 `${model.relationships.length} relationship(s)`,
             },
@@ -116,7 +125,9 @@ export const modelCommand = new Command("model")
           yamlContent = serializeModel(model);
 
           fs.writeFileSync(outputPath, yamlContent, "utf-8");
-          console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+          console.error(
+            `Model written to ${path.relative(process.cwd(), outputPath)}`,
+          );
         }
       } catch (err) {
         if (
@@ -125,7 +136,9 @@ export const modelCommand = new Command("model")
           err instanceof LLMOutputError
         ) {
           console.error(`Error: ${err.message}`);
-          console.error("  Per-app agent logs may be available in .diagram-docs/logs/");
+          console.error(
+            "  Per-app agent logs may be available in .diagram-docs/logs/",
+          );
           process.exit(1);
         }
         throw err;
@@ -142,7 +155,9 @@ export const modelCommand = new Command("model")
 
       const outputPath = path.resolve(options.output);
       fs.writeFileSync(outputPath, yamlContent, "utf-8");
-      console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+      console.error(
+        `Model written to ${path.relative(process.cwd(), outputPath)}`,
+      );
       console.error(
         `  ${model.containers.length} container(s), ` +
           `${model.components.length} component(s), ` +

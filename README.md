@@ -50,20 +50,20 @@ Source code  ──▶  .diagram-docs/raw-structure.json  ──▶  architectur
 
 **Generate** — The architecture model is rendered as D2 diagrams at three C4 levels:
 
-| Level | File | Shows |
-|-------|------|-------|
-| Context (L1) | `c1-context.d2` | System, actors, external systems |
-| Container (L2) | `c2-container.d2` | Applications within the system |
+| Level          | File              | Shows                              |
+| -------------- | ----------------- | ---------------------------------- |
+| Context (L1)   | `c1-context.d2`   | System, actors, external systems   |
+| Container (L2) | `c2-container.d2` | Applications within the system     |
 | Component (L3) | `c3-component.d2` | Components within each application |
 
 ## Supported languages
 
-| Language | Discovered by | Extracted |
-|----------|--------------|-----------|
-| Java | `pom.xml`, `build.gradle`, `build.gradle.kts` | Packages, imports, Spring annotations, Maven/Gradle dependencies, multi-module subprojects, published coordinates |
-| Python | `pyproject.toml`, `setup.py`, `requirements.txt` | Modules, imports, framework detection (FastAPI, Flask, Django), dependencies |
-| TypeScript | `tsconfig.json`, `package.json` | Modules from tsconfig source roots, imports, framework detection (Express, NestJS, Next.js), package dependencies |
-| C | `CMakeLists.txt`, `Makefile` | Header/source structure, `#include` directives, public API from header exports |
+| Language   | Discovered by                                    | Extracted                                                                                                         |
+| ---------- | ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| Java       | `pom.xml`, `build.gradle`, `build.gradle.kts`    | Packages, imports, Spring annotations, Maven/Gradle dependencies, multi-module subprojects, published coordinates |
+| Python     | `pyproject.toml`, `setup.py`, `requirements.txt` | Modules, imports, framework detection (FastAPI, Flask, Django), dependencies                                      |
+| TypeScript | `tsconfig.json`, `package.json`                  | Modules from tsconfig source roots, imports, framework detection (Express, NestJS, Next.js), package dependencies |
+| C          | `CMakeLists.txt`, `Makefile`                     | Header/source structure, `#include` directives, public API from header exports                                    |
 
 ## Output structure
 
@@ -114,42 +114,49 @@ With submodules enabled, each application also gets its own docs directory:
 
 ```yaml
 system:
-  name: "My System"             # Inferred from directory name if not set
+  name: "My System" # Inferred from directory name if not set
   description: ""
 
 scan:
   include: ["**"]
-  exclude: ["**/*test*/**", "**/node_modules/**", "**/build/**", "**/dist/**", "**/target/**"]
+  exclude:
+    [
+      "**/*test*/**",
+      "**/node_modules/**",
+      "**/build/**",
+      "**/dist/**",
+      "**/target/**",
+    ]
 
 levels:
-  context: true                 # L1
-  container: true               # L2
-  component: true               # L3
+  context: true # L1
+  container: true # L2
+  component: true # L3
 
 abstraction:
-  granularity: balanced         # detailed | balanced | overview
-  excludePatterns:              # Cross-cutting concerns to omit from diagrams
+  granularity: balanced # detailed | balanced | overview
+  excludePatterns: # Cross-cutting concerns to omit from diagrams
     - logging
     - metrics
     - middleware
     - config
     - utils
 
-externalSystems:                # Declare known external systems
+externalSystems: # Declare known external systems
   - name: PostgreSQL
     technology: SQL
     usedBy: [user-api]
 
 output:
   dir: docs/architecture
-  format: svg                   # svg | png
-  theme: 0                      # D2 theme ID
-  layout: elk                   # D2 layout engine
+  format: svg # svg | png
+  theme: 0 # D2 theme ID
+  layout: elk # D2 layout engine
 
 llm:
-  provider: auto                # auto | claude-code | copilot
+  provider: auto # auto | claude-code | copilot
   model: sonnet
-  concurrency: 10               # Max parallel LLM calls
+  concurrency: 10 # Max parallel LLM calls
 
 submodules:
   enabled: true
@@ -162,11 +169,11 @@ submodules:
 
 ### Granularity
 
-| Level | Behavior |
-|-------|----------|
-| `detailed` | 1:1 module-to-component mapping |
+| Level      | Behavior                                                             |
+| ---------- | -------------------------------------------------------------------- |
+| `detailed` | 1:1 module-to-component mapping                                      |
 | `balanced` | Groups modules into up to 20 components using common-prefix grouping |
-| `overview` | One component per container |
+| `overview` | One component per container                                          |
 
 ### External systems
 

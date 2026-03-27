@@ -143,10 +143,11 @@ async function promptChoice(
   process.stderr.write(`\n${header}\n`);
   for (let i = 0; i < choices.length; i++) {
     const marker = i === 0 ? chalk.dim(" (recommended)") : "";
-    process.stderr.write(`  ${chalk.bold(`${i + 1})`)} ${choices[i]}${marker}\n`);
+    process.stderr.write(
+      `  ${chalk.bold(`${i + 1})`)} ${choices[i]}${marker}\n`,
+    );
   }
 
-  // eslint-disable-next-line no-constant-condition
   while (true) {
     const answer = await question(rl, `${chalk.cyan(">")} `);
     const num = parseInt(answer.trim(), 10);
@@ -183,9 +184,7 @@ export async function promptLLMSetup(): Promise<LLMSetup | null> {
 
     if (available.length === 1) {
       provider = available[0];
-      process.stderr.write(
-        `\nDetected ${chalk.bold(provider.label)}.\n`,
-      );
+      process.stderr.write(`\nDetected ${chalk.bold(provider.label)}.\n`);
     } else {
       const idx = await promptChoice(
         rl,

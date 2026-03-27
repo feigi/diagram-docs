@@ -3,10 +3,7 @@ import * as path from "node:path";
 import { cAnalyzer } from "../../src/analyzers/c/index.js";
 import { parseCIncludes } from "../../src/analyzers/c/includes.js";
 
-const FIXTURES = path.resolve(
-  __dirname,
-  "../fixtures/monorepo/libs/mathlib",
-);
+const FIXTURES = path.resolve(__dirname, "../fixtures/monorepo/libs/mathlib");
 
 const defaultConfig = {
   exclude: ["**/test/**", "**/tests/**"],
@@ -50,7 +47,11 @@ describe("C Includes Parser", () => {
     const includes = parseCIncludes(srcPath);
 
     expect(includes.length).toBe(2);
-    expect(includes.find((i) => i.path === "math_ops.h" && !i.isSystem)).toBeTruthy();
-    expect(includes.find((i) => i.path === "stdio.h" && i.isSystem)).toBeTruthy();
+    expect(
+      includes.find((i) => i.path === "math_ops.h" && !i.isSystem),
+    ).toBeTruthy();
+    expect(
+      includes.find((i) => i.path === "stdio.h" && i.isSystem),
+    ).toBeTruthy();
   });
 });

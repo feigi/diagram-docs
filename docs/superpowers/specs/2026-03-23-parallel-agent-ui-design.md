@@ -66,6 +66,7 @@ For single-app mode, nothing changes — it uses the existing `Frame` directly.
 ```
 
 **State icons and styles:**
+
 - **Active** (thinking/output): `chalk.cyan(SPINNER_FRAMES[i])` — rotating braille spinner, same frames as `frame.ts`
 - **Done**: `chalk.green("✓")`
 - **Failed**: `chalk.red("✗")`
@@ -175,7 +176,10 @@ A thin class in `src/core/agent-logger.ts`. Uses `fs.writeFile` (async) with an 
 
 ```typescript
 export class AgentLogger {
-  constructor(logPath: string, metadata: { appId: string; model: string; provider: string });
+  constructor(
+    logPath: string,
+    metadata: { appId: string; model: string; provider: string },
+  );
   logPrompt(systemPrompt: string, userMessage: string): void;
   logProgress(event: ProgressEvent): void;
   logDone(elapsed: number): Promise<void>;
@@ -237,6 +241,7 @@ if (isParallel) {
 ### `frame.ts`
 
 Extract shared terminal utilities into a new `src/cli/terminal-utils.ts` module:
+
 - `formatElapsed()` — elapsed time formatting
 - `SPINNER_FRAMES`, `SPINNER_INTERVAL` — braille spinner characters and timing
 - `stripAnsi()`, `truncate()`, `padRight()`, `getFrameWidth()` — string/layout utilities

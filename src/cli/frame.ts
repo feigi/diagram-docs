@@ -10,7 +10,6 @@ import {
   SPINNER_INTERVAL,
   getFrameWidth,
   formatElapsed,
-  stripAnsi,
   truncate,
   padRight,
 } from "./terminal-utils.js";
@@ -20,7 +19,10 @@ const FRAME_OVERHEAD = 4; // top + 2 status rows + bottom
 
 /** Strip newlines and collapse whitespace to produce a single safe line. */
 function sanitize(text: string): string {
-  return text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 export interface FrameLine {
@@ -57,7 +59,8 @@ function wordWrap(text: string, maxWidth: number): string[] {
 }
 
 function getMaxLogLines(): number {
-  const termRows = process.stderr.isTTY && process.stderr.rows ? process.stderr.rows : 24;
+  const termRows =
+    process.stderr.isTTY && process.stderr.rows ? process.stderr.rows : 24;
   // Reserve 1 extra row for the trailing \n after the frame content.
   // Without this, a full-height frame's trailing \n causes a scroll that
   // pushes the top border into scrollback, unreachable by cursor-up.
@@ -93,11 +96,16 @@ export function createFrame(title: string): Frame {
   // Pre-build static parts
   const titleStr = ` ${title} `;
   const topFill = inner - titleStr.length - 1;
-  const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
+  const top =
+    chalk.dim("┌─") +
+    chalk.bold(titleStr) +
+    chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
   const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
 
   function row(content: string): string {
-    return chalk.dim("│") + " " + padRight(content, inner - 2) + " " + chalk.dim("│");
+    return (
+      chalk.dim("│") + " " + padRight(content, inner - 2) + " " + chalk.dim("│")
+    );
   }
 
   function emptyRow(): string {
@@ -105,9 +113,17 @@ export function createFrame(title: string): Frame {
   }
 
   function emergencyDisableMouse() {
-    try { process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h"); } catch { /* best-effort during exit */ }
+    try {
+      process.stderr.write("\x1b[?1000l\x1b[?1006l\x1b[?25h");
+    } catch {
+      /* best-effort during exit */
+    }
     if (stdinTTY) {
-      try { process.stdin.setRawMode(false); } catch { /* best-effort during exit */ }
+      try {
+        process.stdin.setRawMode(false);
+      } catch {
+        /* best-effort during exit */
+      }
     }
   }
 
@@ -133,7 +149,11 @@ export function createFrame(title: string): Frame {
       process.stderr.write("\x1b[?1000h\x1b[?1006h"); // enable SGR mouse mode
     } catch {
       // stderr unavailable — restore stdin and bail out so the user isn't trapped in raw mode
-      try { process.stdin.setRawMode(wasRawMode); } catch { /* best-effort */ }
+      try {
+        process.stdin.setRawMode(wasRawMode);
+      } catch {
+        /* best-effort */
+      }
       return;
     }
     process.on("exit", emergencyDisableMouse);
@@ -152,6 +172,7 @@ export function createFrame(title: string): Frame {
         return;
       }
       // SGR mouse: \x1b[<btn;col;rowM  (64=wheel up, 65=wheel down)
+      // eslint-disable-next-line no-control-regex
       const match = str.match(/\x1b\[<(\d+);\d+;\d+[Mm]/);
       if (!match) return;
       const btn = parseInt(match[1], 10);
@@ -176,8 +197,16 @@ export function createFrame(title: string): Frame {
       stdinListener = null;
     }
     if (stdinTTY) {
-      try { process.stderr.write("\x1b[?1000l\x1b[?1006l"); } catch { /* stderr may be unavailable */ } // disable mouse mode
-      try { process.stdin.setRawMode(wasRawMode); } catch { /* stdin may be unavailable */ }
+      try {
+        process.stderr.write("\x1b[?1000l\x1b[?1006l");
+      } catch {
+        /* stderr may be unavailable */
+      } // disable mouse mode
+      try {
+        process.stdin.setRawMode(wasRawMode);
+      } catch {
+        /* stdin may be unavailable */
+      }
       process.stdin.unref();
     }
   }
@@ -185,10 +214,12 @@ export function createFrame(title: string): Frame {
   function render() {
     const elapsed = Date.now() - startTime;
     const elapsedStr = formatElapsed(elapsed);
-    const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+    const spinner = chalk.cyan(
+      SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length],
+    );
 
     const maxLogLines = getMaxLogLines();
-    const OUTPUT_INDENT = 2;   // align with "Model:..." status line
+    const OUTPUT_INDENT = 2; // align with "Model:..." status line
     const THINKING_INDENT = 6; // one tab relative to output
     const thinkingWidth = inner - 2 - THINKING_INDENT; // 2 for row padding
     const outputWidth = inner - 2 - OUTPUT_INDENT;
@@ -199,10 +230,18 @@ export function createFrame(title: string): Frame {
       if (entry.kind === "thinking") {
         const wrapped = wordWrap(entry.text, thinkingWidth);
         for (const wl of wrapped) {
-          allLogRows.push(row(chalk.dim.italic(" ".repeat(THINKING_INDENT) + wl)));
+          allLogRows.push(
+            row(chalk.dim.italic(" ".repeat(THINKING_INDENT) + wl)),
+          );
         }
       } else {
-        allLogRows.push(row(chalk.white(" ".repeat(OUTPUT_INDENT) + truncate(entry.text, outputWidth))));
+        allLogRows.push(
+          row(
+            chalk.white(
+              " ".repeat(OUTPUT_INDENT) + truncate(entry.text, outputWidth),
+            ),
+          ),
+        );
       }
     }
 
@@ -211,13 +250,19 @@ export function createFrame(title: string): Frame {
     // text re-wrapped to fewer lines or entries removed).
     const currentLogRowCount = allLogRows.length;
     if (scrollOffset > 0 && currentLogRowCount !== prevLogRowCount) {
-      scrollOffset = Math.max(0, scrollOffset + (currentLogRowCount - prevLogRowCount));
+      scrollOffset = Math.max(
+        0,
+        scrollOffset + (currentLogRowCount - prevLogRowCount),
+      );
     }
     prevLogRowCount = currentLogRowCount;
 
     // Compute frame height from total content (not viewport position) so
     // highWaterLogRows keeps growing even while the user is scrolled up.
-    const naturalRowCount = Math.max(MIN_LOG_LINES, Math.min(allLogRows.length, maxLogLines));
+    const naturalRowCount = Math.max(
+      MIN_LOG_LINES,
+      Math.min(allLogRows.length, maxLogLines),
+    );
     highWaterLogRows = Math.max(highWaterLogRows, naturalRowCount);
     const visibleRowCount = Math.min(highWaterLogRows, maxLogLines);
 
@@ -244,7 +289,9 @@ export function createFrame(title: string): Frame {
 
     // Place "↓ more" at the actual bottom of the frame
     if (hasBelow && visibleLogRows.length > 1) {
-      visibleLogRows[visibleLogRows.length - 1] = row(chalk.dim(`  ↓ ${scrollOffset} more`));
+      visibleLogRows[visibleLogRows.length - 1] = row(
+        chalk.dim(`  ↓ ${scrollOffset} more`),
+      );
     }
     const totalRows = 1 + STATUS_ROWS + visibleRowCount + 1; // top + status + logs + bottom
 
@@ -331,7 +378,11 @@ export function createFrame(title: string): Frame {
 
       // Finalize any trailing partial thinking entry so it stays in the
       // buffer as a complete scrollback record before output begins.
-      if (kind === "output" && logBuffer.length > 0 && logBuffer[logBuffer.length - 1]?.kind === "thinking") {
+      if (
+        kind === "output" &&
+        logBuffer.length > 0 &&
+        logBuffer[logBuffer.length - 1]?.kind === "thinking"
+      ) {
         logFinalized[logBuffer.length - 1] = true;
       }
 

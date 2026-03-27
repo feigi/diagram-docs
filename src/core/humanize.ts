@@ -44,10 +44,7 @@ export function lastSegment(input: string): string {
  *   ("python", ["fastapi"])               → "Python / FastAPI"
  *   ("c", [])                             → "C"
  */
-export function inferTechnology(
-  language: string,
-  deps: string[],
-): string {
+export function inferTechnology(language: string, deps: string[]): string {
   const lang = language.charAt(0).toUpperCase() + language.slice(1);
   const depsLower = deps.map((d) => d.toLowerCase());
 

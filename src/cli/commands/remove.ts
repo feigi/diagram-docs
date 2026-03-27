@@ -6,7 +6,10 @@ import { collectRemovePaths, removePath } from "../../core/remove.js";
 export const removeCommand = new Command("remove")
   .description("Remove all diagram-docs generated files")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
-  .option("--all", "Also remove diagram output folders (docs/architecture and submodule architecture dirs)")
+  .option(
+    "--all",
+    "Also remove diagram output folders (docs/architecture and submodule architecture dirs)",
+  )
   .option("--dry-run", "Print what would be removed without deleting anything")
   .action(async (options) => {
     // Locate config file without auto-creating one (unlike loadConfig).

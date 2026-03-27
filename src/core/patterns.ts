@@ -5,7 +5,12 @@
 
 export type Role = "controller" | "listener" | "repository" | "service";
 
-export type SystemType = "Database" | "Message Broker" | "Cache" | "Search Engine" | "Object Storage";
+export type SystemType =
+  | "Database"
+  | "Message Broker"
+  | "Cache"
+  | "Search Engine"
+  | "Object Storage";
 
 export interface DetectedExternalSystem {
   readonly keyword: string;
@@ -104,13 +109,22 @@ const EXTERNAL_SYSTEM_PATTERNS: Array<{
   { keyword: "lettuce", type: "Cache", technology: "Redis" },
   { keyword: "memcached", type: "Cache", technology: "Memcached" },
   // Search engines
-  { keyword: "elasticsearch", type: "Search Engine", technology: "Elasticsearch" },
+  {
+    keyword: "elasticsearch",
+    type: "Search Engine",
+    technology: "Elasticsearch",
+  },
   { keyword: "opensearch", type: "Search Engine", technology: "OpenSearch" },
   // Object storage
   // "s3" requires word-boundary matching to avoid false positives on "css3",
   // "es3", "js3". Real deps are named like "aws-java-sdk-s3" or
   // "software.amazon.awssdk:s3" where s3 appears as a separate token.
-  { keyword: "s3", type: "Object Storage", technology: "S3", boundaryRegex: /(?:^|[^a-z])s3(?:$|[^a-z0-9])/i },
+  {
+    keyword: "s3",
+    type: "Object Storage",
+    technology: "S3",
+    boundaryRegex: /(?:^|[^a-z])s3(?:$|[^a-z0-9])/i,
+  },
   { keyword: "minio", type: "Object Storage", technology: "S3" },
 ];
 
@@ -119,13 +133,20 @@ const EXTERNAL_SYSTEM_PATTERNS: Array<{
  * Performs case-insensitive substring matching.
  * Deduplicates results by type+technology, keeping the first match found.
  */
-export function detectExternalSystems(depNames: string[]): DetectedExternalSystem[] {
+export function detectExternalSystems(
+  depNames: string[],
+): DetectedExternalSystem[] {
   const seen = new Set<string>();
   const results: DetectedExternalSystem[] = [];
 
   for (const dep of depNames) {
     const depLower = dep.toLowerCase();
-    for (const { keyword, type, technology, boundaryRegex } of EXTERNAL_SYSTEM_PATTERNS) {
+    for (const {
+      keyword,
+      type,
+      technology,
+      boundaryRegex,
+    } of EXTERNAL_SYSTEM_PATTERNS) {
       const matches = boundaryRegex
         ? boundaryRegex.test(depLower)
         : depLower.includes(keyword);
@@ -169,9 +190,9 @@ export function inferRelationshipLabel(
  * Return a relationship label appropriate for the given external system type.
  */
 const EXTERNAL_RELATIONSHIP_LABELS: Record<SystemType, string> = {
-  "Database": "Reads/writes data in",
+  Database: "Reads/writes data in",
   "Message Broker": "Publishes/consumes messages via",
-  "Cache": "Caches data in",
+  Cache: "Caches data in",
   "Search Engine": "Indexes/queries",
   "Object Storage": "Stores objects in",
 };
@@ -198,7 +219,10 @@ const ROLE_TECH_LABELS: Record<Role, string> = {
  *   ("Service", "python")      → "Python Service"
  *   ("Transactional", "java")  → "Java"
  */
-export function inferComponentTech(annotations: string, language: string): string {
+export function inferComponentTech(
+  annotations: string,
+  language: string,
+): string {
   const lang = language.charAt(0).toUpperCase() + language.slice(1);
   const role = detectRole(annotations);
   if (!role) return lang;

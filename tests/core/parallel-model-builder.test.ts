@@ -5,7 +5,10 @@ import {
   mergePartialModels,
   buildModelParallel,
 } from "../../src/core/parallel-model-builder.js";
-import type { LLMProvider, ProgressEvent } from "../../src/core/llm-model-builder.js";
+import type {
+  LLMProvider,
+  ProgressEvent,
+} from "../../src/core/llm-model-builder.js";
 import { LLMCallError } from "../../src/core/llm-model-builder.js";
 import { configSchema } from "../../src/config/schema.js";
 import type {
@@ -17,9 +20,7 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeRawStructure(
-  apps: RawStructure["applications"],
-): RawStructure {
+function makeRawStructure(apps: RawStructure["applications"]): RawStructure {
   return {
     version: 1,
     scannedAt: "2026-03-22T00:00:00Z",
@@ -98,9 +99,9 @@ describe("splitRawStructure", () => {
     const slices = splitRawStructure(raw);
 
     expect(slices[0].applications[0].internalImports).toHaveLength(1);
-    expect(slices[0].applications[0].internalImports[0].targetApplicationId).toBe(
-      "app-b",
-    );
+    expect(
+      slices[0].applications[0].internalImports[0].targetApplicationId,
+    ).toBe("app-b");
   });
 
   it("preserves version and metadata in each slice", () => {
@@ -246,9 +247,7 @@ describe("mergePartialModels", () => {
 
     expect(merged.externalSystems).toHaveLength(2);
     const pg = merged.externalSystems.find((e) => e.id === "postgresql");
-    expect(pg?.description).toBe(
-      "Relational database for persistent storage",
-    );
+    expect(pg?.description).toBe("Relational database for persistent storage");
     const redis = merged.externalSystems.find((e) => e.id === "redis");
     expect(redis).toBeDefined();
   });
@@ -332,9 +331,7 @@ describe("mergePartialModels", () => {
 // Task 8: buildModelParallel orchestration
 // ---------------------------------------------------------------------------
 
-function makeMockProvider(
-  responses: Map<string, string>,
-): LLMProvider {
+function makeMockProvider(responses: Map<string, string>): LLMProvider {
   return {
     name: "mock",
     supportsTools: false,
@@ -354,7 +351,9 @@ function makeMockProvider(
         if (appId === "__synthesis__") continue;
         if (userMessage.includes(appId)) return yaml;
       }
-      throw new Error("Mock provider: no response configured for this app — check test setup");
+      throw new Error(
+        "Mock provider: no response configured for this app — check test setup",
+      );
     },
   };
 }
@@ -401,7 +400,11 @@ describe("buildModelParallel", () => {
       version: 1,
       system: { name: "Service A", description: "A service" },
       actors: [
-        { id: "api-consumer", name: "API Consumer", description: "Calls Service A APIs" },
+        {
+          id: "api-consumer",
+          name: "API Consumer",
+          description: "Calls Service A APIs",
+        },
       ],
       externalSystems: [],
       containers: [
@@ -465,7 +468,11 @@ describe("buildModelParallel", () => {
     const synthesisYaml = stringifyYaml({
       system: { name: "My Platform", description: "A multi-service platform" },
       actors: [
-        { id: "api-consumer", name: "API Consumer", description: "External client" },
+        {
+          id: "api-consumer",
+          name: "API Consumer",
+          description: "External client",
+        },
       ],
       externalSystems: [
         {
@@ -494,7 +501,10 @@ describe("buildModelParallel", () => {
 
     // Containers from both apps should be present
     expect(result.containers).toHaveLength(2);
-    expect(result.containers.map((c) => c.id).sort()).toEqual(["svc-a", "svc-b"]);
+    expect(result.containers.map((c) => c.id).sort()).toEqual([
+      "svc-a",
+      "svc-b",
+    ]);
 
     // Components from both apps
     expect(result.components).toHaveLength(2);
@@ -603,14 +613,21 @@ describe("buildModelParallel", () => {
 
     // Should still produce a valid model — svc-a falls back to deterministic anchor
     expect(result.containers).toHaveLength(2);
-    expect(result.containers.map((c) => c.id).sort()).toEqual(["svc-a", "svc-b"]);
+    expect(result.containers.map((c) => c.id).sort()).toEqual([
+      "svc-a",
+      "svc-b",
+    ]);
 
     // Should have logged a fallback message for svc-a
-    const fallbackMsg = statuses.find((s) => s.includes("deterministic anchor"));
+    const fallbackMsg = statuses.find((s) =>
+      s.includes("deterministic anchor"),
+    );
     expect(fallbackMsg).toBeDefined();
 
     // Should have logged partial fallback warning
-    const warnMsg = statuses.find((s) => s.includes("WARNING") && s.includes("fell back"));
+    const warnMsg = statuses.find(
+      (s) => s.includes("WARNING") && s.includes("fell back"),
+    );
     expect(warnMsg).toBeDefined();
   });
 
@@ -919,18 +936,47 @@ describe("buildModelParallel", () => {
     ]);
 
     const partial = makePartialModel({
-      containers: [{ id: "svc-a", applicationId: "svc-a", name: "Service A", description: "A service", technology: "Java" }],
-      components: [{ id: "mod-a1", containerId: "svc-a", name: "Main", description: "", technology: "Java", moduleIds: [] }],
+      containers: [
+        {
+          id: "svc-a",
+          applicationId: "svc-a",
+          name: "Service A",
+          description: "A service",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "mod-a1",
+          containerId: "svc-a",
+          name: "Main",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+      ],
     });
 
     const responses = new Map<string, string>();
     responses.set("svc-a", stringifyYaml(partial));
-    responses.set("__synthesis__", stringifyYaml({ system: { name: "My System", description: "" }, actors: [], externalSystems: [], relationships: [] }));
+    responses.set(
+      "__synthesis__",
+      stringifyYaml({
+        system: { name: "My System", description: "" },
+        actors: [],
+        externalSystems: [],
+        relationships: [],
+      }),
+    );
 
     const provider = makeMockProvider(responses);
     const config = makeConfig();
 
-    const model = await buildModelParallel({ rawStructure: raw, config, provider });
+    const model = await buildModelParallel({
+      rawStructure: raw,
+      config,
+      provider,
+    });
     expect(model.containers.length).toBeGreaterThanOrEqual(0);
   });
 
@@ -1052,7 +1098,9 @@ describe("buildModelParallel", () => {
       isAvailable: () => true,
       generate: async (_systemPrompt: string, userMessage: string) => {
         if (userMessage.includes("svc-a")) {
-          const err = new Error("Cannot allocate memory") as NodeJS.ErrnoException;
+          const err = new Error(
+            "Cannot allocate memory",
+          ) as NodeJS.ErrnoException;
           err.code = "ENOMEM";
           throw err;
         }
@@ -1062,10 +1110,23 @@ describe("buildModelParallel", () => {
           actors: [],
           externalSystems: [],
           containers: [
-            { id: "svc-b", applicationId: "svc-b", name: "B", description: "B", technology: "Java" },
+            {
+              id: "svc-b",
+              applicationId: "svc-b",
+              name: "B",
+              description: "B",
+              technology: "Java",
+            },
           ],
           components: [
-            { id: "mod-b1", containerId: "svc-b", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-b1"] },
+            {
+              id: "mod-b1",
+              containerId: "svc-b",
+              name: "Main",
+              description: "Core",
+              technology: "Java",
+              moduleIds: ["mod-b1"],
+            },
           ],
           relationships: [],
         });
@@ -1239,13 +1300,31 @@ describe("buildModelParallel", () => {
       system: { name: "", description: "" },
       actors: [],
       externalSystems: [
-        { id: "postgres", name: "PostgreSQL", description: "Main DB", technology: "PostgreSQL" },
+        {
+          id: "postgres",
+          name: "PostgreSQL",
+          description: "Main DB",
+          technology: "PostgreSQL",
+        },
       ],
       containers: [
-        { id: "svc-a", applicationId: "svc-a", name: "A", description: "A", technology: "Java" },
+        {
+          id: "svc-a",
+          applicationId: "svc-a",
+          name: "A",
+          description: "A",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-a1", containerId: "svc-a", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-a1"] },
+        {
+          id: "mod-a1",
+          containerId: "svc-a",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-a1"],
+        },
       ],
       relationships: [],
     };
@@ -1256,10 +1335,23 @@ describe("buildModelParallel", () => {
       actors: [],
       externalSystems: [],
       containers: [
-        { id: "svc-b", applicationId: "svc-b", name: "B", description: "B", technology: "Java" },
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "B",
+          description: "B",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-b1", containerId: "svc-b", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-b1"] },
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
       ],
       relationships: [],
     };
@@ -1329,10 +1421,23 @@ describe("buildModelParallel", () => {
       actors: [],
       externalSystems: [],
       containers: [
-        { id: "svc-b", applicationId: "svc-b", name: "Service B", description: "B", technology: "Java" },
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "Service B",
+          description: "B",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-b1", containerId: "svc-b", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-b1"] },
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
       ],
       relationships: [],
     };
@@ -1368,7 +1473,9 @@ describe("buildModelParallel", () => {
     // svc-a should fall back to deterministic anchor, svc-b from LLM
     expect(result.containers).toHaveLength(2);
     // Should have logged a fallback warning
-    const fallbackMsg = statuses.find((s) => s.includes("svc-a") && s.includes("deterministic anchor"));
+    const fallbackMsg = statuses.find(
+      (s) => s.includes("svc-a") && s.includes("deterministic anchor"),
+    );
     expect(fallbackMsg).toBeDefined();
   });
 
@@ -1408,10 +1515,23 @@ describe("buildModelParallel", () => {
       actors: [],
       externalSystems: [],
       containers: [
-        { id: "svc-b", applicationId: "svc-b", name: "Service B", description: "B", technology: "Java" },
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "Service B",
+          description: "B",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-b1", containerId: "svc-b", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-b1"] },
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
       ],
       relationships: [],
     };
@@ -1447,7 +1567,9 @@ describe("buildModelParallel", () => {
 
     // svc-a should fall back to deterministic anchor
     expect(result.containers).toHaveLength(2);
-    const fallbackMsg = statuses.find((s) => s.includes("svc-a") && s.includes("deterministic anchor"));
+    const fallbackMsg = statuses.find(
+      (s) => s.includes("svc-a") && s.includes("deterministic anchor"),
+    );
     expect(fallbackMsg).toBeDefined();
   });
 
@@ -1485,12 +1607,32 @@ describe("buildModelParallel", () => {
       version: 1,
       system: { name: "", description: "" },
       actors: [{ id: "user", name: "User", description: "App user" }],
-      externalSystems: [{ id: "db", name: "DB", description: "Database", technology: "PostgreSQL" }],
+      externalSystems: [
+        {
+          id: "db",
+          name: "DB",
+          description: "Database",
+          technology: "PostgreSQL",
+        },
+      ],
       containers: [
-        { id: "svc-a", applicationId: "svc-a", name: "A", description: "A", technology: "Java" },
+        {
+          id: "svc-a",
+          applicationId: "svc-a",
+          name: "A",
+          description: "A",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-a1", containerId: "svc-a", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-a1"] },
+        {
+          id: "mod-a1",
+          containerId: "svc-a",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-a1"],
+        },
       ],
       relationships: [],
     };
@@ -1501,10 +1643,23 @@ describe("buildModelParallel", () => {
       actors: [],
       externalSystems: [],
       containers: [
-        { id: "svc-b", applicationId: "svc-b", name: "B", description: "B", technology: "Java" },
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "B",
+          description: "B",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-b1", containerId: "svc-b", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-b1"] },
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
       ],
       relationships: [],
     };
@@ -1546,34 +1701,69 @@ describe("buildModelParallel", () => {
   it("enforces concurrency limit on parallel LLM calls", async () => {
     const raw = makeRawStructure([
       makeApp("svc-a", {
-        modules: [{
-          id: "mod-a1", path: "apps/svc-a/src/main", name: "svc-a.main",
-          files: ["Main.java"], exports: [], imports: [], metadata: {},
-        }],
+        modules: [
+          {
+            id: "mod-a1",
+            path: "apps/svc-a/src/main",
+            name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
       }),
       makeApp("svc-b", {
-        modules: [{
-          id: "mod-b1", path: "apps/svc-b/src/main", name: "svc-b.main",
-          files: ["Main.java"], exports: [], imports: [], metadata: {},
-        }],
+        modules: [
+          {
+            id: "mod-b1",
+            path: "apps/svc-b/src/main",
+            name: "svc-b.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
       }),
       makeApp("svc-c", {
-        modules: [{
-          id: "mod-c1", path: "apps/svc-c/src/main", name: "svc-c.main",
-          files: ["Main.java"], exports: [], imports: [], metadata: {},
-        }],
+        modules: [
+          {
+            id: "mod-c1",
+            path: "apps/svc-c/src/main",
+            name: "svc-c.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
       }),
       makeApp("svc-d", {
-        modules: [{
-          id: "mod-d1", path: "apps/svc-d/src/main", name: "svc-d.main",
-          files: ["Main.java"], exports: [], imports: [], metadata: {},
-        }],
+        modules: [
+          {
+            id: "mod-d1",
+            path: "apps/svc-d/src/main",
+            name: "svc-d.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
       }),
       makeApp("svc-e", {
-        modules: [{
-          id: "mod-e1", path: "apps/svc-e/src/main", name: "svc-e.main",
-          files: ["Main.java"], exports: [], imports: [], metadata: {},
-        }],
+        modules: [
+          {
+            id: "mod-e1",
+            path: "apps/svc-e/src/main",
+            name: "svc-e.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
       }),
     ]);
 
@@ -1609,10 +1799,23 @@ describe("buildModelParallel", () => {
               actors: [],
               externalSystems: [],
               containers: [
-                { id, applicationId: id, name: id, description: id, technology: "Java" },
+                {
+                  id,
+                  applicationId: id,
+                  name: id,
+                  description: id,
+                  technology: "Java",
+                },
               ],
               components: [
-                { id: `mod-${id.split("-")[1]}1`, containerId: id, name: "Main", description: "Core", technology: "Java", moduleIds: [`mod-${id.split("-")[1]}1`] },
+                {
+                  id: `mod-${id.split("-")[1]}1`,
+                  containerId: id,
+                  name: "Main",
+                  description: "Core",
+                  technology: "Java",
+                  moduleIds: [`mod-${id.split("-")[1]}1`],
+                },
               ],
               relationships: [],
             });
@@ -1663,16 +1866,30 @@ describe("buildModelParallel", () => {
   it("synthesis updates relationship labels on merged model", async () => {
     const raw = makeRawStructure([
       makeApp("svc-a", {
-        modules: [{
-          id: "mod-a1", path: "apps/svc-a/src/main", name: "svc-a.main",
-          files: ["Main.java"], exports: [], imports: [], metadata: {},
-        }],
+        modules: [
+          {
+            id: "mod-a1",
+            path: "apps/svc-a/src/main",
+            name: "svc-a.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
       }),
       makeApp("svc-b", {
-        modules: [{
-          id: "mod-b1", path: "apps/svc-b/src/main", name: "svc-b.main",
-          files: ["Main.java"], exports: [], imports: [], metadata: {},
-        }],
+        modules: [
+          {
+            id: "mod-b1",
+            path: "apps/svc-b/src/main",
+            name: "svc-b.main",
+            files: ["Main.java"],
+            exports: [],
+            imports: [],
+            metadata: {},
+          },
+        ],
       }),
     ]);
 
@@ -1681,13 +1898,31 @@ describe("buildModelParallel", () => {
       system: { name: "", description: "" },
       actors: [],
       externalSystems: [
-        { id: "postgresql", name: "PostgreSQL", description: "Database", technology: "PostgreSQL" },
+        {
+          id: "postgresql",
+          name: "PostgreSQL",
+          description: "Database",
+          technology: "PostgreSQL",
+        },
       ],
       containers: [
-        { id: "svc-a", applicationId: "svc-a", name: "Service A", description: "A", technology: "Java" },
+        {
+          id: "svc-a",
+          applicationId: "svc-a",
+          name: "Service A",
+          description: "A",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-a1", containerId: "svc-a", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-a1"] },
+        {
+          id: "mod-a1",
+          containerId: "svc-a",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-a1"],
+        },
       ],
       relationships: [
         { sourceId: "mod-a1", targetId: "postgresql", label: "Uses" },
@@ -1700,10 +1935,23 @@ describe("buildModelParallel", () => {
       actors: [],
       externalSystems: [],
       containers: [
-        { id: "svc-b", applicationId: "svc-b", name: "Service B", description: "B", technology: "Java" },
+        {
+          id: "svc-b",
+          applicationId: "svc-b",
+          name: "Service B",
+          description: "B",
+          technology: "Java",
+        },
       ],
       components: [
-        { id: "mod-b1", containerId: "svc-b", name: "Main", description: "Core", technology: "Java", moduleIds: ["mod-b1"] },
+        {
+          id: "mod-b1",
+          containerId: "svc-b",
+          name: "Main",
+          description: "Core",
+          technology: "Java",
+          moduleIds: ["mod-b1"],
+        },
       ],
       relationships: [],
     };
@@ -1712,7 +1960,11 @@ describe("buildModelParallel", () => {
     const synthesisYaml = stringifyYaml({
       system: { name: "Platform", description: "Multi-service platform" },
       relationships: [
-        { sourceId: "mod-a1", targetId: "postgresql", label: "Reads/writes user profiles via JDBC" },
+        {
+          sourceId: "mod-a1",
+          targetId: "postgresql",
+          label: "Reads/writes user profiles via JDBC",
+        },
       ],
     });
 
@@ -1773,7 +2025,11 @@ describe("buildModelParallel", () => {
       version: 1,
       system: { name: "", description: "" },
       actors: [
-        { id: "user", name: "User", description: "Pre-synthesis actor from app A" },
+        {
+          id: "user",
+          name: "User",
+          description: "Pre-synthesis actor from app A",
+        },
       ],
       externalSystems: [],
       containers: [
@@ -1880,12 +2136,22 @@ describe("buildModelParallel", () => {
           });
         }
         const appId = userMessage.includes("app-a") ? "app-a" : "app-b";
-        return stringifyYaml(makePartialModel({
-          system: { name: "Test", description: "test" },
-          containers: [{ id: appId, applicationId: appId, name: appId, description: "c", technology: "java" }],
-          components: [],
-          relationships: [],
-        }));
+        return stringifyYaml(
+          makePartialModel({
+            system: { name: "Test", description: "test" },
+            containers: [
+              {
+                id: appId,
+                applicationId: appId,
+                name: appId,
+                description: "c",
+                technology: "java",
+              },
+            ],
+            components: [],
+            relationships: [],
+          }),
+        );
       },
     };
 

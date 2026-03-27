@@ -62,7 +62,8 @@ export function matchCrossAppCoordinates(
         app.internalImports.push({
           sourceModuleId: app.id,
           targetApplicationId: targetAppId,
-          targetPath: applications.find((a) => a.id === targetAppId)?.path ?? targetAppId,
+          targetPath:
+            applications.find((a) => a.id === targetAppId)?.path ?? targetAppId,
         });
       } else {
         remaining.push(dep);
@@ -73,7 +74,11 @@ export function matchCrossAppCoordinates(
   }
 }
 
-export async function runScan({ rootDir, config, force }: ScanOptions): Promise<ScanResult> {
+export async function runScan({
+  rootDir,
+  config,
+  force,
+}: ScanOptions): Promise<ScanResult> {
   // Compute effective excludes from config + all analyzer defaults
   const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
   const effectiveConfig: Config = {
@@ -93,7 +98,9 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
   });
 
   if (discovered.length === 0) {
-    throw new ScanError("No applications discovered. Check your scan.include patterns.");
+    throw new ScanError(
+      "No applications discovered. Check your scan.include patterns.",
+    );
   }
 
   console.error(`Discovered ${discovered.length} application(s):`);
@@ -128,10 +135,7 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
     process.stderr.write("\r✔ Checksum computed\n");
   }
 
-  if (
-    !force &&
-    manifest.lastScan?.checksum === checksum
-  ) {
+  if (!force && manifest.lastScan?.checksum === checksum) {
     const cachedPath = path.resolve(
       rootDir,
       ".diagram-docs",
@@ -196,8 +200,9 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
       }
       // Also normalize targets that use absolute paths of other apps
       if (imp.targetApplicationId.startsWith(rootPrefix)) {
-        imp.targetApplicationId =
-          imp.targetApplicationId.slice(rootPrefix.length + 1); // +1 for the separator
+        imp.targetApplicationId = imp.targetApplicationId.slice(
+          rootPrefix.length + 1,
+        ); // +1 for the separator
       }
     }
 
@@ -221,11 +226,7 @@ export async function runScan({ rootDir, config, force }: ScanOptions): Promise<
   if (!fs.existsSync(manifestDir)) {
     fs.mkdirSync(manifestDir, { recursive: true });
   }
-  fs.writeFileSync(
-    path.join(manifestDir, "raw-structure.json"),
-    json,
-    "utf-8",
-  );
+  fs.writeFileSync(path.join(manifestDir, "raw-structure.json"), json, "utf-8");
 
   // Update manifest
   manifest.lastScan = {

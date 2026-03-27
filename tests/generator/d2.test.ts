@@ -40,7 +40,11 @@ describe("wrapText", () => {
   });
 
   it("wraps text at word boundaries with D2 newline escape", () => {
-    const result = wrapText("This is a long description that needs wrapping", 25, 5);
+    const result = wrapText(
+      "This is a long description that needs wrapping",
+      25,
+      5,
+    );
     expect(result).toContain("\\n");
     for (const line of result.split("\\n")) {
       expect(line.length).toBeLessThanOrEqual(25);
@@ -115,7 +119,10 @@ describe("D2 Container Diagram", () => {
 
   it("includes link properties when componentLinks is enabled", () => {
     const model = loadModel(MODEL_PATH);
-    const d2 = generateContainerDiagram(model, { componentLinks: true, format: "svg" });
+    const d2 = generateContainerDiagram(model, {
+      componentLinks: true,
+      format: "svg",
+    });
 
     // Each container should have a link to its component diagram
     for (const container of model.containers) {
@@ -134,7 +141,10 @@ describe("D2 Container Diagram", () => {
 
   it("uses png extension when format is png", () => {
     const model = loadModel(MODEL_PATH);
-    const d2 = generateContainerDiagram(model, { componentLinks: true, format: "png" });
+    const d2 = generateContainerDiagram(model, {
+      componentLinks: true,
+      format: "png",
+    });
 
     expect(d2).toContain("component.png");
     expect(d2).not.toContain("component.svg");

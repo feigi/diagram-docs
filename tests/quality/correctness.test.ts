@@ -53,7 +53,10 @@ const FIXTURES: Array<{
   {
     name: "typescript-express",
     appPath: path.resolve(MONOREPO, "services/api-gateway"),
-    expectedPath: path.resolve(QUALITY_FIXTURES, "typescript-express/expected.json"),
+    expectedPath: path.resolve(
+      QUALITY_FIXTURES,
+      "typescript-express/expected.json",
+    ),
     analyzerId: "typescript",
   },
 ];
@@ -78,7 +81,9 @@ afterAll(() => {
   if (allSuggestions.length === 0) {
     console.log("\nAll correctness checks passed with no suggestions.");
   } else {
-    console.log(`\n${allSuggestions.length} suggestion(s) total across all fixtures.`);
+    console.log(
+      `\n${allSuggestions.length} suggestion(s) total across all fixtures.`,
+    );
   }
   console.log("");
 });
@@ -157,9 +162,7 @@ describe("Correctness: Analyzer accuracy", () => {
 
         for (const mod of actual.modules) {
           for (const imp of mod.imports) {
-            allFoundImports.push(
-              `${mod.name}|${imp.source}|${imp.isExternal}`,
-            );
+            allFoundImports.push(`${mod.name}|${imp.source}|${imp.isExternal}`);
           }
         }
 
@@ -242,9 +245,7 @@ describe("Correctness: Analyzer accuracy", () => {
         }
         for (const mod of result.modules) {
           for (const imp of mod.imports) {
-            allFoundImports.push(
-              `${mod.name}|${imp.source}|${imp.isExternal}`,
-            );
+            allFoundImports.push(`${mod.name}|${imp.source}|${imp.isExternal}`);
           }
         }
         categories["imports"] = computeSetMetrics(
@@ -336,17 +337,23 @@ describe("Correctness: D2 generator structural completeness", () => {
     const danglingRefs: string[] = [];
 
     for (const rel of model.relationships) {
-      if (!allIds.has(rel.sourceId)) danglingRefs.push(`source: ${rel.sourceId}`);
-      if (!allIds.has(rel.targetId)) danglingRefs.push(`target: ${rel.targetId}`);
+      if (!allIds.has(rel.sourceId))
+        danglingRefs.push(`source: ${rel.sourceId}`);
+      if (!allIds.has(rel.targetId))
+        danglingRefs.push(`target: ${rel.targetId}`);
     }
     for (const comp of model.components) {
       if (!model.containers.some((c) => c.id === comp.containerId)) {
-        danglingRefs.push(`component ${comp.id} -> container ${comp.containerId}`);
+        danglingRefs.push(
+          `component ${comp.id} -> container ${comp.containerId}`,
+        );
       }
     }
 
     if (danglingRefs.length > 0) {
-      console.log(`\n  [WARN] Dangling model references: ${danglingRefs.join(", ")}`);
+      console.log(
+        `\n  [WARN] Dangling model references: ${danglingRefs.join(", ")}`,
+      );
     }
     // This is a warning, not a hard failure — agents may produce forward refs
   });

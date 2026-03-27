@@ -2,11 +2,7 @@
  * Wrap text at word boundaries, inserting D2 newline escapes.
  * Keeps each line within `maxWidth` characters and truncates with "..." beyond `maxLines`.
  */
-export function wrapText(
-  text: string,
-  maxWidth = 50,
-  maxLines = 2,
-): string {
+export function wrapText(text: string, maxWidth = 50, maxLines = 2): string {
   const words = text.split(/\s+/);
   const lines: string[] = [];
   let current = "";
@@ -49,7 +45,9 @@ export class D2Writer {
       this.lines.push(`${prefix}${id}`);
     }
     if (props) {
-      for (const [key, value] of Object.entries(props).sort(([a], [b]) => a.localeCompare(b))) {
+      for (const [key, value] of Object.entries(props).sort(([a], [b]) =>
+        a.localeCompare(b),
+      )) {
         this.lines.push(`${prefix}${id}.${key}: ${value}`);
       }
     }
@@ -74,13 +72,19 @@ export class D2Writer {
   ): this {
     const prefix = this.pad();
     if (label) {
-      this.lines.push(`${prefix}${sourceId} -> ${targetId}: ${this.quote(label)}`);
+      this.lines.push(
+        `${prefix}${sourceId} -> ${targetId}: ${this.quote(label)}`,
+      );
     } else {
       this.lines.push(`${prefix}${sourceId} -> ${targetId}`);
     }
     if (props) {
-      for (const [key, value] of Object.entries(props).sort(([a], [b]) => a.localeCompare(b))) {
-        this.lines.push(`${prefix}(${sourceId} -> ${targetId})[0].${key}: ${value}`);
+      for (const [key, value] of Object.entries(props).sort(([a], [b]) =>
+        a.localeCompare(b),
+      )) {
+        this.lines.push(
+          `${prefix}(${sourceId} -> ${targetId})[0].${key}: ${value}`,
+        );
       }
     }
     return this;
@@ -113,7 +117,7 @@ export class D2Writer {
   private quote(text: string): string {
     // D2 supports \n as newline in labels natively.
     // Use double-quoted strings when text contains reserved characters.
-    if (/[{}:;|#\[\]()'"\\]/.test(text) || text.includes("\\n")) {
+    if (/[{}:;|#[\]()'"\\]/.test(text) || text.includes("\\n")) {
       // Escape any double quotes in the text
       const escaped = text.replace(/"/g, '\\"');
       return `"${escaped}"`;

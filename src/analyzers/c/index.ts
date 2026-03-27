@@ -58,9 +58,7 @@ export const cAnalyzer: LanguageAnalyzer = {
       }
 
       // Public API = header file exported functions (names derived from headers)
-      const exports = group.headers.map((h) =>
-        path.basename(h, ".h"),
-      );
+      const exports = group.headers.map((h) => path.basename(h, ".h"));
 
       modules.push({
         id: slugify(`${appPath}/${group.path}`),

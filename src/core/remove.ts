@@ -43,7 +43,11 @@ export async function collectRemovePaths(
 
   if (all) {
     // Discover submodule architecture dirs before the model is marked for deletion
-    const submoduleDirs = await discoverSubmoduleDirs(configDir, modelPath, config);
+    const submoduleDirs = await discoverSubmoduleDirs(
+      configDir,
+      modelPath,
+      config,
+    );
 
     // 4. {config.output.dir}/ — entire output folder
     candidates.push(path.resolve(configDir, config.output.dir));
@@ -54,9 +58,7 @@ export async function collectRemovePaths(
 
   candidates.push(modelPath);
 
-  return [...new Set(candidates)]
-    .filter((p) => fs.existsSync(p))
-    .sort();
+  return [...new Set(candidates)].filter((p) => fs.existsSync(p)).sort();
 }
 
 /**

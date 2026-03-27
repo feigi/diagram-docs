@@ -46,8 +46,12 @@ describe("Python Analyzer", () => {
     const result = await pythonAnalyzer.analyze(FIXTURES, defaultConfig);
 
     expect(result.externalDependencies.length).toBe(3);
-    expect(result.externalDependencies.some((d) => d.name === "fastapi")).toBe(true);
-    expect(result.externalDependencies.some((d) => d.name === "sqlalchemy")).toBe(true);
+    expect(result.externalDependencies.some((d) => d.name === "fastapi")).toBe(
+      true,
+    );
+    expect(
+      result.externalDependencies.some((d) => d.name === "sqlalchemy"),
+    ).toBe(true);
   });
 
   it("extracts class exports", async () => {

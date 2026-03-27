@@ -16,9 +16,7 @@ export function parseSettingsGradle(appPath: string): GradleSettings | null {
   const content = fs.readFileSync(settingsFile, "utf-8");
 
   // Extract rootProject.name
-  const nameMatch = content.match(
-    /rootProject\.name\s*=\s*['"]([^'"]+)['"]/,
-  );
+  const nameMatch = content.match(/rootProject\.name\s*=\s*['"]([^'"]+)['"]/);
   const rootProjectName = nameMatch?.[1] ?? null;
 
   // Extract include directives: include 'foo', include('foo'), include('foo', 'bar')
@@ -34,9 +32,7 @@ export function parseSettingsGradle(appPath: string): GradleSettings | null {
 
   // Handle multi-arg include: include('a', 'b', 'c')
   // The regex above only gets first two. Re-scan for all quoted strings in include() calls.
-  for (const includeMatch of content.matchAll(
-    /include\s*\(([^)]+)\)/g,
-  )) {
+  for (const includeMatch of content.matchAll(/include\s*\(([^)]+)\)/g)) {
     const args = includeMatch[1];
     for (const argMatch of args.matchAll(/['"]([^'"]+)['"]/g)) {
       const name = argMatch[1];
@@ -77,7 +73,9 @@ export interface GradleDependencies {
   mavenDeps: Array<{ group: string; artifact: string; version?: string }>;
 }
 
-export function parseGradleDependencies(buildFilePath: string): GradleDependencies {
+export function parseGradleDependencies(
+  buildFilePath: string,
+): GradleDependencies {
   if (!fs.existsSync(buildFilePath)) {
     return { group: null, projectDeps: [], mavenDeps: [] };
   }
@@ -94,19 +92,27 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
   // Match dependency lines: both Groovy (`implementation '...'`, `implementation project(':...')`)
   // and Kotlin DSL (`implementation("...")`, `implementation(project(":..."))`)
   // Word-boundary prefix prevents matching testImplementation as implementation
-  const implConfigs = "(?:^|\\s)(?:implementation|api|compileOnly|runtimeOnly|annotationProcessor)";
-  const testConfigs = "(?:testImplementation|testCompileOnly|testRuntimeOnly|testAnnotationProcessor)";
+  const implConfigs =
+    "(?:^|\\s)(?:implementation|api|compileOnly|runtimeOnly|annotationProcessor)";
+  const testConfigs =
+    "(?:testImplementation|testCompileOnly|testRuntimeOnly|testAnnotationProcessor)";
 
   // project(':name') deps — Groovy: `implementation project(':x')`, Kotlin: `implementation(project(":x"))`
   for (const match of content.matchAll(
-    new RegExp(`${implConfigs}\\s*\\(?\\s*project\\s*\\(\\s*['\"][:.]?([^'\"]+)['\"]\\s*\\)`, "gm"),
+    new RegExp(
+      `${implConfigs}\\s*\\(?\\s*project\\s*\\(\\s*['"][:.]?([^'"]+)['"]\\s*\\)`,
+      "gm",
+    ),
   )) {
     projectDeps.push(match[1].replace(/^:/, ""));
   }
 
   // Maven coordinate deps — Groovy: `implementation 'g:a:v'`, Kotlin: `implementation("g:a:v")`
   for (const match of content.matchAll(
-    new RegExp(`${implConfigs}\\s*\\(?\\s*['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "gm"),
+    new RegExp(
+      `${implConfigs}\\s*\\(?\\s*['"]([^'":]+):([^'":]+)(?::([^'"]+))?['"]`,
+      "gm",
+    ),
   )) {
     mavenDeps.push({
       group: match[1],
@@ -118,7 +124,10 @@ export function parseGradleDependencies(buildFilePath: string): GradleDependenci
   // Exclude deps from test configurations — scan for those and remove matches
   const testDeps = new Set<string>();
   for (const match of content.matchAll(
-    new RegExp(`${testConfigs}\\s*\\(?\\s*['"]([^'":]+):([^'":]+)(?::([^'"]+))?['\"]`, "g"),
+    new RegExp(
+      `${testConfigs}\\s*\\(?\\s*['"]([^'":]+):([^'":]+)(?::([^'"]+))?['"]`,
+      "g",
+    ),
   )) {
     testDeps.add(`${match[1]}:${match[2]}`);
   }

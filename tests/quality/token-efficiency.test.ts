@@ -5,7 +5,10 @@ import { encode } from "gpt-tokenizer";
 import { getAnalyzer } from "../../src/analyzers/registry.js";
 import { discoverApplications } from "../../src/core/discovery.js";
 import { loadConfig } from "../../src/config/loader.js";
-import type { RawStructure, ScannedApplication } from "../../src/analyzers/types.js";
+import type {
+  RawStructure,
+  ScannedApplication,
+} from "../../src/analyzers/types.js";
 import type { TokenReport } from "./helpers/types.js";
 import {
   formatTokenReport,
@@ -50,9 +53,7 @@ function countEntities(structure: RawStructure): number {
 /**
  * Measure token breakdown by section to identify what's most expensive.
  */
-function tokenBreakdown(
-  structure: RawStructure,
-): Record<string, number> {
+function tokenBreakdown(structure: RawStructure): Record<string, number> {
   const breakdown: Record<string, number> = {};
 
   // Measure each field's contribution
@@ -106,10 +107,10 @@ describe("Token Efficiency: raw-structure.json", () => {
     const applications: ScannedApplication[] = [];
     for (const app of discovered) {
       const analyzer = getAnalyzer(app.analyzerId)!;
-      const result = await analyzer.analyze(
-        path.resolve(MONOREPO, app.path),
-        { exclude: config.scan.exclude, abstraction: config.abstraction },
-      );
+      const result = await analyzer.analyze(path.resolve(MONOREPO, app.path), {
+        exclude: config.scan.exclude,
+        abstraction: config.abstraction,
+      });
       result.path = app.path;
       applications.push(result);
     }

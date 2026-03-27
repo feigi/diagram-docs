@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import * as path from "node:path";
-import { parseSettingsGradle, parseGradleDependencies } from "../../../src/analyzers/java/gradle.js";
+import {
+  parseSettingsGradle,
+  parseGradleDependencies,
+} from "../../../src/analyzers/java/gradle.js";
 
 const FIXTURES = path.resolve(__dirname, "../../fixtures/gradle-multimodule");
 
@@ -16,9 +19,7 @@ describe("parseSettingsGradle", () => {
   });
 
   it("handles projectDir overrides", () => {
-    const result = parseSettingsGradle(
-      path.join(FIXTURES, "with-projectdir"),
-    );
+    const result = parseSettingsGradle(path.join(FIXTURES, "with-projectdir"));
     expect(result).not.toBeNull();
     expect(result!.rootProjectName).toBe("my-db");
     expect(result!.subprojects).toEqual([
@@ -77,7 +78,12 @@ describe("parseGradleDependencies", () => {
   });
 
   it("handles build.gradle.kts (Kotlin DSL)", () => {
-    const buildFile = path.join(FIXTURES, "kts-project", "api", "build.gradle.kts");
+    const buildFile = path.join(
+      FIXTURES,
+      "kts-project",
+      "api",
+      "build.gradle.kts",
+    );
     const result = parseGradleDependencies(buildFile);
 
     expect(result.group).toBe("com.example.kts");

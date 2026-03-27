@@ -8,7 +8,8 @@ export interface TypeScriptImportInfo {
 // import ... from "source"  /  import type ... from "source"  (including multi-line braces)
 // Uses {[^}]*} for destructured imports (bounded by closing brace, safe across newlines)
 // and [^\n]*? for default/namespace/type-alias imports (bounded by newline)
-const STATIC_IMPORT = /^\s*import\s+(?:type\s+)?(?:\{[^}]*\}|[^\n]*?)\s+from\s+["']([^"']+)["']/gm;
+const STATIC_IMPORT =
+  /^\s*import\s+(?:type\s+)?(?:\{[^}]*\}|[^\n]*?)\s+from\s+["']([^"']+)["']/gm;
 
 // import("source")
 const DYNAMIC_IMPORT = /import\(\s*["']([^"']+)["']\s*\)/g;
@@ -17,9 +18,12 @@ const DYNAMIC_IMPORT = /import\(\s*["']([^"']+)["']\s*\)/g;
 const REQUIRE = /require\(\s*["']([^"']+)["']\s*\)/g;
 
 // export ... from "source"  /  export type ... from "source"
-const REEXPORT = /^\s*export\s+(?:type\s+)?(?:\{[^}]*\}|\*)\s+from\s+["']([^"']+)["']/gm;
+const REEXPORT =
+  /^\s*export\s+(?:type\s+)?(?:\{[^}]*\}|\*)\s+from\s+["']([^"']+)["']/gm;
 
-export function parseTypeScriptImports(filePath: string): TypeScriptImportInfo[] {
+export function parseTypeScriptImports(
+  filePath: string,
+): TypeScriptImportInfo[] {
   const content = fs.readFileSync(filePath, "utf-8");
   const imports: TypeScriptImportInfo[] = [];
   const seen = new Set<string>();

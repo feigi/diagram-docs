@@ -46,7 +46,13 @@
       "default": [],
       "items": {
         "type": "object",
-        "required": ["id", "applicationId", "name", "description", "technology"],
+        "required": [
+          "id",
+          "applicationId",
+          "name",
+          "description",
+          "technology"
+        ],
         "properties": {
           "id": { "type": "string" },
           "applicationId": { "type": "string" },
@@ -68,7 +74,11 @@
           "name": { "type": "string" },
           "description": { "type": "string" },
           "technology": { "type": "string" },
-          "moduleIds": { "type": "array", "items": { "type": "string" }, "default": [] }
+          "moduleIds": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          }
         }
       }
     },

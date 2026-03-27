@@ -37,9 +37,7 @@ function parsePyprojectDeps(appPath: string): ExternalDep[] {
   const deps: ExternalDep[] = [];
 
   // Simple regex extraction from dependencies array
-  const depsSection = content.match(
-    /dependencies\s*=\s*\[([\s\S]*?)\]/,
-  );
+  const depsSection = content.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
   if (depsSection) {
     const lines = depsSection[1].match(/"([^"]+)"/g);
     if (lines) {

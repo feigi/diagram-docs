@@ -12,7 +12,16 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["id", "path", "name", "language", "buildFile", "modules", "externalDependencies", "internalImports"],
+        "required": [
+          "id",
+          "path",
+          "name",
+          "language",
+          "buildFile",
+          "modules",
+          "externalDependencies",
+          "internalImports"
+        ],
         "properties": {
           "id": { "type": "string" },
           "path": { "type": "string" },
@@ -23,7 +32,15 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["id", "path", "name", "files", "exports", "imports", "metadata"],
+              "required": [
+                "id",
+                "path",
+                "name",
+                "files",
+                "exports",
+                "imports",
+                "metadata"
+              ],
               "properties": {
                 "id": { "type": "string" },
                 "path": { "type": "string" },
@@ -42,7 +59,10 @@
                     }
                   }
                 },
-                "metadata": { "type": "object", "additionalProperties": { "type": "string" } }
+                "metadata": {
+                  "type": "object",
+                  "additionalProperties": { "type": "string" }
+                }
               }
             }
           },
@@ -61,7 +81,11 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["sourceModuleId", "targetApplicationId", "targetPath"],
+              "required": [
+                "sourceModuleId",
+                "targetApplicationId",
+                "targetPath"
+              ],
               "properties": {
                 "sourceModuleId": { "type": "string" },
                 "targetApplicationId": { "type": "string" },

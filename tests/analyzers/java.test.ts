@@ -1,10 +1,19 @@
 import { describe, it, expect } from "vitest";
 import * as path from "node:path";
 import { javaAnalyzer } from "../../src/analyzers/java/index.js";
-import { parseJavaImports, parseJavaPackage } from "../../src/analyzers/java/imports.js";
+import {
+  parseJavaImports,
+  parseJavaPackage,
+} from "../../src/analyzers/java/imports.js";
 
-const FIXTURES = path.resolve(__dirname, "../fixtures/monorepo/services/user-api");
-const GRADLE_FIXTURES = path.resolve(__dirname, "../fixtures/gradle-multimodule");
+const FIXTURES = path.resolve(
+  __dirname,
+  "../fixtures/monorepo/services/user-api",
+);
+const GRADLE_FIXTURES = path.resolve(
+  __dirname,
+  "../fixtures/gradle-multimodule",
+);
 
 const defaultConfig = {
   exclude: ["**/test/**", "**/tests/**"],
@@ -47,9 +56,7 @@ describe("Java Analyzer", () => {
 
     const repoModule = result.modules.find((m) => m.name.includes("repo"));
     expect(repoModule).toBeTruthy();
-    expect(repoModule!.metadata["annotations"]).toContain(
-      "Repository",
-    );
+    expect(repoModule!.metadata["annotations"]).toContain("Repository");
   });
 });
 
@@ -112,8 +119,12 @@ describe("Java Imports Parser", () => {
   it("parses import statements", () => {
     const imports = parseJavaImports(controllerPath);
     expect(imports.length).toBeGreaterThan(0);
-    expect(imports.some((i) => i.source === "com.example.repo.UserRepository")).toBe(true);
-    expect(imports.some((i) => i.source.includes("springframework"))).toBe(true);
+    expect(
+      imports.some((i) => i.source === "com.example.repo.UserRepository"),
+    ).toBe(true);
+    expect(imports.some((i) => i.source.includes("springframework"))).toBe(
+      true,
+    );
   });
 
   it("parses package declaration", () => {

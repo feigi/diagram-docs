@@ -4,7 +4,12 @@ import { pythonAnalyzer } from "./python/index.js";
 import { cAnalyzer } from "./c/index.js";
 import { typescriptAnalyzer } from "./typescript/index.js";
 
-const analyzers: LanguageAnalyzer[] = [javaAnalyzer, pythonAnalyzer, cAnalyzer, typescriptAnalyzer];
+const analyzers: LanguageAnalyzer[] = [
+  javaAnalyzer,
+  pythonAnalyzer,
+  cAnalyzer,
+  typescriptAnalyzer,
+];
 
 export function getRegistry(): LanguageAnalyzer[] {
   return analyzers;

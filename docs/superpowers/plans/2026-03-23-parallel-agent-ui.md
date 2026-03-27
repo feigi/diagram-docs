@@ -15,6 +15,7 @@
 ### Task 1: Extract terminal utilities from frame.ts
 
 **Files:**
+
 - Create: `src/cli/terminal-utils.ts`
 - Modify: `src/cli/frame.ts:1-80`
 - Test: `tests/cli/terminal-utils.test.ts`
@@ -111,7 +112,18 @@ Expected: FAIL — module `../../src/cli/terminal-utils.js` not found
  * Shared terminal utilities used by Frame and ParallelProgress components.
  */
 
-export const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+export const SPINNER_FRAMES = [
+  "⠋",
+  "⠙",
+  "⠹",
+  "⠸",
+  "⠼",
+  "⠴",
+  "⠦",
+  "⠧",
+  "⠇",
+  "⠏",
+];
 export const SPINNER_INTERVAL = 80;
 
 export function getFrameWidth(): number {
@@ -178,7 +190,10 @@ const FRAME_OVERHEAD = 4; // top + 2 status rows + bottom
 
 /** Strip newlines and collapse whitespace to produce a single safe line. */
 function sanitize(text: string): string {
-  return text.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  return text
+    .replace(/[\r\n]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 ```
 
@@ -201,6 +216,7 @@ git commit -m "refactor: extract shared terminal utilities from frame.ts"
 ### Task 2: Create AgentLogger
 
 **Files:**
+
 - Create: `src/core/agent-logger.ts`
 - Test: `tests/core/agent-logger.test.ts`
 
@@ -236,7 +252,9 @@ describe("AgentLogger", () => {
     await logger.logDone(5000);
 
     const content = fs.readFileSync(logPath, "utf-8");
-    expect(content).toContain("START app=my-app model=sonnet provider=claude-code");
+    expect(content).toContain(
+      "START app=my-app model=sonnet provider=claude-code",
+    );
     expect(content).toContain("SYSTEM PROMPT");
     expect(content).toContain("system prompt text");
     expect(content).toContain("USER MESSAGE");
@@ -252,7 +270,11 @@ describe("AgentLogger", () => {
       provider: "claude-code",
     });
     logger.logPrompt("sys", "usr");
-    logger.logProgress({ line: "analyzing structure...", final: true, kind: "thinking" });
+    logger.logProgress({
+      line: "analyzing structure...",
+      final: true,
+      kind: "thinking",
+    });
     logger.logProgress({ line: "version: 1", final: true, kind: "output" });
     await logger.logDone(3000);
 
@@ -291,7 +313,9 @@ describe("AgentLogger", () => {
     await logger.logFailed("Provider timeout after 900000ms", 107000);
 
     const content = fs.readFileSync(logPath, "utf-8");
-    expect(content).toContain("FAILED elapsed=107s error=Provider timeout after 900000ms");
+    expect(content).toContain(
+      "FAILED elapsed=107s error=Provider timeout after 900000ms",
+    );
     expect(content).not.toContain("DONE");
   });
 
@@ -305,7 +329,11 @@ describe("AgentLogger", () => {
     logger.logPrompt("sys", "usr");
     logger.logProgress({ line: "thinking...", final: true, kind: "thinking" });
     logger.logProgress({ line: "output line", final: true, kind: "output" });
-    logger.logProgress({ line: "more thinking", final: true, kind: "thinking" });
+    logger.logProgress({
+      line: "more thinking",
+      final: true,
+      kind: "thinking",
+    });
     await logger.logDone(2000);
 
     const content = fs.readFileSync(logPath, "utf-8");
@@ -409,6 +437,7 @@ git commit -m "feat: add AgentLogger for per-app LLM debug logs"
 ### Task 3: Create ParallelProgress component
 
 **Files:**
+
 - Create: `src/cli/parallel-progress.ts`
 - Test: `tests/cli/parallel-progress.test.ts`
 
@@ -426,7 +455,8 @@ const originalWrite = process.stderr.write;
 function captureStderr() {
   stderrOutput = "";
   process.stderr.write = ((chunk: string | Uint8Array) => {
-    stderrOutput += typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
+    stderrOutput +=
+      typeof chunk === "string" ? chunk : new TextDecoder().decode(chunk);
     return true;
   }) as typeof process.stderr.write;
 }
@@ -453,7 +483,8 @@ describe("ParallelProgress", () => {
 
   it("prints app state transitions in non-TTY mode", async () => {
     // Dynamic import after stubbing process
-    const { createParallelProgress } = await import("../../src/cli/parallel-progress.js");
+    const { createParallelProgress } =
+      await import("../../src/cli/parallel-progress.js");
     captureStderr();
 
     const progress = createParallelProgress("sonnet");
@@ -469,7 +500,8 @@ describe("ParallelProgress", () => {
   });
 
   it("tracks per-app state correctly", async () => {
-    const { createParallelProgress } = await import("../../src/cli/parallel-progress.js");
+    const { createParallelProgress } =
+      await import("../../src/cli/parallel-progress.js");
     captureStderr();
 
     const progress = createParallelProgress("sonnet");
@@ -558,10 +590,14 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
 
   function stateIcon(state: AppState): string {
     switch (state) {
-      case "done": return chalk.green("✓");
-      case "failed": return chalk.red("✗");
-      case "queued": return chalk.dim("○");
-      default: return chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+      case "done":
+        return chalk.green("✓");
+      case "failed":
+        return chalk.red("✗");
+      case "queued":
+        return chalk.dim("○");
+      default:
+        return chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
     }
   }
 
@@ -572,20 +608,33 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     const inner = frameWidth - 2;
 
     function row(content: string): string {
-      return chalk.dim("│") + " " + padRight(content, inner - 2) + " " + chalk.dim("│");
+      return (
+        chalk.dim("│") +
+        " " +
+        padRight(content, inner - 2) +
+        " " +
+        chalk.dim("│")
+      );
     }
 
     const titleStr = " LLM Agents ";
     const topFill = inner - titleStr.length - 1;
-    const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
+    const top =
+      chalk.dim("┌─") +
+      chalk.bold(titleStr) +
+      chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
     const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
 
     // Header: spinner + "Modeling N apps" + overall elapsed
-    const spinner = chalk.cyan(SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length]);
+    const spinner = chalk.cyan(
+      SPINNER_FRAMES[spinnerIdx % SPINNER_FRAMES.length],
+    );
     const headerText = statusText || `Modeling ${apps.length} apps`;
     const elapsed = overallElapsed();
     const maxHeaderText = inner - 10 - elapsed.length;
-    const headerRow = row(`${spinner} ${truncate(headerText, maxHeaderText)}  ${chalk.dim(elapsed)}`);
+    const headerRow = row(
+      `${spinner} ${truncate(headerText, maxHeaderText)}  ${chalk.dim(elapsed)}`,
+    );
 
     // Model line
     const modelRow = row(`  Model: ${llmModel}`);
@@ -617,16 +666,18 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
     const appRows = visibleApps.map((app) => {
       const icon = stateIcon(app.state);
       const id = truncate(app.id, MAX_APP_ID_LEN);
-      const stateLabel = app.state === "done" || app.state === "failed"
-        ? app.state
-        : app.state === "queued"
-          ? "queued"
-          : `${app.state}...`;
-      const elapsedStr = app.elapsed != null
-        ? formatElapsed(app.elapsed)
-        : app.startTime != null
-          ? formatElapsed(Date.now() - app.startTime)
-          : "";
+      const stateLabel =
+        app.state === "done" || app.state === "failed"
+          ? app.state
+          : app.state === "queued"
+            ? "queued"
+            : `${app.state}...`;
+      const elapsedStr =
+        app.elapsed != null
+          ? formatElapsed(app.elapsed)
+          : app.startTime != null
+            ? formatElapsed(Date.now() - app.startTime)
+            : "";
       // Layout: "  icon id          state    elapsed"
       const leftPart = `${icon} ${padRight(id, MAX_APP_ID_LEN + 2)}${stateLabel}`;
       if (elapsedStr) {
@@ -704,7 +755,8 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       entry.state = state;
 
       if (!isTTY) {
-        const elapsedStr = entry.elapsed != null ? ` (${formatElapsed(entry.elapsed)})` : "";
+        const elapsedStr =
+          entry.elapsed != null ? ` (${formatElapsed(entry.elapsed)})` : "";
         printLine(`${appId}: ${state}${elapsedStr}`);
         return;
       }
@@ -737,11 +789,20 @@ export function createParallelProgress(llmModel: string): ParallelProgress {
       const inner = frameWidth - 2;
       const titleStr = " LLM Agents ";
       const topFill = inner - titleStr.length - 1;
-      const top = chalk.dim("┌─") + chalk.bold(titleStr) + chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
+      const top =
+        chalk.dim("┌─") +
+        chalk.bold(titleStr) +
+        chalk.dim("─".repeat(Math.max(0, topFill)) + "┐");
       const bottom = chalk.dim("└" + "─".repeat(inner) + "┘");
-      const summaryRow = chalk.dim("│") + " " +
-        padRight(`${chalk.green("✓")} ${truncate(summary, inner - 8)}  ${chalk.dim(elapsed)}`, inner - 2) +
-        " " + chalk.dim("│");
+      const summaryRow =
+        chalk.dim("│") +
+        " " +
+        padRight(
+          `${chalk.green("✓")} ${truncate(summary, inner - 8)}  ${chalk.dim(elapsed)}`,
+          inner - 2,
+        ) +
+        " " +
+        chalk.dim("│");
 
       let output = "";
       if (prevTotalRows > 0) {
@@ -774,6 +835,7 @@ git commit -m "feat: add ParallelProgress component for multi-app LLM status"
 ### Task 4: Wire ParallelProgress and AgentLogger into parallel-model-builder
 
 **Files:**
+
 - Modify: `src/core/parallel-model-builder.ts:1-30,154-161,168-180,241-276,394-397,438-440,499-540`
 - Modify: `src/core/llm-model-builder.ts:1028-1036`
 - Modify: `src/cli/commands/model.ts:51-102`
@@ -792,12 +854,16 @@ it("creates its own UI when onStatus/onProgress are omitted", async () => {
     supportsTools: false,
     isAvailable: () => true,
     generate: async (_sys, _user, _model, _onProgress) => {
-      return stringifyYaml(makePartialModel({
-        system: { name: "Test", description: "test" },
-        containers: [{ id: "c1", name: "C1", description: "c", technology: "java" }],
-        components: [],
-        relationships: [],
-      }));
+      return stringifyYaml(
+        makePartialModel({
+          system: { name: "Test", description: "test" },
+          containers: [
+            { id: "c1", name: "C1", description: "c", technology: "java" },
+          ],
+          components: [],
+          relationships: [],
+        }),
+      );
     },
   };
 
@@ -837,28 +903,30 @@ import { AgentLogger } from "./agent-logger.js";
 At the start of `buildModelParallel()` (after line 172, the destructuring), add log directory setup:
 
 ```typescript
-  // -- Log directory setup --
-  const logsDir = path.join(".diagram-docs", "logs");
-  const manageOwnUI = !onStatus && !onProgress;
+// -- Log directory setup --
+const logsDir = path.join(".diagram-docs", "logs");
+const manageOwnUI = !onStatus && !onProgress;
 
-  if (manageOwnUI) {
-    // Create logs directory, clearing previous run's logs
-    fs.rmSync(logsDir, { recursive: true, force: true });
-    fs.mkdirSync(logsDir, { recursive: true });
+if (manageOwnUI) {
+  // Create logs directory, clearing previous run's logs
+  fs.rmSync(logsDir, { recursive: true, force: true });
+  fs.mkdirSync(logsDir, { recursive: true });
 
-    // Warn if not gitignored
-    try {
-      const gitignorePath = ".gitignore";
-      if (fs.existsSync(gitignorePath)) {
-        const gitignore = fs.readFileSync(gitignorePath, "utf-8");
-        if (!gitignore.includes(".diagram-docs/logs")) {
-          process.stderr.write(
-            chalk.yellow("Warning: .diagram-docs/logs/ is not in .gitignore\n"),
-          );
-        }
+  // Warn if not gitignored
+  try {
+    const gitignorePath = ".gitignore";
+    if (fs.existsSync(gitignorePath)) {
+      const gitignore = fs.readFileSync(gitignorePath, "utf-8");
+      if (!gitignore.includes(".diagram-docs/logs")) {
+        process.stderr.write(
+          chalk.yellow("Warning: .diagram-docs/logs/ is not in .gitignore\n"),
+        );
       }
-    } catch { /* best-effort check */ }
+    }
+  } catch {
+    /* best-effort check */
   }
+}
 ```
 
 Also add `import chalk from "chalk";` at the top of the file (after the existing imports).
@@ -868,19 +936,19 @@ Also add `import chalk from "chalk";` at the top of the file (after the existing
 After the log directory setup (still inside `buildModelParallel`, before Step 1 "Split"), add:
 
 ```typescript
-  // -- UI setup --
-  const progress = manageOwnUI
-    ? createParallelProgress(config.llm.model)
-    : undefined;
+// -- UI setup --
+const progress = manageOwnUI
+  ? createParallelProgress(config.llm.model)
+  : undefined;
 ```
 
 After the split step (line ~192), add:
 
 ```typescript
-  if (progress) {
-    const appIds = slices.map((s) => s.applications[0].id);
-    progress.setApps(appIds);
-  }
+if (progress) {
+  const appIds = slices.map((s) => s.applications[0].id);
+  progress.setApps(appIds);
+}
 ```
 
 - [ ] **Step 5: Wire per-app progress and logging into buildOneApp**
@@ -888,27 +956,28 @@ After the split step (line ~192), add:
 Inside `buildOneApp()` (after `const app = slice.applications[0];` on line ~248), create the logger and progress closure:
 
 ```typescript
-      const logger = manageOwnUI
-        ? new AgentLogger(
-            path.join(logsDir, `agent-${safeAppId}.log`),
-            { appId: app.id, model: config.llm.model, provider: provider.name },
-          )
-        : undefined;
+const logger = manageOwnUI
+  ? new AgentLogger(path.join(logsDir, `agent-${safeAppId}.log`), {
+      appId: app.id,
+      model: config.llm.model,
+      provider: provider.name,
+    })
+  : undefined;
 
-      const appStartTime = Date.now();
+const appStartTime = Date.now();
 
-      // Per-app progress closure: updates both ParallelProgress and AgentLogger
-      let currentAppState: "queued" | "thinking" | "output" = "queued";
-      const appOnProgress = manageOwnUI
-        ? (event: ProgressEvent) => {
-            logger!.logProgress(event);
-            const newState = event.kind;
-            if (newState !== currentAppState) {
-              currentAppState = newState;
-              progress!.updateApp(app.id, newState);
-            }
-          }
-        : onProgress;
+// Per-app progress closure: updates both ParallelProgress and AgentLogger
+let currentAppState: "queued" | "thinking" | "output" = "queued";
+const appOnProgress = manageOwnUI
+  ? (event: ProgressEvent) => {
+      logger!.logProgress(event);
+      const newState = event.kind;
+      if (newState !== currentAppState) {
+        currentAppState = newState;
+        progress!.updateApp(app.id, newState);
+      }
+    }
+  : onProgress;
 ```
 
 Move `const safeAppId = ...` before the logger creation (it's already there at line ~253).
@@ -916,55 +985,55 @@ Move `const safeAppId = ...` before the logger creation (it's already there at l
 Replace the `onStatus?.(\`Modeling app ...\`)` call with:
 
 ```typescript
-      if (progress) {
-        progress.updateApp(app.id, "thinking");
-      } else {
-        onStatus?.(`Modeling app ${index + 1}/${slices.length}: ${app.id}`);
-      }
+if (progress) {
+  progress.updateApp(app.id, "thinking");
+} else {
+  onStatus?.(`Modeling app ${index + 1}/${slices.length}: ${app.id}`);
+}
 ```
 
 Log prompts to the agent logger after building them:
 
 ```typescript
-      // After building systemPrompt and userMessage (line ~267):
-      logger?.logPrompt(systemPrompt, userMessage);
+// After building systemPrompt and userMessage (line ~267):
+logger?.logPrompt(systemPrompt, userMessage);
 ```
 
 Replace `onProgress` in the `provider.generate()` call (line ~275) with `appOnProgress`:
 
 ```typescript
-        textOutput = await provider.generate(
-          systemPrompt,
-          userMessage,
-          config.llm.model,
-          appOnProgress,
-        );
+textOutput = await provider.generate(
+  systemPrompt,
+  userMessage,
+  config.llm.model,
+  appOnProgress,
+);
 ```
 
 After successful `buildOneApp` return (before `return { model: ..., fellBack: false }`), log done:
 
 ```typescript
-        await logger?.logDone(Date.now() - appStartTime);
+await logger?.logDone(Date.now() - appStartTime);
 ```
 
 In the recoverable error catch block (line ~379-387), update both progress and logger:
 
 ```typescript
-      if (isRecoverableLLMError(err)) {
-        const msg = err instanceof Error ? err.message : String(err);
-        warn(
-          `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic seed`,
-        );
-        progress?.updateApp(slice.applications[0].id, "failed");
-        await logger?.logFailed(msg, Date.now() - appStartTime);
-        return { model: seed, fellBack: true };
-      }
+if (isRecoverableLLMError(err)) {
+  const msg = err instanceof Error ? err.message : String(err);
+  warn(
+    `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic seed`,
+  );
+  progress?.updateApp(slice.applications[0].id, "failed");
+  await logger?.logFailed(msg, Date.now() - appStartTime);
+  return { model: seed, fellBack: true };
+}
 ```
 
 After successful `buildOneApp` return, also update progress to "done":
 
 ```typescript
-        progress?.updateApp(app.id, "done");
+progress?.updateApp(app.id, "done");
 ```
 
 - [ ] **Step 6: Collapse ParallelProgress after all apps finish, before synthesis**
@@ -972,11 +1041,11 @@ After successful `buildOneApp` return, also update progress to "done":
 After `Promise.allSettled` and result collection (around line ~440 where "Merging per-app models..." is), add:
 
 ```typescript
-  // Collapse parallel progress display
-  const doneCount = results.filter((r) => !r.fellBack).length;
-  if (progress) {
-    progress.stop(`${doneCount}/${slices.length} apps modeled`);
-  }
+// Collapse parallel progress display
+const doneCount = results.filter((r) => !r.fellBack).length;
+if (progress) {
+  progress.stop(`${doneCount}/${slices.length} apps modeled`);
+}
 ```
 
 - [ ] **Step 7: Create Frame for synthesis pass when managing own UI**
@@ -984,23 +1053,25 @@ After `Promise.allSettled` and result collection (around line ~440 where "Mergin
 In the synthesis section (around line ~499), replace the direct `onStatus`/`onProgress` usage with a synthesis frame:
 
 ```typescript
-  // Before the synthesis try block:
-  const synthesisFrame = manageOwnUI ? createFrame("LLM Synthesis") : undefined;
-  const synthesisOnStatus = manageOwnUI
-    ? (status: string) => synthesisFrame!.update([
+// Before the synthesis try block:
+const synthesisFrame = manageOwnUI ? createFrame("LLM Synthesis") : undefined;
+const synthesisOnStatus = manageOwnUI
+  ? (status: string) =>
+      synthesisFrame!.update([
         { text: status, spinner: true },
         { text: `Model: ${config.llm.model}` },
       ])
-    : onStatus;
-  const synthesisOnProgress = manageOwnUI
-    ? (event: ProgressEvent) => synthesisFrame!.log(event.line, event.final, event.kind)
-    : onProgress;
+  : onStatus;
+const synthesisOnProgress = manageOwnUI
+  ? (event: ProgressEvent) =>
+      synthesisFrame!.log(event.line, event.final, event.kind)
+  : onProgress;
 ```
 
 Replace `onStatus?.("Running synthesis pass...");` with:
 
 ```typescript
-  synthesisOnStatus?.("Running synthesis pass...");
+synthesisOnStatus?.("Running synthesis pass...");
 ```
 
 Replace `onProgress` in the synthesis `provider.generate()` call with `synthesisOnProgress`.
@@ -1008,16 +1079,16 @@ Replace `onProgress` in the synthesis `provider.generate()` call with `synthesis
 After the synthesis try/catch block completes, stop the frame:
 
 ```typescript
-  if (synthesisFrame) {
-    synthesisFrame.stop([{ text: "Synthesis complete" }]);
-  }
+if (synthesisFrame) {
+  synthesisFrame.stop([{ text: "Synthesis complete" }]);
+}
 ```
 
 In the synthesis catch block (the recoverable error branch), also stop the frame:
 
 ```typescript
-  // Inside the catch (isRecoverableLLMError(err)) block for synthesis:
-  synthesisFrame?.stop([{ text: `Synthesis failed: ${msg}` }]);
+// Inside the catch (isRecoverableLLMError(err)) block for synthesis:
+synthesisFrame?.stop([{ text: `Synthesis failed: ${msg}` }]);
 ```
 
 - [ ] **Step 8: Fix llm-model-builder.ts to pass undefined callbacks in multi-app mode**
@@ -1061,51 +1132,52 @@ This ensures `onStatus` and `onProgress` are `undefined` when the caller (model.
 In `src/cli/commands/model.ts`, replace the LLM block (lines 64-87) with mode detection:
 
 ```typescript
-      const isSeedMode = !existingModelYaml?.trim();
-      const isParallel = isSeedMode && rawStructure.applications.length > 1;
+const isSeedMode = !existingModelYaml?.trim();
+const isParallel = isSeedMode && rawStructure.applications.length > 1;
 
-      if (isParallel) {
-        // Multi-app: parallel builder manages its own UI internally
-        const model = await buildModelWithLLM({
-          rawStructure,
-          config,
-          configYaml,
-          existingModelYaml,
-        });
-        yamlContent = serializeModel(model);
+if (isParallel) {
+  // Multi-app: parallel builder manages its own UI internally
+  const model = await buildModelWithLLM({
+    rawStructure,
+    config,
+    configYaml,
+    existingModelYaml,
+  });
+  yamlContent = serializeModel(model);
 
-        fs.writeFileSync(outputPath, yamlContent, "utf-8");
-        console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
-      } else {
-        // Single-app / update: use Frame as before
-        const frame = createFrame("LLM Agent");
-        const model = await buildModelWithLLM({
-          rawStructure,
-          config,
-          configYaml,
-          existingModelYaml,
-          onStatus(status) {
-            frame.update([
-              { text: status, spinner: true },
-              { text: `Model: ${config.llm.model}` },
-            ]);
-          },
-          onProgress({ line, final: done, kind }) {
-            frame.log(line, done, kind);
-          },
-        });
-        frame.stop([
-          {
-            text: `${model.containers.length} container(s), ` +
-              `${model.components.length} component(s), ` +
-              `${model.relationships.length} relationship(s)`,
-          },
-        ]);
-        yamlContent = serializeModel(model);
+  fs.writeFileSync(outputPath, yamlContent, "utf-8");
+  console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+} else {
+  // Single-app / update: use Frame as before
+  const frame = createFrame("LLM Agent");
+  const model = await buildModelWithLLM({
+    rawStructure,
+    config,
+    configYaml,
+    existingModelYaml,
+    onStatus(status) {
+      frame.update([
+        { text: status, spinner: true },
+        { text: `Model: ${config.llm.model}` },
+      ]);
+    },
+    onProgress({ line, final: done, kind }) {
+      frame.log(line, done, kind);
+    },
+  });
+  frame.stop([
+    {
+      text:
+        `${model.containers.length} container(s), ` +
+        `${model.components.length} component(s), ` +
+        `${model.relationships.length} relationship(s)`,
+    },
+  ]);
+  yamlContent = serializeModel(model);
 
-        fs.writeFileSync(outputPath, yamlContent, "utf-8");
-        console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
-      }
+  fs.writeFileSync(outputPath, yamlContent, "utf-8");
+  console.error(`Model written to ${path.relative(process.cwd(), outputPath)}`);
+}
 ```
 
 The `outputPath` and `yamlContent` write logic is duplicated here for clarity — both branches need to write the file. The `outputPath` variable is already defined above (line 59).

@@ -37,7 +37,8 @@ export function generateSubmoduleDocs(
     if (override?.exclude) continue;
 
     // Use the container's path if available, otherwise fall back to applicationId
-    const appPath = container.path ?? container.applicationId.replace(/-/g, "/");
+    const appPath =
+      container.path ?? container.applicationId.replace(/-/g, "/");
     const docsDir = override?.docsDir ?? subCfg.docsDir;
     const outputDir = path.join(repoRoot, appPath, docsDir, "architecture");
     const generatedDir = path.join(outputDir, "_generated");
@@ -88,7 +89,10 @@ export function generateSubmoduleDocs(
       "# Architecture Model Fragment — auto-generated, do not edit\n" +
       "# This is a subset of the root model scoped to this application.\n\n" +
       stringifyYaml(fragment(model, container.id), { lineWidth: 120 });
-    writeIfChanged(path.join(outputDir, "architecture-model.yaml"), fragmentContent);
+    writeIfChanged(
+      path.join(outputDir, "architecture-model.yaml"),
+      fragmentContent,
+    );
 
     results.push({
       containerId: container.id,
@@ -97,9 +101,7 @@ export function generateSubmoduleDocs(
       d2Files,
     });
 
-    console.error(
-      `Generated: ${path.relative(repoRoot, outputDir)}/`,
-    );
+    console.error(`Generated: ${path.relative(repoRoot, outputDir)}/`);
   }
 
   return results;

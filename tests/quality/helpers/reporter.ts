@@ -15,7 +15,8 @@ export function formatCorrectnessReport(report: CorrectnessReport): string {
   lines.push(`${"=".repeat(70)}`);
 
   for (const [category, metrics] of Object.entries(report.categories)) {
-    const status = metrics.f1 >= 0.95 ? "PASS" : metrics.f1 >= 0.8 ? "WARN" : "FAIL";
+    const status =
+      metrics.f1 >= 0.95 ? "PASS" : metrics.f1 >= 0.8 ? "WARN" : "FAIL";
     lines.push(
       `  [${status}] ${category}: P=${fmt(metrics.precision)} R=${fmt(metrics.recall)} F1=${fmt(metrics.f1)} (${metrics.matched}/${metrics.expected} matched, ${metrics.extra.length} extra)`,
     );
@@ -54,7 +55,9 @@ export function formatDriftReport(report: DriftReport): string {
   lines.push(`\n${"=".repeat(70)}`);
   lines.push(`DRIFT: ${report.scenario}`);
   lines.push(`${"=".repeat(70)}`);
-  lines.push(`  [${status}] Stability: ${fmt(report.stabilityScore)} | Line churn: ${fmt(report.lineChurn)} | ID changes: ${report.idChanges}`);
+  lines.push(
+    `  [${status}] Stability: ${fmt(report.stabilityScore)} | Line churn: ${fmt(report.lineChurn)} | ID changes: ${report.idChanges}`,
+  );
 
   if (report.renames.length > 0) {
     lines.push(`  Renames:`);
@@ -86,8 +89,12 @@ export function formatTokenReport(report: TokenReport): string {
   lines.push(`TOKEN EFFICIENCY: ${report.fixture}`);
   lines.push(`${"=".repeat(70)}`);
   lines.push(`  Pretty:  ${report.prettyTokens} tokens`);
-  lines.push(`  Compact: ${report.compactTokens} tokens (${fmt(report.compactSavings * 100)}% smaller)`);
-  lines.push(`  Entities: ${report.entityCount} | Tokens/entity: ${fmt(report.tokensPerEntity)}`);
+  lines.push(
+    `  Compact: ${report.compactTokens} tokens (${fmt(report.compactSavings * 100)}% smaller)`,
+  );
+  lines.push(
+    `  Entities: ${report.entityCount} | Tokens/entity: ${fmt(report.tokensPerEntity)}`,
+  );
 
   if (report.suggestions.length > 0) {
     lines.push(`\n  Suggestions:`);

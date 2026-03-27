@@ -16,8 +16,7 @@ export function computeSetMetrics(
   const extra = found.filter((f) => !expectedSet.has(f));
 
   const precision = found.length === 0 ? 1 : matched.length / found.length;
-  const recall =
-    expected.length === 0 ? 1 : matched.length / expected.length;
+  const recall = expected.length === 0 ? 1 : matched.length / expected.length;
   const f1 =
     precision + recall === 0
       ? 0
@@ -62,9 +61,7 @@ export function extractD2ShapeIds(d2Content: string): string[] {
     }
 
     // Connection: `a -> b` or `a.x -> b.y`
-    const connMatch = trimmed.match(
-      /^([a-z0-9_.-]+)\s*->\s*([a-z0-9_.-]+)/i,
-    );
+    const connMatch = trimmed.match(/^([a-z0-9_.-]+)\s*->\s*([a-z0-9_.-]+)/i);
     if (connMatch) {
       ids.add(connMatch[1].split(".")[0]);
       ids.add(connMatch[2].split(".")[0]);

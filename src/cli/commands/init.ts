@@ -1,6 +1,10 @@
 import { Command } from "commander";
 import * as path from "node:path";
-import { findConfigFile, writeDefaultConfig, updateConfigLLM } from "../../config/loader.js";
+import {
+  findConfigFile,
+  writeDefaultConfig,
+  updateConfigLLM,
+} from "../../config/loader.js";
 import { promptLLMSetup } from "../interactive-setup.js";
 
 export const initCommand = new Command("init")
