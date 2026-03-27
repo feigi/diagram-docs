@@ -53,3 +53,40 @@ export async function computeChecksum(
 
   return `sha256:${hash.digest("hex")}`;
 }
+
+/**
+ * Compute a checksum for a single project directory.
+ * Hashes all source files within the directory, in sorted order.
+ */
+export async function computeProjectChecksum(
+  projectDir: string,
+  exclude: string[],
+  configFingerprint?: string,
+): Promise<string> {
+  const hash = crypto.createHash("sha256");
+
+  if (configFingerprint) {
+    hash.update(configFingerprint);
+  }
+
+  const extPattern = `**/*.{${SOURCE_EXTENSIONS.join(",")}}`;
+
+  const files = await glob(extPattern, {
+    cwd: projectDir,
+    ignore: exclude,
+    nodir: true,
+  });
+
+  const sortedFiles = files.sort();
+  for (let i = 0; i < sortedFiles.length; i++) {
+    const file = sortedFiles[i];
+    const content = fs.readFileSync(path.join(projectDir, file), "utf-8");
+    hash.update(`${file}\n`);
+    hash.update(content);
+    if (i % 50 === 49) {
+      await new Promise((resolve) => setImmediate(resolve));
+    }
+  }
+
+  return `sha256:${hash.digest("hex")}`;
+}
