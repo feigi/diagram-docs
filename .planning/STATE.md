@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: completed
-stopped_at: Completed 02-01-PLAN.md
-last_updated: "2026-03-31T16:42:49.477Z"
-last_activity: "2026-03-31 — Completed 02-01: Config File Filtering Module"
+stopped_at: Completed 02-02-PLAN.md
+last_updated: "2026-03-31T16:47:48.687Z"
+last_activity: "2026-03-31 — Completed 02-02: Scan Pipeline Integration"
 progress:
   total_phases: 5
-  completed_phases: 1
+  completed_phases: 2
   total_plans: 3
-  completed_plans: 2
+  completed_plans: 3
   percent: 40
 ---
 
@@ -26,9 +26,9 @@ See: .planning/PROJECT.md (updated 2026-03-31)
 ## Current Position
 
 Phase: 2 of 5 (Content-Based File Filtering)
-Plan: 1 of 2 in current phase
-Status: Plan 01 complete
-Last activity: 2026-03-31 — Completed 02-01: Config File Filtering Module
+Plan: 2 of 2 in current phase
+Status: Phase 02 complete
+Last activity: 2026-03-31 — Completed 02-02: Scan Pipeline Integration
 
 Progress: [████░░░░░░] 40%
 
@@ -51,6 +51,7 @@ Progress: [████░░░░░░] 40%
 
 *Updated after each plan completion*
 | Phase 02-content-based-file-filtering P01 | 3m13s | 2 tasks | 3 files |
+| Phase 02 P02 | 2m22s | 2 tasks | 2 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,8 @@ Recent decisions affecting current work:
 - [Phase 02-01]: Kept files include full content for downstream pipeline consumption
 - [Phase 02-01]: Zero-signal apps get configFiles=undefined and signals=undefined (not empty arrays)
 - [Phase 02-01]: applyConfigFiltering mutates in-place and returns Map for reporting
+- [Phase 02]: Filtering placed after rollUpShellParents/matchCrossAppCoordinates — filters final app state
+- [Phase 02]: Verbose output uses stderr to keep stdout clean for JSON piping
 
 ### Pending Todos
 
@@ -82,6 +85,6 @@ None yet.
 
 ## Session Continuity
 
-Last session: 2026-03-31T16:42:49.474Z
-Stopped at: Completed 02-01-PLAN.md
+Last session: 2026-03-31T16:47:48.684Z
+Stopped at: Completed 02-02-PLAN.md
 Resume file: None
