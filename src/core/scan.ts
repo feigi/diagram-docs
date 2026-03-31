@@ -515,6 +515,7 @@ export async function runScanAll(options: {
       project,
       config,
       force,
+      verbose,
     });
 
     if (result.fromCache) {
