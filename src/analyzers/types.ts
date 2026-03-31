@@ -1,4 +1,5 @@
 import type { Config } from "../config/schema.js";
+import type { ConfigSignal } from "../core/config-signals.js";
 
 /** Raw scan output types */
 
@@ -31,6 +32,8 @@ export interface ScannedApplication {
   publishedAs?: string;
   /** Config/resource files included for LLM-based architecture analysis */
   configFiles?: Array<{ path: string; content: string }>;
+  /** Architecture signals detected in config file content */
+  signals?: ConfigSignal[];
 }
 
 export interface ScannedModule {
