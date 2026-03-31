@@ -135,7 +135,7 @@ export const pythonAnalyzer: LanguageAnalyzer = {
       buildFile = "setup.py";
 
     // Collect config files for LLM-based architecture analysis
-    const configFiles = collectConfigFiles(appPath, appPath);
+    const configFiles = collectConfigFiles(appPath, appPath, config.exclude);
 
     return {
       id: appId,

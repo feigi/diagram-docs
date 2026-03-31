@@ -20,6 +20,7 @@ export const configSchema = z.object({
           "**/*test*",
           "**/build/**",
           "**/*.worktree/**",
+          "**/*.worktrees/**",
           "**/.worktrees/**",
         ]),
       /** Patterns that override built-in excludes, forcing matched paths to be scanned. */

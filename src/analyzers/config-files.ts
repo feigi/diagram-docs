@@ -41,16 +41,18 @@ const MAX_FILE_SIZE = 10 * 1024;
 /**
  * Collect config files from a directory, returning paths relative to appPath.
  * Skips binary files, keystores, and files exceeding MAX_FILE_SIZE.
+ * Additional exclude patterns from the scan config are merged with the built-in list.
  */
 export function collectConfigFiles(
   dir: string,
   appPath: string,
+  exclude: string[] = [],
 ): Array<{ path: string; content: string }> {
   if (!fs.existsSync(dir)) return [];
 
   const files = globSync(CONFIG_GLOB, {
     cwd: dir,
-    ignore: EXCLUDE_PATTERNS,
+    ignore: [...EXCLUDE_PATTERNS, ...exclude],
     nodir: true,
   });
 

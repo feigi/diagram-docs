@@ -192,7 +192,7 @@ export const javaAnalyzer: LanguageAnalyzer = {
       path.join(appPath, "src", "main", "webapp", "WEB-INF"),
     ];
     const configFiles = resourceDirs.flatMap((dir) =>
-      collectConfigFiles(dir, appPath),
+      collectConfigFiles(dir, appPath, config.exclude),
     );
 
     return {

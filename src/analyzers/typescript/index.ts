@@ -177,7 +177,7 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
       : { external: [], internal: [] };
 
     // Collect config files
-    const configFiles = collectConfigFiles(appPath, appPath);
+    const configFiles = collectConfigFiles(appPath, appPath, config.exclude);
 
     return {
       id: appId,
