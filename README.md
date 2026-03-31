@@ -29,6 +29,8 @@ diagram-docs generate
 
 To render diagrams to SVG or PNG, install the [D2 CLI](https://d2lang.com/releases/install). Without it you still get `.d2` source files.
 
+SVG output includes interactive edge highlighting — click any arrow to highlight it, click again or anywhere else to deselect.
+
 ### LLM-enhanced modeling
 
 By default, if [Claude Code](https://claude.ai/download) or [GitHub Copilot CLI](https://docs.github.com/en/copilot/github-copilot-in-the-cli) is installed, diagram-docs uses it to produce richer descriptions, smarter component grouping, and more meaningful relationship labels. Without either, a deterministic rule-based builder is used. You can force deterministic mode:

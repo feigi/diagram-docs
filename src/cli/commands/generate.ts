@@ -45,6 +45,7 @@ import {
 } from "../../core/llm-model-builder.js";
 import { formatElapsed } from "../terminal-utils.js";
 import { promptLLMSetup } from "../interactive-setup.js";
+import { addEdgeInteractivity } from "../../generator/d2/svg-post-process.js";
 
 export const generateCommand = new Command("generate")
   .description("Generate D2 diagrams from an architecture model")
@@ -205,6 +206,12 @@ export const generateCommand = new Command("generate")
     }
 
     renderD2Files(d2Files, config);
+
+    // Post-process rendered SVGs to add interactive edge highlighting
+    if (config.output.format === "svg") {
+      postProcessSVGs(d2Files);
+    }
+
     console.error(`Done in ${formatElapsed(Date.now() - startTime)}.`);
   });
 
@@ -573,4 +580,24 @@ function writeIfChanged(filePath: string, content: string): boolean {
   }
   fs.writeFileSync(filePath, content, "utf-8");
   return true;
+}
+
+/**
+ * Post-process rendered SVG files to inject edge-click interactivity.
+ * Operates on the .svg counterpart of each .d2 source path.
+ */
+function postProcessSVGs(d2Files: string[]): void {
+  for (const d2Path of d2Files) {
+    const svgPath = d2Path.replace(/\.d2$/, ".svg");
+    if (!fs.existsSync(svgPath)) continue;
+
+    const original = fs.readFileSync(svgPath, "utf-8");
+    // Skip files already processed (idempotent)
+    if (original.includes("edge-active")) continue;
+
+    const processed = addEdgeInteractivity(original);
+    if (processed !== original) {
+      fs.writeFileSync(svgPath, processed, "utf-8");
+    }
+  }
 }
