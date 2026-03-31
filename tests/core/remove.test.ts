@@ -75,6 +75,63 @@ describe("collectRemovePaths — default (no --all)", () => {
     const result = await collectRemovePaths(tmpDir, configPath, config, false);
     expect(result).not.toContain(path.join(tmpDir, "docs/architecture"));
   });
+
+  it("includes submodule .diagram-docs dirs discovered from architecture-model.yaml", async () => {
+    const configPath = touch("diagram-docs.yaml");
+
+    const model = {
+      version: 1,
+      system: { name: "Test", description: "" },
+      actors: [],
+      containers: [
+        {
+          id: "svc-auth",
+          applicationId: "svc-auth",
+          name: "Auth",
+          path: "services/auth",
+          technology: "Node.js",
+          description: "",
+        },
+      ],
+    };
+    touch("architecture-model.yaml");
+    fs.writeFileSync(
+      path.join(tmpDir, "architecture-model.yaml"),
+      stringifyYaml(model),
+      "utf-8",
+    );
+
+    const subCacheDir = mkdir("services/auth/.diagram-docs");
+
+    const config = makeConfig();
+    const result = await collectRemovePaths(tmpDir, configPath, config, false);
+    expect(result).toContain(subCacheDir);
+  });
+
+  it("falls back to filesystem walk for submodule .diagram-docs dirs when model is absent", async () => {
+    const configPath = touch("diagram-docs.yaml");
+    const subCacheDir = mkdir("apps/worker/.diagram-docs");
+    // Place a marker file so glob can discover it
+    touch("apps/worker/.diagram-docs/raw-structure.json");
+
+    const config = makeConfig();
+    const result = await collectRemovePaths(tmpDir, configPath, config, false);
+    expect(result).toContain(subCacheDir);
+  });
+
+  it("does not duplicate root .diagram-docs when submodule dirs also exist", async () => {
+    const configPath = touch("diagram-docs.yaml");
+    const rootCacheDir = mkdir(".diagram-docs");
+    const subCacheDir = mkdir("apps/api/.diagram-docs");
+    touch("apps/api/.diagram-docs/raw-structure.json");
+
+    const config = makeConfig();
+    const result = await collectRemovePaths(tmpDir, configPath, config, false);
+    expect(result).toContain(rootCacheDir);
+    expect(result).toContain(subCacheDir);
+    // Root should appear exactly once (deduplication)
+    expect(result.filter((p) => p === rootCacheDir)).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

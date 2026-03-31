@@ -16,7 +16,8 @@ import { architectureModelSchema } from "./model.js";
 /**
  * Collect all paths that `remove` should delete.
  *
- * Default (all=false): tool traces only — config file, scan cache, root model.
+ * Default (all=false): tool traces only — config file, scan cache (root + all
+ * submodule .diagram-docs dirs), root model.
  * With all=true: also diagram output dirs (main + submodule architecture folders).
  *
  * Submodule discovery reads architecture-model.yaml (if present) for exact
@@ -41,6 +42,13 @@ export async function collectRemovePaths(
   // 3. architecture-model.yaml — root model (read submodule paths from it first if --all)
   const modelPath = path.join(configDir, "architecture-model.yaml");
 
+  // 4. submodule .diagram-docs/ dirs (always removed — they are tool traces)
+  const submoduleCacheDirs = await discoverSubmoduleCacheDirs(
+    configDir,
+    modelPath,
+  );
+  candidates.push(...submoduleCacheDirs);
+
   if (all) {
     // Discover submodule architecture dirs before the model is marked for deletion
     const submoduleDirs = await discoverSubmoduleDirs(
@@ -49,16 +57,55 @@ export async function collectRemovePaths(
       config,
     );
 
-    // 4. {config.output.dir}/ — entire output folder
+    // 5. {config.output.dir}/ — entire output folder
     candidates.push(path.resolve(configDir, config.output.dir));
 
-    // 5. submodule {appPath}/{docsDir}/architecture/ dirs
+    // 6. submodule {appPath}/{docsDir}/architecture/ dirs
     candidates.push(...submoduleDirs);
   }
 
   candidates.push(modelPath);
 
   return [...new Set(candidates)].filter((p) => fs.existsSync(p)).sort();
+}
+
+/**
+ * Discover per-application .diagram-docs cache dirs.
+ *
+ * Strategy:
+ * 1. Read architecture-model.yaml and derive {appPath}/.diagram-docs paths.
+ * 2. Fallback: glob for all .diagram-docs directories in the project tree.
+ */
+async function discoverSubmoduleCacheDirs(
+  configDir: string,
+  modelPath: string,
+): Promise<string[]> {
+  if (fs.existsSync(modelPath)) {
+    try {
+      const raw = fs.readFileSync(modelPath, "utf-8");
+      const model = architectureModelSchema.parse(parseYaml(raw));
+      return model.containers.map((container) => {
+        const appPath =
+          container.path ?? container.applicationId.replace(/-/g, "/");
+        return path.join(configDir, appPath, ".diagram-docs");
+      });
+    } catch {
+      // Fall through to filesystem walk
+    }
+  }
+
+  const ignoreOpts = {
+    cwd: configDir,
+    ignore: ["**/node_modules/**", "**/.git/**"],
+    absolute: true,
+    dot: true,
+  };
+
+  const matches = await glob("**/.diagram-docs", ignoreOpts);
+
+  // Exclude the root .diagram-docs (already handled as a direct candidate)
+  const rootCache = path.join(configDir, ".diagram-docs");
+  return matches.filter((m) => m !== rootCache);
 }
 
 /**
