@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadConfig } from "../../config/loader.js";
+import { loadConfig, computeEffectiveExcludes } from "../../config/loader.js";
 import {
   runScan,
   ScanError,
@@ -79,16 +79,28 @@ export const scanCommand = new Command("scan")
         rawStructure = result.scan;
       } else {
         // Root-level scan: discover all projects and scan them
-        const discovered = await discoverApplications(configDir, config, {
-          onSearching: (language, pattern) => {
-            console.error(`  Searching: ${language} (${pattern})`);
+        const effectiveExcludes = computeEffectiveExcludes(
+          config,
+          getRegistry(),
+        );
+        const effectiveConfig = {
+          ...config,
+          scan: { ...config.scan, exclude: effectiveExcludes },
+        };
+        const discovered = await discoverApplications(
+          configDir,
+          effectiveConfig,
+          {
+            onSearching: (language, pattern) => {
+              console.error(`  Searching: ${language} (${pattern})`);
+            },
+            onFound: (app) => {
+              console.error(
+                `  Found: ${app.path} (${app.type}: ${app.buildFile})`,
+              );
+            },
           },
-          onFound: (app) => {
-            console.error(
-              `  Found: ${app.path} (${app.type}: ${app.buildFile})`,
-            );
-          },
-        });
+        );
 
         if (discovered.length === 0) {
           // Fall back to legacy single-scan for non-monorepo projects

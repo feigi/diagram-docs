@@ -97,8 +97,6 @@ export function matchCrossAppCoordinates(
 export function rollUpShellParents(
   applications: ScannedApplication[],
 ): ScannedApplication[] {
-  const byPath = new Map(applications.map((a) => [a.path, a]));
-
   // Identify non-root shell parents
   const shellParents = applications.filter(
     (app) =>

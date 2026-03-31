@@ -227,11 +227,7 @@ describe("rollUpShellParents", () => {
 
     // Root stays, children stay — no roll-up
     expect(result).toHaveLength(3);
-    expect(result.map((a) => a.id).sort()).toEqual([
-      "root",
-      "svc-a",
-      "svc-b",
-    ]);
+    expect(result.map((a) => a.id).sort()).toEqual(["root", "svc-a", "svc-b"]);
   });
 
   it("only considers direct children (one level deeper)", () => {
