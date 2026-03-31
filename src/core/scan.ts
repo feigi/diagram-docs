@@ -23,6 +23,7 @@ import { computeEffectiveExcludes } from "../config/loader.js";
 import type { Config } from "../config/schema.js";
 import type { RawStructure, ScannedApplication } from "../analyzers/types.js";
 import type { DiscoveredProject } from "./discovery.js";
+import { applyConfigFiltering } from "./config-filter.js";
 
 export class ScanError extends Error {
   constructor(message: string) {
@@ -35,6 +36,7 @@ export interface ScanOptions {
   rootDir: string;
   config: Config;
   force?: boolean;
+  verbose?: boolean;
 }
 
 export interface ScanResult {
@@ -204,6 +206,7 @@ export async function runScan({
   rootDir,
   config,
   force,
+  verbose,
 }: ScanOptions): Promise<ScanResult> {
   // Compute effective excludes from config + all analyzer defaults
   const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
@@ -341,6 +344,22 @@ export async function runScan({
   // Roll up shell parent projects (e.g. Gradle multi-module roots with no code)
   const rolledUpApplications = rollUpShellParents(applications);
 
+  // Filter config files by architecture signals (Phase 2)
+  const filterResults = applyConfigFiltering(rolledUpApplications);
+  if (verbose) {
+    for (const [, result] of filterResults) {
+      for (const file of result.kept) {
+        const count = result.signals.filter(
+          (s) => s.filePath === file.path,
+        ).length;
+        console.error(`  Kept: ${file.path} (${count} signals)`);
+      }
+      for (const droppedPath of result.dropped) {
+        console.error(`  Filtered: ${droppedPath} (0 signals)`);
+      }
+    }
+  }
+
   const rawStructure: RawStructure = {
     version: 1,
     scannedAt: new Date().toISOString(),
@@ -382,8 +401,9 @@ export async function runProjectScan(options: {
   project: DiscoveredProject;
   config: Config;
   force?: boolean;
+  verbose?: boolean;
 }): Promise<ProjectScanResult> {
-  const { rootDir, project, config, force } = options;
+  const { rootDir, project, config, force, verbose } = options;
   const projectAbsPath = path.resolve(rootDir, project.path);
 
   const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
@@ -440,6 +460,22 @@ export async function runProjectScan(options: {
     }
   }
 
+  // Filter config files by architecture signals (Phase 2)
+  const filterResults = applyConfigFiltering([result]);
+  if (verbose) {
+    for (const [, filterResult] of filterResults) {
+      for (const file of filterResult.kept) {
+        const count = filterResult.signals.filter(
+          (s) => s.filePath === file.path,
+        ).length;
+        console.error(`  Kept: ${file.path} (${count} signals)`);
+      }
+      for (const droppedPath of filterResult.dropped) {
+        console.error(`  Filtered: ${droppedPath} (0 signals)`);
+      }
+    }
+  }
+
   const scan: RawStructure = {
     version: 1,
     scannedAt: new Date().toISOString(),
@@ -462,12 +498,13 @@ export async function runScanAll(options: {
   config: Config;
   projects: DiscoveredProject[];
   force?: boolean;
+  verbose?: boolean;
 }): Promise<{
   rawStructure: RawStructure;
   projectResults: ProjectScanResult[];
   staleProjects: DiscoveredProject[];
 }> {
-  const { rootDir, config, projects, force } = options;
+  const { rootDir, config, projects, force, verbose } = options;
   const projectResults: ProjectScanResult[] = [];
   const staleProjects: DiscoveredProject[] = [];
 
@@ -495,6 +532,22 @@ export async function runScanAll(options: {
 
   // Cross-app coordinate matching
   matchCrossAppCoordinates(allApplications);
+
+  // Filter config files by architecture signals (Phase 2)
+  const filterResults = applyConfigFiltering(allApplications);
+  if (verbose) {
+    for (const [, filterResult] of filterResults) {
+      for (const file of filterResult.kept) {
+        const count = filterResult.signals.filter(
+          (s) => s.filePath === file.path,
+        ).length;
+        console.error(`  Kept: ${file.path} (${count} signals)`);
+      }
+      for (const droppedPath of filterResult.dropped) {
+        console.error(`  Filtered: ${droppedPath} (0 signals)`);
+      }
+    }
+  }
 
   const combinedChecksum = allApplications
     .map((a) => a.id)
