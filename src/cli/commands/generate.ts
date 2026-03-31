@@ -52,7 +52,8 @@ export const generateCommand = new Command("generate")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
   .option("--submodules", "Generate per-folder docs for each application")
   .option("--deterministic", "Use deterministic model builder (skip LLM)")
-  .action(async (options) => {
+  .action(async (options, command) => {
+    const globalOpts = command.optsWithGlobals();
     const startTime = Date.now();
     const {
       config: initialConfig,
@@ -83,6 +84,7 @@ export const generateCommand = new Command("generate")
       configDir,
       config,
       options.deterministic,
+      globalOpts.debug,
     );
 
     const outputDir = path.resolve(configDir, config.output.dir);
@@ -217,6 +219,7 @@ async function resolveModel(
   configDir: string,
   config: Config,
   deterministic?: boolean,
+  debug?: boolean,
 ) {
   // 1. Explicit path — trust the user
   if (modelPath) {
@@ -304,6 +307,7 @@ async function resolveModel(
     deterministic,
     cachedModels,
     libraryMeta,
+    debug,
   );
 
   // 7. Cache per-container model fragments
@@ -384,6 +388,7 @@ async function buildModelFromScan(
     language: string;
     path: string;
   }>,
+  debug?: boolean,
 ) {
   if (deterministic) {
     console.error("Building model (deterministic)...");
@@ -403,6 +408,7 @@ async function buildModelFromScan(
       configYaml,
       cachedModels,
       libraries,
+      debug,
     });
     return model;
   } catch (err) {

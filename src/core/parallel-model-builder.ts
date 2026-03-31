@@ -29,6 +29,7 @@ import chalk from "chalk";
 import { createParallelProgress } from "../cli/parallel-progress.js";
 import { createFrame } from "../cli/frame.js";
 import { AgentLogger } from "./agent-logger.js";
+import { DebugLogWriter, prepareDebugDir } from "./debug-logger.js";
 
 /** Result of building a single app — tracks whether it degraded to deterministic mode. */
 interface AppBuildResult {
@@ -173,6 +174,7 @@ export interface ParallelBuildOptions {
   readonly onProgress?: (event: ProgressEvent) => void;
   /** Pre-built models for unchanged containers — skips LLM for these. */
   readonly cachedModels?: Map<string, ArchitectureModel>;
+  readonly debug?: boolean;
 }
 
 /**
@@ -183,9 +185,19 @@ export interface ParallelBuildOptions {
 export async function buildModelParallel(
   options: ParallelBuildOptions,
 ): Promise<ArchitectureModel> {
-  const { rawStructure, config, configYaml, provider, onStatus, onProgress } =
-    options;
+  const {
+    rawStructure,
+    config,
+    configYaml,
+    provider,
+    onStatus,
+    onProgress,
+    debug,
+  } = options;
   const concurrency = config.llm.concurrency;
+
+  // -- Debug directory setup --
+  const debugDir = debug ? prepareDebugDir() : undefined;
 
   // -- Log directory setup --
   const logsDir = path.join(".diagram-docs", "logs");
@@ -316,6 +328,14 @@ export async function buildModelParallel(
         })
       : undefined;
 
+    const debugWriter = debugDir
+      ? new DebugLogWriter({
+          dir: debugDir,
+          label: `app-${safeAppId}`,
+          metadata: { provider: provider.name, model: config.llm.model },
+        })
+      : undefined;
+
     const appStartTime = Date.now();
 
     try {
@@ -354,6 +374,14 @@ export async function buildModelParallel(
       });
 
       logger?.logPrompt(systemPrompt, userMessage);
+      debugWriter?.logPrompt(systemPrompt, userMessage);
+
+      const debugWrappedProgress = debugWriter
+        ? (event: ProgressEvent) => {
+            debugWriter.logProgress(event);
+            appOnProgress?.(event);
+          }
+        : appOnProgress;
 
       let textOutput: string;
       try {
@@ -361,7 +389,7 @@ export async function buildModelParallel(
           systemPrompt,
           userMessage,
           config.llm.model,
-          appOnProgress,
+          debugWrappedProgress,
         );
       } catch (err) {
         cleanupFile(outputPath);
@@ -468,6 +496,7 @@ export async function buildModelParallel(
         ) as ArchitectureModel;
         progress?.updateApp(app.id, "done");
         logger?.logDone(Date.now() - appStartTime);
+        debugWriter?.finish(Date.now() - appStartTime);
         return { model, fellBack: false };
       } catch (schemaErr) {
         throw new LLMOutputError(
@@ -482,6 +511,7 @@ export async function buildModelParallel(
         const msg = err instanceof Error ? err.message : String(err);
         progress?.updateApp(slice.applications[0].id, "failed");
         logger?.logFailed(msg, Date.now() - appStartTime);
+        debugWriter?.finishWithError(msg, Date.now() - appStartTime);
         warn(
           `App ${slice.applications[0].id}: LLM failed (${msg}), using deterministic anchor`,
         );
@@ -490,6 +520,10 @@ export async function buildModelParallel(
       // Non-recoverable: still mark UI as failed so the app doesn't appear stuck
       progress?.updateApp(app.id, "failed");
       logger?.logFailed(
+        err instanceof Error ? err.message : String(err),
+        Date.now() - appStartTime,
+      );
+      debugWriter?.finishWithError(
         err instanceof Error ? err.message : String(err),
         Date.now() - appStartTime,
       );
@@ -671,6 +705,14 @@ export async function buildModelParallel(
   const preSynthActors = [...merged.actors];
   const preSynthExternalSystems = [...merged.externalSystems];
   const preSynthRelationships = merged.relationships.map((r) => ({ ...r }));
+  const synthesisDebugWriter = debugDir
+    ? new DebugLogWriter({
+        dir: debugDir,
+        label: "synthesis",
+        metadata: { provider: provider.name, model: config.llm.model },
+      })
+    : undefined;
+  const synthesisStartTime = Date.now();
   try {
     const crossAppRels = merged.relationships.filter((r) => {
       const srcContainer = containerIds.has(r.sourceId)
@@ -700,13 +742,22 @@ export async function buildModelParallel(
       crossAppRelationships: crossAppRels,
     });
 
+    synthesisDebugWriter?.logPrompt(synthesisSystem, synthesisUser);
+
+    const debugWrappedSynthesisProgress = synthesisDebugWriter
+      ? (event: ProgressEvent) => {
+          synthesisDebugWriter.logProgress(event);
+          synthesisOnProgress?.(event);
+        }
+      : synthesisOnProgress;
+
     let synthesisOutput: string;
     try {
       synthesisOutput = await provider.generate(
         synthesisSystem,
         synthesisUser,
         config.llm.model,
-        synthesisOnProgress,
+        debugWrappedSynthesisProgress,
       );
     } catch (err) {
       if (err instanceof LLMCallError || err instanceof LLMOutputError)
@@ -821,9 +872,14 @@ export async function buildModelParallel(
       }
     }
     synthesisSucceeded = true;
+    synthesisDebugWriter?.finish(Date.now() - synthesisStartTime);
   } catch (err) {
     if (isRecoverableLLMError(err)) {
       const msg = err instanceof Error ? err.message : String(err);
+      synthesisDebugWriter?.finishWithError(
+        msg,
+        Date.now() - synthesisStartTime,
+      );
       synthesisFrame?.stop([{ text: `Synthesis failed: ${msg}` }]);
       warn(
         `Synthesis failed (${msg}): rolling back system name/description to config defaults, ` +
@@ -836,6 +892,10 @@ export async function buildModelParallel(
       merged.externalSystems = preSynthExternalSystems;
       merged.relationships = preSynthRelationships;
     } else {
+      synthesisDebugWriter?.finishWithError(
+        err instanceof Error ? err.message : String(err),
+        Date.now() - synthesisStartTime,
+      );
       synthesisFrame?.stop([{ text: "Synthesis error" }]);
       throw err;
     }

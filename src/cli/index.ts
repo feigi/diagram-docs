@@ -14,7 +14,8 @@ program
   .description(
     "C4 architecture diagram generator — static analysis to D2 format",
   )
-  .version("0.1.0");
+  .version("0.1.0")
+  .option("--debug", "Enable debug output (e.g., per-LLM-call log files)");
 
 program.addCommand(initCommand);
 program.addCommand(scanCommand);

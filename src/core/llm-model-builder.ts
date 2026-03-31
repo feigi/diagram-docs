@@ -14,6 +14,7 @@ import type {
   ArchitectureModel,
 } from "../analyzers/types.js";
 import { architectureModelSchema } from "./model.js";
+import { DebugLogWriter, prepareDebugDir } from "./debug-logger.js";
 import { buildModel } from "./model-builder.js";
 
 // ---------------------------------------------------------------------------
@@ -1265,6 +1266,7 @@ export interface BuildModelWithLLMOptions {
     language: string;
     path: string;
   }>;
+  readonly debug?: boolean;
 }
 
 export async function buildModelWithLLM(
@@ -1301,6 +1303,7 @@ export async function buildModelWithLLM(
           : undefined,
         onProgress: options.onProgress,
         cachedModels: options.cachedModels,
+        debug: options.debug,
       });
     } catch (err) {
       if (
@@ -1352,15 +1355,43 @@ export async function buildModelWithLLM(
 
   // 3. Call LLM
   emit(`Waiting for ${resolvedProvider.name} response...`);
+
+  // Debug logging for the update-mode LLM call
+  const debugDir = options.debug ? prepareDebugDir() : undefined;
+  const debugWriter = debugDir
+    ? new DebugLogWriter({
+        dir: debugDir,
+        label: "update",
+        metadata: {
+          provider: resolvedProvider.name,
+          model: options.config.llm.model,
+        },
+      })
+    : undefined;
+  debugWriter?.logPrompt(systemPrompt, userMessage);
+
+  const callStartTime = Date.now();
+  const wrappedOnProgress = debugWriter
+    ? (event: ProgressEvent) => {
+        debugWriter.logProgress(event);
+        options.onProgress?.(event);
+      }
+    : options.onProgress;
+
   let textOutput: string;
   try {
     textOutput = await resolvedProvider.generate(
       systemPrompt,
       userMessage,
       options.config.llm.model,
-      options.onProgress,
+      wrappedOnProgress,
     );
+    debugWriter?.finish(Date.now() - callStartTime);
   } catch (err) {
+    debugWriter?.finishWithError(
+      err instanceof Error ? err.message : String(err),
+      Date.now() - callStartTime,
+    );
     if (outputPath) {
       try {
         fs.unlinkSync(outputPath);

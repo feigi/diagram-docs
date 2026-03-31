@@ -74,6 +74,7 @@ architecture-model.yaml        # Architecture model — edit to refine diagrams
 .diagram-docs/
   manifest.yaml              # Checksums for incremental builds
   raw-structure.json         # Scan output
+  debug/                     # Per-LLM-call logs (--debug flag)
 
 docs/architecture/
   c1-context.d2              # User-facing — scaffolded once, never overwritten
@@ -232,7 +233,14 @@ diagram-docs model                   # Build model → architecture-model.yaml
 diagram-docs model --llm             # Build model with LLM refinement
 diagram-docs generate                # Full pipeline
 diagram-docs generate --deterministic  # Full pipeline, no LLM
+diagram-docs --debug generate        # Full pipeline with LLM debug logs
 ```
+
+### Global flags
+
+| Flag      | Description                                                                                                               |
+| --------- | ------------------------------------------------------------------------------------------------------------------------- |
+| `--debug` | Write a log file per LLM call to `.diagram-docs/debug/` with system prompt, user message, thinking (indented), and output |
 
 ### Flags
 

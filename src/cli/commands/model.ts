@@ -33,7 +33,8 @@ export const modelCommand = new Command("model")
     "--llm",
     "Use LLM to generate model (requires Claude Code or Copilot CLI)",
   )
-  .action(async (options) => {
+  .action(async (options, command) => {
+    const globalOpts = command.optsWithGlobals();
     const {
       config: initialConfig,
       configDir,
@@ -89,6 +90,7 @@ export const modelCommand = new Command("model")
             config,
             configYaml,
             existingModelYaml,
+            debug: globalOpts.debug,
           });
           yamlContent = serializeModel(model);
 
@@ -104,6 +106,7 @@ export const modelCommand = new Command("model")
             config,
             configYaml,
             existingModelYaml,
+            debug: globalOpts.debug,
             onStatus(status) {
               frame.update([
                 { text: status, spinner: true },
