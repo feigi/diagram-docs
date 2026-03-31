@@ -26,7 +26,10 @@
           "id": { "type": "string" },
           "path": { "type": "string" },
           "name": { "type": "string" },
-          "language": { "type": "string", "enum": ["java", "python", "c"] },
+          "language": {
+            "type": "string",
+            "enum": ["java", "python", "c", "typescript"]
+          },
           "buildFile": { "type": "string" },
           "modules": {
             "type": "array",
@@ -102,6 +105,38 @@
               "properties": {
                 "path": { "type": "string" },
                 "content": { "type": "string" }
+              }
+            }
+          },
+          "signals": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "type",
+                "value",
+                "line",
+                "matchedPattern",
+                "filePath"
+              ],
+              "properties": {
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "database-url",
+                    "message-broker",
+                    "cache-endpoint",
+                    "search-endpoint",
+                    "object-storage",
+                    "service-endpoint",
+                    "server-config",
+                    "env-infrastructure"
+                  ]
+                },
+                "value": { "type": "string" },
+                "line": { "type": "integer" },
+                "matchedPattern": { "type": "string" },
+                "filePath": { "type": "string" }
               }
             }
           }
