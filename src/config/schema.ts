@@ -15,7 +15,13 @@ export const configSchema = z.object({
       include: z.array(z.string()).default(["**"]),
       exclude: z
         .array(z.string())
-        .default(["**/*test*/**", "**/*test*", "**/build/**"]),
+        .default([
+          "**/*test*/**",
+          "**/*test*",
+          "**/build/**",
+          "**/*.worktree/**",
+          "**/.worktrees/**",
+        ]),
       /** Patterns that override built-in excludes, forcing matched paths to be scanned. */
       forceInclude: z.array(z.string()).default([]),
     })
