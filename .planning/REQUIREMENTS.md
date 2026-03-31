@@ -4,7 +4,7 @@
 
 ### Config Signal Detection
 - [x] **SIG-01**: Scanner detects architecture signals in config file contents (URLs, hostnames, Kafka topics, DB connection strings, service endpoints)
-- [ ] **SIG-02**: Files without any architecture signals are excluded from `raw-structure.json`
+- [x] **SIG-02**: Files without any architecture signals are excluded from `raw-structure.json`
 - [x] **SIG-03**: Signal detection is deterministic — identical input always produces identical output
 
 ### Content Extraction
@@ -40,7 +40,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | SIG-01 | Phase 1: Signal Detection Engine | Complete |
-| SIG-02 | Phase 2: Content-Based File Filtering | Pending |
+| SIG-02 | Phase 2: Content-Based File Filtering | Complete |
 | SIG-03 | Phase 1: Signal Detection Engine | Complete |
 | EXT-01 | Phase 3: Architecture-Relevant Line Extraction | Pending |
 | EXT-02 | Phase 3: Architecture-Relevant Line Extraction | Pending |
