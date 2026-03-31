@@ -41,10 +41,11 @@ Plans:
   1. Running `diagram-docs scan` produces a `raw-structure.json` with no zero-signal config files (e.g., logback-spring.xml, data fixture JSONs are gone)
   2. Config files containing architecture signals (connection URLs, topic names, endpoints) are still present in output
   3. The configFiles array in raw-structure.json is noticeably smaller for projects with many non-signal files
-**Plans**: TBD
+**Plans**: 2 plans
 
 Plans:
-- [ ] 02-01: TBD
+- [ ] 02-01-PLAN.md — Config filter module with TDD (filterConfigFiles, applyConfigFiltering, tests, JSON schema update)
+- [ ] 02-02-PLAN.md — Pipeline integration + CLI verbose flag (wire filtering into runScan/runProjectScan/runScanAll, --verbose)
 
 ### Phase 3: Architecture-Relevant Line Extraction
 **Goal**: Signal-bearing config files include only their architecture-relevant lines, not full file contents
