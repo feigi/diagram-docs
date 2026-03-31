@@ -40,6 +40,7 @@ export const scanCommand = new Command("scan")
   .option("-c, --config <path>", "Path to diagram-docs.yaml")
   .option("-o, --output <path>", "Output file path (default: stdout)")
   .option("--force", "Skip cache and re-scan everything")
+  .option("-v, --verbose", "Show detailed filtering decisions")
   .action(async (options) => {
     const { config, configDir } = loadConfig(options.config);
     const cwd = process.cwd();
@@ -68,6 +69,7 @@ export const scanCommand = new Command("scan")
           },
           config,
           force: options.force,
+          verbose: options.verbose,
         });
 
         if (result.fromCache) {
@@ -108,6 +110,7 @@ export const scanCommand = new Command("scan")
             rootDir: configDir,
             config,
             force: options.force,
+            verbose: options.verbose,
           });
 
           if (fromCache) {
@@ -123,6 +126,7 @@ export const scanCommand = new Command("scan")
             config,
             projects: discovered,
             force: options.force,
+            verbose: options.verbose,
           });
 
           rawStructure = combined;
