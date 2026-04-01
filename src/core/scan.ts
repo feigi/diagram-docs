@@ -24,6 +24,7 @@ import type { Config } from "../config/schema.js";
 import type { RawStructure, ScannedApplication } from "../analyzers/types.js";
 import type { DiscoveredProject } from "./discovery.js";
 import { applyConfigFiltering } from "./config-filter.js";
+import { applyConfigExtraction } from "./config-extraction.js";
 
 export class ScanError extends Error {
   constructor(message: string) {
@@ -360,6 +361,18 @@ export async function runScan({
     }
   }
 
+  // Extract only signal-bearing lines from config files (Phase 3)
+  const extractionResults = applyConfigExtraction(rolledUpApplications);
+  if (verbose) {
+    for (const [, appResults] of extractionResults) {
+      for (const r of appResults) {
+        console.error(
+          `  Extracted: ${r.filePath} (${r.originalLineCount} → ${r.extractedSignalCount} lines)`,
+        );
+      }
+    }
+  }
+
   const rawStructure: RawStructure = {
     version: 1,
     scannedAt: new Date().toISOString(),
@@ -476,6 +489,18 @@ export async function runProjectScan(options: {
     }
   }
 
+  // Extract only signal-bearing lines from config files (Phase 3)
+  const extractionResults = applyConfigExtraction([result]);
+  if (verbose) {
+    for (const [, appResults] of extractionResults) {
+      for (const r of appResults) {
+        console.error(
+          `  Extracted: ${r.filePath} (${r.originalLineCount} → ${r.extractedSignalCount} lines)`,
+        );
+      }
+    }
+  }
+
   const scan: RawStructure = {
     version: 1,
     scannedAt: new Date().toISOString(),
@@ -546,6 +571,18 @@ export async function runScanAll(options: {
       }
       for (const droppedPath of filterResult.dropped) {
         console.error(`  Filtered: ${droppedPath} (0 signals)`);
+      }
+    }
+  }
+
+  // Extract only signal-bearing lines from config files (Phase 3)
+  const extractionResults = applyConfigExtraction(allApplications);
+  if (verbose) {
+    for (const [, appResults] of extractionResults) {
+      for (const r of appResults) {
+        console.error(
+          `  Extracted: ${r.filePath} (${r.originalLineCount} → ${r.extractedSignalCount} lines)`,
+        );
       }
     }
   }
