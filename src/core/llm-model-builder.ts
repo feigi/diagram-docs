@@ -920,14 +920,14 @@ relationships:
   - spring-kafka/kafka-clients → Apache Kafka
   - spring-data-redis/jedis/lettuce → Redis
   - elasticsearch/opensearch → Search engine
-- Check configFiles for connection strings and service URLs.
+- Check the config field for pre-extracted connection strings and service URLs (presented as dotted key-value pairs with # filename provenance comments).
 - Include any externalSystems declared in the config.
 
 ### Relationships
 - Every relationship needs a specific, descriptive label — never just "Uses".
   - Good: "Reads user profiles from", "Publishes order events to"
   - Bad: "Uses", "Calls", "Connects to"
-- Derive from: internalImports, module imports, externalDependencies, configFiles.
+- Derive from: internalImports, module imports, externalDependencies, config.
 - Include both container-level and component-level relationships.
 - Include technology where known (JDBC, HTTP/REST, gRPC, Kafka).
 
@@ -942,7 +942,7 @@ A machine-generated scaffold is provided. IDs and module mappings are already co
 - Rewrite all descriptions to be specific and meaningful (remove generic "X module" placeholders).
 - Regroup components by architectural role (Controller, Service, Repository, Entity, etc.) rather than the 1:1 module mapping. Aim for 5-15 components per container.
 - Infer actors from code evidence (REST controllers → User, message consumers → upstream system).
-- Detect external systems from externalDependencies and configFiles (databases, brokers, caches).
+- Detect external systems from externalDependencies and config (databases, brokers, caches).
 - Replace all "Uses" relationship labels with specific verb phrases ("Reads user profiles from", "Publishes events to").
 - Add technology to relationships where known (JDBC, HTTP/REST, Kafka).
 - Keep all applicationId and moduleId references valid — every module must appear in exactly one component.
@@ -955,30 +955,75 @@ A machine-generated scaffold is provided. IDs and module mappings are already co
 }
 
 /**
+ * Condense config file data into a flat text block of dotted key-value pairs.
+ * Used by both summarizeForLLM() and buildPerAppUserMessage() to replace the
+ * configFiles array with a single config string field.
+ *
+ * - Each file's entries are preceded by a `# filename` provenance comment
+ * - Files sorted alphabetically by path (deterministic)
+ * - Deduplicates by full line (key+value) across files — first file wins
+ * - Returns undefined when no config data (omit field from JSON)
+ */
+function condenseConfigForLLM(app: ScannedApplication): string | undefined {
+  if (!app.configFiles?.length) return undefined;
+
+  // Sort files alphabetically by path for deterministic first-file-wins dedup
+  const sortedFiles = [...app.configFiles].sort((a, b) =>
+    a.path.localeCompare(b.path),
+  );
+
+  const seen = new Set<string>();
+  const sections: string[] = [];
+
+  for (const file of sortedFiles) {
+    const lines = file.content.split("\n").filter((l) => l.trim().length > 0);
+    const uniqueLines: string[] = [];
+
+    for (const line of lines) {
+      const normalized = line.trim();
+      if (seen.has(normalized)) continue;
+      seen.add(normalized);
+      uniqueLines.push(normalized);
+    }
+
+    if (uniqueLines.length > 0) {
+      // Use basename for provenance comment
+      const filename = file.path.split("/").pop() ?? file.path;
+      sections.push(`# ${filename}\n${uniqueLines.join("\n")}`);
+    }
+  }
+
+  return sections.length > 0 ? sections.join("\n") : undefined;
+}
+
+/**
  * Create a lean version of raw-structure for LLM consumption.
  * Strips verbose per-module fields (files, exports, imports, non-annotation metadata) to fit context windows.
  */
 function summarizeForLLM(rawStructure: RawStructure): unknown {
   return {
     version: rawStructure.version,
-    applications: rawStructure.applications.map((app) => ({
-      id: app.id,
-      path: app.path,
-      name: app.name,
-      language: app.language,
-      modules: app.modules.map((mod) => {
-        const annotations = mod.metadata["annotations"];
-        return {
-          id: mod.id,
-          name: mod.name,
-          ...(annotations ? { annotations } : {}),
-        };
-      }),
-      externalDependencies: app.externalDependencies.map((d) => d.name),
-      internalImports: app.internalImports,
-      ...(app.publishedAs ? { publishedAs: app.publishedAs } : {}),
-      ...(app.configFiles?.length ? { configFiles: app.configFiles } : {}),
-    })),
+    applications: rawStructure.applications.map((app) => {
+      const config = condenseConfigForLLM(app);
+      return {
+        id: app.id,
+        path: app.path,
+        name: app.name,
+        language: app.language,
+        modules: app.modules.map((mod) => {
+          const annotations = mod.metadata["annotations"];
+          return {
+            id: mod.id,
+            name: mod.name,
+            ...(annotations ? { annotations } : {}),
+          };
+        }),
+        externalDependencies: app.externalDependencies.map((d) => d.name),
+        internalImports: app.internalImports,
+        ...(app.publishedAs ? { publishedAs: app.publishedAs } : {}),
+        ...(config ? { config } : {}),
+      };
+    }),
   };
 }
 
@@ -1045,6 +1090,7 @@ export function buildPerAppUserMessage(options: {
   outputPath?: string;
 }): string {
   // Build single-app raw structure summary (same format as summarizeForLLM but for one app)
+  const config = condenseConfigForLLM(options.app);
   const singleAppStructure = {
     version: 1,
     applications: [
@@ -1068,9 +1114,7 @@ export function buildPerAppUserMessage(options: {
         ...(options.app.publishedAs
           ? { publishedAs: options.app.publishedAs }
           : {}),
-        ...(options.app.configFiles?.length
-          ? { configFiles: options.app.configFiles }
-          : {}),
+        ...(config ? { config } : {}),
       },
     ],
   };

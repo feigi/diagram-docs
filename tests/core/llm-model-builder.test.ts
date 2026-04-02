@@ -203,10 +203,11 @@ describe("summarizeForLLM config condensation (via buildUserMessage)", () => {
     const parsed = parseJsonFromMessage(message);
     const config: string = parsed.applications[0].config;
 
-    // Sorted alphabetically: a-config.yml comes first
-    expect(config.indexOf("# a-config.yml")).toBeLessThan(
-      config.indexOf("# z-config.yml"),
-    );
+    // Sorted alphabetically: a-config.yml comes first and wins dedup
+    expect(config).toContain("# a-config.yml");
+
+    // z-config.yml section is omitted because all its lines were deduplicated
+    expect(config).not.toContain("# z-config.yml");
 
     // Deduplicated: db.url appears once
     const occurrences = config.split("db.url: same-value").length - 1;
