@@ -6,12 +6,11 @@ import {
   loadConfig,
   writeDefaultConfig,
   updateConfigLLM,
-  computeEffectiveExcludes,
+  buildEffectiveConfig,
 } from "../../config/loader.js";
 import { loadModel } from "../../core/model.js";
 import { buildModel } from "../../core/model-builder.js";
 import { discoverApplications } from "../../core/discovery.js";
-import { getRegistry } from "../../analyzers/registry.js";
 import {
   readProjectCache,
   writeProjectModel,
@@ -234,11 +233,7 @@ async function resolveModel(
   }
 
   // 2. Discover and classify projects
-  const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
-  const effectiveConfig = {
-    ...config,
-    scan: { ...config.scan, exclude: effectiveExcludes },
-  };
+  const effectiveConfig = buildEffectiveConfig(config);
   const discovered = await discoverApplications(configDir, effectiveConfig, {
     onSearching: (language, pattern) => {
       console.error(`  Searching: ${language} (${pattern})`);
@@ -259,7 +254,7 @@ async function resolveModel(
   // 3. Per-project scan with caching
   const { rawStructure, projectResults, staleProjects } = await runScanAll({
     rootDir: configDir,
-    config,
+    config: effectiveConfig,
     projects: discovered,
   });
 

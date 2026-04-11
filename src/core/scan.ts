@@ -16,10 +16,10 @@ import {
   writeProjectScan,
   isProjectStale,
 } from "./per-project-cache.js";
-import { getRegistry, getAnalyzer } from "../analyzers/registry.js";
+import { getAnalyzer } from "../analyzers/registry.js";
 import { slugify } from "./slugify.js";
 import { SPINNER_FRAMES, SPINNER_INTERVAL } from "../cli/terminal-utils.js";
-import { computeEffectiveExcludes } from "../config/loader.js";
+import { buildEffectiveConfig } from "../config/loader.js";
 import type { Config } from "../config/schema.js";
 import type { RawStructure, ScannedApplication } from "../analyzers/types.js";
 import type { DiscoveredProject } from "./discovery.js";
@@ -209,12 +209,8 @@ export async function runScan({
   force,
   verbose,
 }: ScanOptions): Promise<ScanResult> {
-  // Compute effective excludes from config + all analyzer defaults
-  const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
-  const effectiveConfig: Config = {
-    ...config,
-    scan: { ...config.scan, exclude: effectiveExcludes },
-  };
+  const effectiveConfig = buildEffectiveConfig(config);
+  const effectiveExcludes = effectiveConfig.scan.exclude;
 
   // Discover applications
   console.error("Discovering applications...");
@@ -419,11 +415,12 @@ export async function runProjectScan(options: {
   const { rootDir, project, config, force, verbose } = options;
   const projectAbsPath = path.resolve(rootDir, project.path);
 
-  const effectiveExcludes = computeEffectiveExcludes(config, getRegistry());
+  const effectiveConfig = buildEffectiveConfig(config);
+  const effectiveExcludes = effectiveConfig.scan.exclude;
 
   const configFingerprint = JSON.stringify({
     exclude: effectiveExcludes,
-    abstraction: config.abstraction,
+    abstraction: effectiveConfig.abstraction,
   });
 
   const checksum = await computeProjectChecksum(
@@ -448,7 +445,7 @@ export async function runProjectScan(options: {
 
   const scanConfig = {
     exclude: effectiveExcludes,
-    abstraction: config.abstraction,
+    abstraction: effectiveConfig.abstraction,
   };
 
   const result = await analyzer.analyze(projectAbsPath, scanConfig);

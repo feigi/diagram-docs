@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { configSchema, type Config } from "./schema.js";
 import { humanizeName } from "../core/humanize.js";
+import { getRegistry } from "../analyzers/registry.js";
 import type { LanguageAnalyzer } from "../analyzers/types.js";
 
 const CONFIG_FILENAMES = ["diagram-docs.yaml", "diagram-docs.yml"];
@@ -144,4 +145,21 @@ export function computeEffectiveExcludes(
 
   const forceInclude = new Set(config.scan.forceInclude);
   return [...combined].filter((p) => !forceInclude.has(p));
+}
+
+/**
+ * Build a Config with `scan.exclude` replaced by the fully-resolved effective
+ * excludes (user patterns + analyzer defaults − forceInclude). Use this at the
+ * boundary between CLI/orchestration code and any consumer that reads
+ * `config.scan.exclude` — so the effective set is computed exactly once per
+ * command invocation and flows through the rest of the pipeline explicitly.
+ */
+export function buildEffectiveConfig(config: Config): Config {
+  return {
+    ...config,
+    scan: {
+      ...config.scan,
+      exclude: computeEffectiveExcludes(config, getRegistry()),
+    },
+  };
 }
