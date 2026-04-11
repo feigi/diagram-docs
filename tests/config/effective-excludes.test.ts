@@ -133,6 +133,7 @@ describe("analyzer defaultExcludes", () => {
     // Universal
     expect(result).toContain("**/*test*/**");
     expect(result).toContain("**/*.worktree/**");
+    expect(result).toContain("**/*.worktrees/**");
     expect(result).toContain("**/.worktrees/**");
     // Python
     expect(result).toContain("**/venv/**");
