@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadConfig, computeEffectiveExcludes } from "../../config/loader.js";
+import { loadConfig, buildEffectiveConfig } from "../../config/loader.js";
 import {
   runScan,
   ScanError,
@@ -81,14 +81,7 @@ export const scanCommand = new Command("scan")
         rawStructure = result.scan;
       } else {
         // Root-level scan: discover all projects and scan them
-        const effectiveExcludes = computeEffectiveExcludes(
-          config,
-          getRegistry(),
-        );
-        const effectiveConfig = {
-          ...config,
-          scan: { ...config.scan, exclude: effectiveExcludes },
-        };
+        const effectiveConfig = buildEffectiveConfig(config);
         const discovered = await discoverApplications(
           configDir,
           effectiveConfig,
@@ -123,7 +116,7 @@ export const scanCommand = new Command("scan")
         } else {
           const { rawStructure: combined } = await runScanAll({
             rootDir: configDir,
-            config,
+            config: effectiveConfig,
             projects: discovered,
             force: options.force,
             verbose: options.verbose,
