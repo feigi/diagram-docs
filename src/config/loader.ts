@@ -149,17 +149,22 @@ export function computeEffectiveExcludes(
 
 /**
  * Build a Config with `scan.exclude` replaced by the fully-resolved effective
- * excludes (user patterns + analyzer defaults − forceInclude). Use this at the
- * boundary between CLI/orchestration code and any consumer that reads
- * `config.scan.exclude` — so the effective set is computed exactly once per
- * command invocation and flows through the rest of the pipeline explicitly.
+ * excludes (user patterns + analyzer defaults − forceInclude). Call this once
+ * at the CLI boundary and thread the result through the pipeline so downstream
+ * consumers of `config.scan.exclude` see the effective set.
+ *
+ * `analyzers` defaults to the global registry; callers (typically tests) may
+ * inject a specific list to decouple from registry state.
  */
-export function buildEffectiveConfig(config: Config): Config {
+export function buildEffectiveConfig(
+  config: Config,
+  analyzers: LanguageAnalyzer[] = getRegistry(),
+): Config {
   return {
     ...config,
     scan: {
       ...config.scan,
-      exclude: computeEffectiveExcludes(config, getRegistry()),
+      exclude: computeEffectiveExcludes(config, analyzers),
     },
   };
 }

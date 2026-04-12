@@ -43,6 +43,7 @@ export const scanCommand = new Command("scan")
   .option("-v, --verbose", "Show detailed filtering decisions")
   .action(async (options) => {
     const { config, configDir } = loadConfig(options.config);
+    const effectiveConfig = buildEffectiveConfig(config);
     const cwd = process.cwd();
 
     try {
@@ -67,7 +68,7 @@ export const scanCommand = new Command("scan")
             analyzerId: buildInfo.analyzerId,
             type: "container", // Default; classification happens at discovery
           },
-          config,
+          config: effectiveConfig,
           force: options.force,
           verbose: options.verbose,
         });
@@ -81,7 +82,6 @@ export const scanCommand = new Command("scan")
         rawStructure = result.scan;
       } else {
         // Root-level scan: discover all projects and scan them
-        const effectiveConfig = buildEffectiveConfig(config);
         const discovered = await discoverApplications(
           configDir,
           effectiveConfig,
@@ -101,7 +101,7 @@ export const scanCommand = new Command("scan")
           // Fall back to legacy single-scan for non-monorepo projects
           const { rawStructure: legacyResult, fromCache } = await runScan({
             rootDir: configDir,
-            config,
+            config: effectiveConfig,
             force: options.force,
             verbose: options.verbose,
           });
