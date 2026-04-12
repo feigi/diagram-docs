@@ -9,6 +9,7 @@ import {
   runScanAll,
 } from "../../core/scan.js";
 import { discoverApplications } from "../../core/discovery.js";
+import { resolveConfig } from "../../core/cascading-config.js";
 import { getRegistry } from "../../analyzers/registry.js";
 
 // Re-export for backward compatibility with existing tests
@@ -43,8 +44,13 @@ export const scanCommand = new Command("scan")
   .option("-v, --verbose", "Show detailed filtering decisions")
   .action(async (options) => {
     const { config, configDir } = loadConfig(options.config);
-    const effectiveConfig = buildEffectiveConfig(config);
     const cwd = process.cwd();
+
+    // When --config is explicit, use that config everywhere.
+    // Otherwise, resolve per-project cascading config.
+    const resolveProjectEffectiveConfig = options.config
+      ? () => buildEffectiveConfig(config)
+      : (absPath: string) => buildEffectiveConfig(resolveConfig(absPath));
 
     try {
       // Check if we're in a project subdirectory (has a build file)
@@ -55,7 +61,7 @@ export const scanCommand = new Command("scan")
       let rawStructure;
 
       if (isProjectDir) {
-        // Single-project scan from a container/library directory
+        // Single-project scan — resolve cascading config for this directory
         const relPath = path.relative(configDir, cwd);
         console.error(`Scanning project: ${relPath}`);
 
@@ -68,7 +74,7 @@ export const scanCommand = new Command("scan")
             analyzerId: buildInfo.analyzerId,
             type: "container", // Default; classification happens at discovery
           },
-          config: effectiveConfig,
+          config: resolveProjectEffectiveConfig(cwd),
           force: options.force,
           verbose: options.verbose,
         });
@@ -82,9 +88,10 @@ export const scanCommand = new Command("scan")
         rawStructure = result.scan;
       } else {
         // Root-level scan: discover all projects and scan them
+        const rootEffective = buildEffectiveConfig(config);
         const discovered = await discoverApplications(
           configDir,
-          effectiveConfig,
+          rootEffective,
           {
             onSearching: (language, pattern) => {
               console.error(`  Searching: ${language} (${pattern})`);
@@ -101,7 +108,7 @@ export const scanCommand = new Command("scan")
           // Fall back to legacy single-scan for non-monorepo projects
           const { rawStructure: legacyResult, fromCache } = await runScan({
             rootDir: configDir,
-            config: effectiveConfig,
+            config: rootEffective,
             force: options.force,
             verbose: options.verbose,
           });
@@ -116,8 +123,9 @@ export const scanCommand = new Command("scan")
         } else {
           const { rawStructure: combined } = await runScanAll({
             rootDir: configDir,
-            config: effectiveConfig,
+            config: rootEffective,
             projects: discovered,
+            getProjectConfig: resolveProjectEffectiveConfig,
             force: options.force,
             verbose: options.verbose,
           });
