@@ -536,7 +536,8 @@ export async function runScanAll(options: {
   projectResults: ProjectScanResult[];
   staleProjects: DiscoveredProject[];
 }> {
-  const { rootDir, config, projects, getProjectConfig, force, verbose } = options;
+  const { rootDir, config, projects, getProjectConfig, force, verbose } =
+    options;
   const projectResults: ProjectScanResult[] = [];
   const staleProjects: DiscoveredProject[] = [];
 
