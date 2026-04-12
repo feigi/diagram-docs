@@ -11,6 +11,7 @@ import {
 import { loadModel } from "../../core/model.js";
 import { buildModel } from "../../core/model-builder.js";
 import { discoverApplications } from "../../core/discovery.js";
+import { resolveConfig } from "../../core/cascading-config.js";
 import {
   readProjectCache,
   writeProjectModel,
@@ -85,6 +86,7 @@ export const generateCommand = new Command("generate")
       config,
       options.deterministic,
       globalOpts.debug,
+      !!options.config,
     );
 
     const outputDir = path.resolve(configDir, config.output.dir);
@@ -226,6 +228,7 @@ async function resolveModel(
   config: Config,
   deterministic?: boolean,
   debug?: boolean,
+  explicitConfig?: boolean,
 ) {
   // 1. Explicit path — trust the user
   if (modelPath) {
@@ -251,11 +254,15 @@ async function resolveModel(
   const containers = discovered.filter((d) => d.type === "container");
   const libraries = discovered.filter((d) => d.type === "library");
 
-  // 3. Per-project scan with caching
+  // 3. Per-project scan with caching (cascading per-project config)
+  const getProjectConfig = explicitConfig
+    ? undefined
+    : (absPath: string) => buildEffectiveConfig(resolveConfig(absPath));
   const { rawStructure, projectResults, staleProjects } = await runScanAll({
     rootDir: configDir,
     config: effectiveConfig,
     projects: discovered,
+    getProjectConfig,
   });
 
   const staleContainers = staleProjects.filter((p) => p.type === "container");

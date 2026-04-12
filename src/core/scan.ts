@@ -520,11 +520,15 @@ export async function runProjectScan(options: {
 /**
  * Scan all projects from root, using per-project caching.
  * Returns combined RawStructure + per-project results.
+ *
+ * When `getProjectConfig` is provided, each project's config is resolved
+ * individually (cascading config). Otherwise `config` is used for all projects.
  */
 export async function runScanAll(options: {
   rootDir: string;
   config: Config;
   projects: DiscoveredProject[];
+  getProjectConfig?: (projectAbsPath: string) => Config;
   force?: boolean;
   verbose?: boolean;
 }): Promise<{
@@ -532,16 +536,20 @@ export async function runScanAll(options: {
   projectResults: ProjectScanResult[];
   staleProjects: DiscoveredProject[];
 }> {
-  const { rootDir, config, projects, force, verbose } = options;
+  const { rootDir, config, projects, getProjectConfig, force, verbose } = options;
   const projectResults: ProjectScanResult[] = [];
   const staleProjects: DiscoveredProject[] = [];
 
   for (const project of projects) {
     console.error(`Scanning: ${project.path} (${project.type})`);
+    const projectAbsPath = path.resolve(rootDir, project.path);
+    const projectConfig = getProjectConfig
+      ? getProjectConfig(projectAbsPath)
+      : config;
     const result = await runProjectScan({
       rootDir,
       project,
-      config,
+      config: projectConfig,
       force,
       verbose,
     });
