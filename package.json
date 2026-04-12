@@ -34,7 +34,7 @@
     "@types/diff": "^7.0.2",
     "@types/node": "^22.13.0",
     "diff": "^8.0.3",
-    "eslint": "^9.19.0",
+    "eslint": "^10.0.0",
     "eslint-config-prettier": "^10.1.8",
     "gpt-tokenizer": "^3.4.0",
     "husky": "^9.1.7",
