@@ -1,18 +1,38 @@
 import { describe, it, expect } from "vitest";
-import {
-  buildEffectiveConfig,
-  computeEffectiveExcludes,
-} from "../../src/config/loader.js";
+import { buildEffectiveConfig } from "../../src/config/loader.js";
 import { configSchema } from "../../src/config/schema.js";
-import { getRegistry } from "../../src/analyzers/registry.js";
+import type { LanguageAnalyzer } from "../../src/analyzers/types.js";
+
+const stubAnalyzer = (
+  id: string,
+  defaultExcludes: string[],
+): LanguageAnalyzer =>
+  ({
+    id,
+    buildFilePatterns: [],
+    defaultExcludes,
+  }) as unknown as LanguageAnalyzer;
 
 describe("buildEffectiveConfig", () => {
-  it("returns a config whose scan.exclude equals computeEffectiveExcludes", () => {
-    const config = configSchema.parse({});
-    const effective = buildEffectiveConfig(config);
+  it("merges user excludes with analyzer defaults, honoring forceInclude", () => {
+    const config = configSchema.parse({
+      scan: {
+        exclude: ["custom/**"],
+        forceInclude: ["node_modules/keep/**"],
+      },
+    });
+    const analyzers = [
+      stubAnalyzer("java", ["target/**", "node_modules/**"]),
+      stubAnalyzer("python", ["venv/**", "node_modules/keep/**"]),
+    ];
+
+    const effective = buildEffectiveConfig(config, analyzers);
+
     expect(effective.scan.exclude).toEqual(
-      computeEffectiveExcludes(config, getRegistry()),
+      expect.arrayContaining(["custom/**", "target/**", "venv/**"]),
     );
+    expect(effective.scan.exclude).toContain("node_modules/**");
+    expect(effective.scan.exclude).not.toContain("node_modules/keep/**");
   });
 
   it("preserves the rest of config.scan (include, forceInclude)", () => {

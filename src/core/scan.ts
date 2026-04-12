@@ -19,7 +19,6 @@ import {
 import { getAnalyzer } from "../analyzers/registry.js";
 import { slugify } from "./slugify.js";
 import { SPINNER_FRAMES, SPINNER_INTERVAL } from "../cli/terminal-utils.js";
-import { buildEffectiveConfig } from "../config/loader.js";
 import type { Config } from "../config/schema.js";
 import type { RawStructure, ScannedApplication } from "../analyzers/types.js";
 import type { DiscoveredProject } from "./discovery.js";
@@ -203,13 +202,17 @@ function mergeIntoParent(
   };
 }
 
+/**
+ * Expects `config.scan.exclude` to already be the effective set
+ * (see `buildEffectiveConfig` in src/config/loader.ts). Callers compute it
+ * once at the CLI boundary and thread it through.
+ */
 export async function runScan({
   rootDir,
-  config,
+  config: effectiveConfig,
   force,
   verbose,
 }: ScanOptions): Promise<ScanResult> {
-  const effectiveConfig = buildEffectiveConfig(config);
   const effectiveExcludes = effectiveConfig.scan.exclude;
 
   // Discover applications
@@ -404,6 +407,10 @@ export interface ProjectScanResult {
 
 /**
  * Scan a single project, using per-project cache.
+ *
+ * Expects `config.scan.exclude` to already be the effective set
+ * (see `buildEffectiveConfig` in src/config/loader.ts). Callers compute it
+ * once at the CLI boundary and thread it through.
  */
 export async function runProjectScan(options: {
   rootDir: string;
@@ -412,10 +419,9 @@ export async function runProjectScan(options: {
   force?: boolean;
   verbose?: boolean;
 }): Promise<ProjectScanResult> {
-  const { rootDir, project, config, force, verbose } = options;
+  const { rootDir, project, config: effectiveConfig, force, verbose } = options;
   const projectAbsPath = path.resolve(rootDir, project.path);
 
-  const effectiveConfig = buildEffectiveConfig(config);
   const effectiveExcludes = effectiveConfig.scan.exclude;
 
   const configFingerprint = JSON.stringify({
