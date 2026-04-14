@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import type {
   LanguageAnalyzer,
@@ -7,11 +8,13 @@ import type {
   ScannedModule,
   ExternalDep,
   ModuleImport,
+  RawCodeElement,
 } from "../types.js";
 import { slugify } from "../../core/slugify.js";
 import { parsePythonImports } from "./imports.js";
 import { extractPythonModules, detectPythonFramework } from "./modules.js";
 import { collectConfigFiles } from "../config-files.js";
+import { extractPythonCode } from "./code.js";
 
 function parseRequirements(appPath: string): ExternalDep[] {
   const reqPath = path.join(appPath, "requirements.txt");
@@ -111,7 +114,7 @@ export const pythonAnalyzer: LanguageAnalyzer = {
         metadata["framework"] = framework;
       }
 
-      modules.push({
+      const module: ScannedModule = {
         id: slugify(`${appPath}/${mod.path}`),
         path: mod.path,
         name: mod.name,
@@ -119,7 +122,20 @@ export const pythonAnalyzer: LanguageAnalyzer = {
         exports: mod.exports,
         imports: deduplicateImports(imports),
         metadata,
-      });
+      };
+
+      if (config.levels?.code) {
+        const allElements: RawCodeElement[] = [];
+        for (const file of module.files.filter((f) => f.endsWith(".py"))) {
+          const fullPath = path.join(appPath, file);
+          const source = await fsp.readFile(fullPath, "utf-8");
+          const elements = await extractPythonCode(fullPath, source);
+          allElements.push(...elements);
+        }
+        if (allElements.length > 0) module.codeElements = allElements;
+      }
+
+      modules.push(module);
     }
 
     const externalDependencies = [
