@@ -95,6 +95,65 @@
           "technology": { "type": "string" }
         }
       }
+    },
+    "codeElements": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["id", "componentId", "kind", "name"],
+        "properties": {
+          "id": { "type": "string" },
+          "componentId": { "type": "string" },
+          "kind": { "type": "string" },
+          "name": { "type": "string" },
+          "visibility": {
+            "type": "string",
+            "enum": ["public", "internal", "private"]
+          },
+          "parentElementId": { "type": "string" },
+          "members": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["name", "kind"],
+              "properties": {
+                "name": { "type": "string" },
+                "kind": {
+                  "type": "string",
+                  "enum": ["field", "method"]
+                },
+                "signature": { "type": "string" },
+                "visibility": {
+                  "type": "string",
+                  "enum": ["public", "internal", "private"]
+                }
+              }
+            }
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "codeRelationships": {
+      "type": "array",
+      "default": [],
+      "items": {
+        "type": "object",
+        "required": ["sourceId", "targetId", "kind"],
+        "properties": {
+          "sourceId": { "type": "string" },
+          "targetId": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": ["inherits", "implements", "uses", "contains"]
+          },
+          "label": { "type": "string" }
+        }
+      }
     }
   }
 }
