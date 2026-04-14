@@ -1,13 +1,16 @@
 import { describe, it, expect, afterAll } from "vitest";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
-import { parse as parseYaml } from "yaml";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { loadConfig } from "../../src/config/loader.js";
 import { loadModel } from "../../src/core/model.js";
 import { buildModel } from "../../src/core/model-builder.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateSubmoduleDocs } from "../../src/generator/d2/submodule-scaffold.js";
 import { configSchema } from "../../src/config/schema.js";
+import { resolveConfig } from "../../src/core/cascading-config.js";
+import { collectRemovePaths, removePath } from "../../src/core/remove.js";
 import { discoverApplications } from "../../src/core/discovery.js";
 import { getAnalyzer } from "../../src/analyzers/registry.js";
 import type {
@@ -239,6 +242,10 @@ describe("Integration: Submodule per-folder docs", () => {
       const parsed = parseYaml(content);
       expect(parsed).toBeNull();
 
+      // `parsed ?? {}` (what cascading-config.ts uses) must schema-validate,
+      // so an untouched stub contributes nothing to the merged config.
+      expect(() => configSchema.parse(parsed ?? {})).not.toThrow();
+
       // The stub must mention the top-level keys so users can find them
       for (const key of [
         "system:",
@@ -332,5 +339,123 @@ describe("Integration: Submodule per-folder docs", () => {
       "diagram-docs.yaml",
     );
     expect(fs.existsSync(includedStub)).toBe(true);
+  });
+
+  it("uncommenting a key in a scaffolded stub overrides the root config", () => {
+    // Hermetic tmpRoot with a .git sentinel so resolveConfig's upward walk
+    // stops here instead of climbing into the enclosing worktree.
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "diagram-docs-roundtrip-"),
+    );
+    try {
+      fs.mkdirSync(path.join(tmpRoot, ".git"), { recursive: true });
+
+      // Root config sets system.name to a sentinel the cascade should see
+      // everywhere EXCEPT the submodule whose stub we edit.
+      const rootConfigPath = path.join(tmpRoot, "diagram-docs.yaml");
+      fs.writeFileSync(
+        rootConfigPath,
+        "system:\n  name: Root System\n",
+        "utf-8",
+      );
+
+      const MODEL_PATH = path.resolve(__dirname, "../fixtures/model.yaml");
+      const model = loadModel(MODEL_PATH);
+      const config = configSchema.parse({
+        submodules: { enabled: true },
+        levels: { context: true, container: true, component: true },
+      });
+
+      generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config);
+
+      // Pick the first container and uncomment `system:` + `  name: ...` in
+      // its stub, rewriting the value so the assertion can recognize it.
+      const target = model.containers[0]!;
+      const appPath = target.path ?? target.applicationId.replace(/-/g, "/");
+      const stubPath = path.join(tmpRoot, appPath, "diagram-docs.yaml");
+      const stubContent = fs.readFileSync(stubPath, "utf-8");
+      // Commented lines are `# ` + the original YAML line. `system:` sits at
+      // column 0; `name:` is indented 2 spaces under it, so after the `# `
+      // prefix it reads `#   name: …` (three spaces).
+      const uncommented = stubContent
+        .replace(/^# (system:)$/m, "$1")
+        .replace(/^#   name: .+$/m, "  name: SUBMODULE_OVERRIDE");
+      fs.writeFileSync(stubPath, uncommented, "utf-8");
+
+      // Sanity: edited stub parses and schema-validates by itself.
+      const parsedStub = parseYaml(uncommented) as Record<string, unknown>;
+      expect(parsedStub).not.toBeNull();
+
+      // Other containers still see the root value; this container sees the override.
+      const sibling = model.containers.find((c) => c.id !== target.id)!;
+      const siblingAppPath =
+        sibling.path ?? sibling.applicationId.replace(/-/g, "/");
+      fs.mkdirSync(path.join(tmpRoot, siblingAppPath), { recursive: true });
+
+      expect(resolveConfig(path.join(tmpRoot, appPath)).system.name).toBe(
+        "SUBMODULE_OVERRIDE",
+      );
+      expect(
+        resolveConfig(path.join(tmpRoot, siblingAppPath)).system.name,
+      ).toBe("Root System");
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  it("generate-then-remove cleans up all files generate created", async () => {
+    const tmpRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), "diagram-docs-symmetry-"),
+    );
+    try {
+      const rootConfigPath = path.join(tmpRoot, "diagram-docs.yaml");
+      fs.writeFileSync(
+        rootConfigPath,
+        "submodules:\n  enabled: true\n",
+        "utf-8",
+      );
+
+      const MODEL_PATH = path.resolve(__dirname, "../fixtures/model.yaml");
+      const model = loadModel(MODEL_PATH);
+      const modelPath = path.join(tmpRoot, "architecture-model.yaml");
+      fs.writeFileSync(modelPath, stringifyYaml(model), "utf-8");
+
+      const config = configSchema.parse({
+        submodules: { enabled: true },
+        levels: { context: true, container: true, component: true },
+      });
+
+      const rootOutputDir = path.join(tmpRoot, "docs/architecture");
+      fs.mkdirSync(rootOutputDir, { recursive: true });
+      generateSubmoduleDocs(tmpRoot, rootOutputDir, model, config);
+
+      // Catalogue what generate produced so we can assert all of it is gone.
+      const createdPaths: string[] = [];
+      for (const container of model.containers) {
+        const appPath =
+          container.path ?? container.applicationId.replace(/-/g, "/");
+        const stub = path.join(tmpRoot, appPath, "diagram-docs.yaml");
+        const archDir = path.join(tmpRoot, appPath, "docs/architecture");
+        if (fs.existsSync(stub)) createdPaths.push(stub);
+        if (fs.existsSync(archDir)) createdPaths.push(archDir);
+      }
+      expect(createdPaths.length).toBeGreaterThan(0);
+
+      const toRemove = await collectRemovePaths(
+        tmpRoot,
+        rootConfigPath,
+        config,
+        true,
+      );
+      for (const p of toRemove) removePath(p);
+
+      for (const p of createdPaths) {
+        expect(fs.existsSync(p)).toBe(false);
+      }
+      expect(fs.existsSync(rootConfigPath)).toBe(false);
+      expect(fs.existsSync(modelPath)).toBe(false);
+    } finally {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
   });
 });
