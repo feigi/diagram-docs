@@ -72,7 +72,7 @@ export const configSchema = z.object({
   llm: z
     .object({
       provider: z.enum(["auto", "claude-code", "copilot"]).default("auto"),
-      model: z.string().default("sonnet"),
+      model: z.string().default("default"),
       /** Max parallel LLM calls for per-app architecture modeling */
       concurrency: z.number().int().min(1).max(16).default(10),
     })

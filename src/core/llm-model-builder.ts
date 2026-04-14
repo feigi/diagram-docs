@@ -316,7 +316,7 @@ function spawnStreamJson(
           : "";
         reject(
           new LLMCallError(
-            `${cmd} exited with code ${code}: ${stderr || "(no output)"}${context}`,
+            `${cmd} exited with code ${code}: ${stderr || resultText.slice(0, 500) || "(no output)"}${context}`,
           ),
         );
         return;
@@ -479,9 +479,7 @@ const claudeCodeProvider: LLMProvider = {
           "--model",
           model,
           "--allowedTools",
-          "Write",
-          "Read",
-          "Edit",
+          "Write,Read,Edit",
         ],
         userMessage,
         900_000, // 15 minutes
@@ -716,7 +714,7 @@ function spawnCopilotJsonl(
           : "";
         reject(
           new LLMCallError(
-            `copilot exited with code ${code}: ${stderr || "(no output)"}${context}`,
+            `copilot exited with code ${code}: ${stderr || resultText.slice(0, 500) || "(no output)"}${context}`,
           ),
         );
         return;
