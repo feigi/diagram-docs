@@ -3,6 +3,31 @@ import { parse as parseYaml } from "yaml";
 import { z } from "zod";
 import type { ArchitectureModel } from "../analyzers/types.js";
 
+const codeMemberSchema = z.object({
+  name: z.string(),
+  kind: z.enum(["field", "method"]),
+  signature: z.string().optional(),
+  visibility: z.enum(["public", "internal", "private"]).optional(),
+});
+
+const codeElementSchema = z.object({
+  id: z.string(),
+  componentId: z.string(),
+  kind: z.string(),
+  name: z.string(),
+  visibility: z.enum(["public", "internal", "private"]).optional(),
+  parentElementId: z.string().optional(),
+  members: z.array(codeMemberSchema).optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+const codeRelationshipSchema = z.object({
+  sourceId: z.string(),
+  targetId: z.string(),
+  kind: z.enum(["inherits", "implements", "uses", "contains"]),
+  label: z.string().optional(),
+});
+
 export const architectureModelSchema = z.object({
   version: z.literal(1),
   system: z.object({
@@ -25,6 +50,7 @@ export const architectureModelSchema = z.object({
         name: z.string(),
         description: z.string(),
         technology: z.string().optional(),
+        tags: z.array(z.string()).optional(),
       }),
     )
     .default([]),
@@ -62,6 +88,8 @@ export const architectureModelSchema = z.object({
       }),
     )
     .default([]),
+  codeElements: z.array(codeElementSchema).optional(),
+  codeRelationships: z.array(codeRelationshipSchema).optional(),
 });
 
 export function loadModel(modelPath: string): ArchitectureModel {
