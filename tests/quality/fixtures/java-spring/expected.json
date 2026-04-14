@@ -44,5 +44,9 @@
     "com.example.repo": {
       "annotations": "Repository"
     }
-  }
+  },
+  "codeElements": [
+    { "name": "UserController", "kind": "class" },
+    { "name": "UserRepository", "kind": "class" }
+  ]
 }
