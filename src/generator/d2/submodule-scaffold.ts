@@ -6,6 +6,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import type { Config } from "../../config/schema.js";
+import { buildDefaultConfig } from "../../config/loader.js";
 import { generateComponentDiagram } from "./component.js";
 import { STYLES_D2 } from "./styles.js";
 import { extractFragment } from "../../core/model-fragment.js";
@@ -51,6 +52,20 @@ export function generateSubmoduleDocs(
 
     const d2Files: string[] = [];
     let changed = false;
+
+    // Scaffold per-submodule config stub (create-once, gated on component-level diagrams)
+    if (config.levels.component) {
+      const stubPath = path.join(repoRoot, appPath, "diagram-docs.yaml");
+      if (!fs.existsSync(stubPath)) {
+        fs.mkdirSync(path.dirname(stubPath), { recursive: true });
+        fs.writeFileSync(
+          stubPath,
+          buildSubmoduleConfigStub(repoRoot, appPath),
+          "utf-8",
+        );
+        changed = true;
+      }
+    }
 
     // Generate component diagram (only when enabled)
     if (config.levels.component) {
@@ -137,4 +152,25 @@ function writeIfChanged(filePath: string, content: string): boolean {
   }
   fs.writeFileSync(filePath, content, "utf-8");
   return true;
+}
+
+function buildSubmoduleConfigStub(repoRoot: string, appPath: string): string {
+  const { defaults } = buildDefaultConfig(path.join(repoRoot, appPath));
+  const humanName = (defaults.system as { name: string }).name;
+
+  const body = stringifyYaml(defaults, { lineWidth: 120 });
+  const commentedBody = body
+    .split("\n")
+    .map((line) => (line.length === 0 ? "#" : `# ${line}`))
+    .join("\n");
+
+  return [
+    `# diagram-docs.yaml for ${humanName}`,
+    "#",
+    "# Per-application config. Values here override the repo-root config",
+    "# (cascading, closest parent wins). Uncomment any line below to override",
+    "# the inherited default.",
+    "",
+    commentedBody,
+  ].join("\n");
 }
