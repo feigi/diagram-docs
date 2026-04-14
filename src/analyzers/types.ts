@@ -44,6 +44,7 @@ export interface ScannedModule {
   exports: string[];
   imports: ModuleImport[];
   metadata: Record<string, string>;
+  codeElements?: RawCodeElement[];
 }
 
 export interface ExternalDep {
@@ -61,6 +62,30 @@ export interface ModuleImport {
   source: string;
   resolved?: string;
   isExternal: boolean;
+}
+
+export interface RawCodeElement {
+  id: string;
+  kind: string;
+  name: string;
+  visibility?: "public" | "internal" | "private";
+  parentId?: string;
+  members?: CodeMember[];
+  tags?: string[];
+  references?: RawCodeReference[];
+  location: { file: string; line: number };
+}
+
+export interface CodeMember {
+  name: string;
+  kind: "field" | "method";
+  signature?: string;
+  visibility?: "public" | "internal" | "private";
+}
+
+export interface RawCodeReference {
+  targetName: string;
+  kind: "extends" | "implements" | "uses" | "contains";
 }
 
 /** Architecture model types (agent-produced, tool-consumed) */
@@ -98,6 +123,26 @@ export interface ArchitectureModel {
     label: string;
     technology?: string;
   }>;
+  codeElements?: CodeElement[];
+  codeRelationships?: CodeRelationship[];
+}
+
+export interface CodeElement {
+  id: string;
+  componentId: string;
+  kind: string;
+  name: string;
+  visibility?: "public" | "internal" | "private";
+  parentElementId?: string;
+  members?: CodeMember[];
+  tags?: string[];
+}
+
+export interface CodeRelationship {
+  sourceId: string;
+  targetId: string;
+  kind: "inherits" | "implements" | "uses" | "contains";
+  label?: string;
 }
 
 /** Language analyzer plugin interface */
@@ -105,6 +150,8 @@ export interface ArchitectureModel {
 export interface ScanConfig {
   exclude: string[];
   abstraction: Config["abstraction"];
+  levels?: Config["levels"];
+  code?: Config["code"];
 }
 
 export interface LanguageAnalyzer {
