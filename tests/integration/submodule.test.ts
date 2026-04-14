@@ -1,6 +1,7 @@
 import { describe, it, expect, afterAll } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { parse as parseYaml } from "yaml";
 import { loadConfig } from "../../src/config/loader.js";
 import { loadModel } from "../../src/core/model.js";
 import { buildModel } from "../../src/core/model-builder.js";
@@ -168,5 +169,65 @@ describe("Integration: Submodule per-folder docs", () => {
     );
     // user-api should still be included
     expect(subResults.some((s) => s.containerId === "user-api")).toBe(true);
+  });
+
+  it("scaffolds a commented-out diagram-docs.yaml at each submodule root", () => {
+    const MODEL_PATH = path.resolve(__dirname, "../fixtures/model.yaml");
+    const model = loadModel(MODEL_PATH);
+
+    const tmpRoot = path.join(MONOREPO, "test-submodule-stub");
+    trackDir(tmpRoot);
+
+    const config = configSchema.parse({
+      submodules: { enabled: true },
+      levels: { context: true, container: true, component: true },
+    });
+
+    const subResults = generateSubmoduleDocs(
+      tmpRoot,
+      OUTPUT_DIR,
+      model,
+      config,
+    );
+    expect(subResults.length).toBeGreaterThan(0);
+
+    for (const sub of subResults) {
+      const stubPath = path.join(
+        tmpRoot,
+        sub.applicationPath,
+        "diagram-docs.yaml",
+      );
+      expect(fs.existsSync(stubPath)).toBe(true);
+
+      const content = fs.readFileSync(stubPath, "utf-8");
+
+      // Header references the humanized submodule name
+      const expectedName = sub.applicationPath
+        .split("/")
+        .pop()!
+        .replace(/[-_]/g, " ")
+        .split(" ")
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(" ");
+      expect(content).toMatch(
+        new RegExp(`^# diagram-docs\\.yaml for ${expectedName}`),
+      );
+
+      // Every body line must be a comment — parsing yields null (inert stub)
+      const parsed = parseYaml(content);
+      expect(parsed).toBeNull();
+
+      // The stub must mention the top-level keys so users can find them
+      for (const key of [
+        "system:",
+        "scan:",
+        "levels:",
+        "abstraction:",
+        "output:",
+        "llm:",
+      ]) {
+        expect(content).toContain(`# ${key}`);
+      }
+    }
   });
 });
