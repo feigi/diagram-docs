@@ -56,7 +56,7 @@ export interface TokenReport {
  * Only specifies what MUST be found — the test measures what's missing or extra.
  */
 export interface ExpectedApplication {
-  language: "java" | "python" | "c";
+  language: "java" | "python" | "c" | "typescript";
   modules: Array<{
     /** Module name (package name for Java, module name for Python, dir name for C) */
     name: string;
@@ -75,4 +75,9 @@ export interface ExpectedApplication {
     name: string;
   }>;
   metadata: Record<string, Record<string, string>>;
+  /** Expected C4 code-level elements (name + kind only). */
+  codeElements?: Array<{
+    name: string;
+    kind: string;
+  }>;
 }

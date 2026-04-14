@@ -35,5 +35,10 @@
   "externalDependencies": [{ "name": "express" }, { "name": "zod" }],
   "metadata": {
     "routes": { "framework": "Express" }
-  }
+  },
+  "codeElements": [
+    { "name": "User", "kind": "type" },
+    { "name": "registerRoutes", "kind": "function" },
+    { "name": "authenticate", "kind": "function" }
+  ]
 }
