@@ -1,13 +1,10 @@
 ;; Classes
 (class_declaration
-  name: (identifier) @class.name
-  (superclass (type_identifier) @class.extends)?
-  (super_interfaces (type_list (type_identifier) @class.implements))?) @class.decl
+  name: (identifier) @class.name) @class.decl
 
 ;; Interfaces
 (interface_declaration
-  name: (identifier) @interface.name
-  (extends_interfaces (type_list (type_identifier) @interface.extends))?) @interface.decl
+  name: (identifier) @interface.name) @interface.decl
 
 ;; Enums
 (enum_declaration

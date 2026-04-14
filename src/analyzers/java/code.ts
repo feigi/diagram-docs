@@ -55,20 +55,7 @@ export async function extractJavaCode(
     const declCap = entry.captures.find((c) => c.name.endsWith(".decl"))!;
     const id = nameCap.node.text;
 
-    const references: RawCodeReference[] = [];
-    for (const c of entry.captures) {
-      if (c.name === "class.extends") {
-        references.push({ targetName: c.node.text, kind: "extends" });
-      } else if (
-        c.name === "class.implements" ||
-        c.name === "interface.extends"
-      ) {
-        references.push({
-          targetName: c.node.text,
-          kind: c.name === "interface.extends" ? "extends" : "implements",
-        });
-      }
-    }
+    const references = collectReferences(declCap.node, entry.kind);
 
     const members = collectMembers(declCap.node);
     const element: RawCodeElement = {
@@ -86,6 +73,71 @@ export async function extractJavaCode(
     elements.push(element);
   }
   return elements;
+}
+
+function typeName(node: SyntaxNode): string | null {
+  if (node.type === "type_identifier") return node.text;
+  if (node.type === "generic_type") {
+    const nameChild =
+      node.childForFieldName("name") ??
+      (node.namedChildren ?? []).find((c) => c.type === "type_identifier");
+    return nameChild?.text ?? null;
+  }
+  return null;
+}
+
+function collectReferences(
+  declNode: SyntaxNode,
+  elementKind: string,
+): RawCodeReference[] {
+  const references: RawCodeReference[] = [];
+  const children = declNode.namedChildren ?? [];
+
+  if (elementKind === "class") {
+    const superclass = children.find((c) => c.type === "superclass");
+    if (superclass) {
+      for (const child of superclass.namedChildren ?? []) {
+        const name = typeName(child);
+        if (name) {
+          references.push({ targetName: name, kind: "extends" });
+          break;
+        }
+      }
+    }
+    const superInterfaces = children.find((c) => c.type === "super_interfaces");
+    if (superInterfaces) {
+      const typeList = (superInterfaces.namedChildren ?? []).find(
+        (c) => c.type === "type_list",
+      );
+      if (typeList) {
+        for (const child of typeList.namedChildren ?? []) {
+          const name = typeName(child);
+          if (name) {
+            references.push({ targetName: name, kind: "implements" });
+          }
+        }
+      }
+    }
+  } else if (elementKind === "interface") {
+    const extendsInterfaces = children.find(
+      (c) => c.type === "extends_interfaces",
+    );
+    if (extendsInterfaces) {
+      const typeList = (extendsInterfaces.namedChildren ?? []).find(
+        (c) => c.type === "type_list",
+      );
+      if (typeList) {
+        for (const child of typeList.namedChildren ?? []) {
+          const name = typeName(child);
+          if (name) {
+            references.push({ targetName: name, kind: "extends" });
+          }
+        }
+      }
+    }
+  }
+
+  return references;
 }
 
 function collectMembers(declNode: SyntaxNode): CodeMember[] {
