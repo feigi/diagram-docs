@@ -9,30 +9,31 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // (Also works from src/analyzers/tree-sitter.ts when tests import source directly.)
 const ASSETS_DIR = path.resolve(__dirname, "..", "..", "assets", "tree-sitter");
 
-let parserInitialized = false;
-const grammarCache = new Map<SupportedLanguage, TreeSitter.Language>();
+let initPromise: Promise<void> | null = null;
+const grammarCache = new Map<SupportedLanguage, Promise<TreeSitter.Language>>();
 
 export function resetLoaderForTesting(): void {
-  parserInitialized = false;
+  initPromise = null;
   grammarCache.clear();
 }
 
-async function initOnce(): Promise<void> {
-  if (parserInitialized) return;
-  await TreeSitter.init();
-  parserInitialized = true;
+function initOnce(): Promise<void> {
+  if (!initPromise) initPromise = TreeSitter.init();
+  return initPromise;
 }
 
 export async function loadLanguage(
   lang: SupportedLanguage,
 ): Promise<TreeSitter.Language> {
   await initOnce();
-  const cached = grammarCache.get(lang);
-  if (cached) return cached;
-  const file = path.join(ASSETS_DIR, `tree-sitter-${lang}.wasm`);
-  const grammar = await TreeSitter.Language.load(file);
-  grammarCache.set(lang, grammar);
-  return grammar;
+  let p = grammarCache.get(lang);
+  if (!p) {
+    p = TreeSitter.Language.load(
+      path.join(ASSETS_DIR, `tree-sitter-${lang}.wasm`),
+    );
+    grammarCache.set(lang, p);
+  }
+  return p;
 }
 
 export interface QueryMatch {
