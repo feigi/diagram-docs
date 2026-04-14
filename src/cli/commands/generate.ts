@@ -26,6 +26,13 @@ import { slugify } from "../../core/slugify.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
+import { generateCodeDiagram } from "../../generator/d2/code.js";
+import {
+  getProfileForLanguage,
+  selectProfileForComponent,
+  type ProfileLanguage,
+} from "../../generator/d2/code-profiles.js";
+import { scaffoldCodeFile } from "../../generator/d2/code-scaffold.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
 import {
   generateSubmoduleDocs,
@@ -38,6 +45,11 @@ import {
   removeStaleSubmoduleDirs,
 } from "../../generator/d2/cleanup.js";
 import type { Config } from "../../config/schema.js";
+import type {
+  ArchitectureModel,
+  Component,
+  RawStructure,
+} from "../../analyzers/types.js";
 import {
   readManifest,
   writeManifest,
@@ -87,7 +99,7 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    const model = await resolveModel(
+    const { model, rawStructure } = await resolveModel(
       options.model,
       configDir,
       config,
@@ -169,6 +181,18 @@ export const generateCommand = new Command("generate")
       }
     }
 
+    // L4: Code-level diagrams (one per component)
+    if (config.levels.code) {
+      const codeResult = generateCodeLevelDiagrams({
+        model,
+        config,
+        outputDir,
+        rawStructure,
+      });
+      filesWritten += codeResult.written;
+      filesUnchanged += codeResult.unchanged;
+    }
+
     // Scaffold user-facing files (only creates, never overwrites)
     scaffoldUserFiles(outputDir, model, config);
 
@@ -200,6 +224,29 @@ export const generateCommand = new Command("generate")
         d2Files.push(
           path.join(outputDir, "containers", container.id, "c3-component.d2"),
         );
+      }
+    }
+    if (config.levels.code) {
+      for (const container of model.containers) {
+        const components = model.components.filter(
+          (c) => c.containerId === container.id,
+        );
+        for (const component of components) {
+          const elementCount = (model.codeElements ?? []).filter(
+            (e) => e.componentId === component.id,
+          ).length;
+          if (elementCount < config.code.minElements) continue;
+          d2Files.push(
+            path.join(
+              outputDir,
+              "containers",
+              container.id,
+              "components",
+              component.id,
+              "c4-code.d2",
+            ),
+          );
+        }
       }
     }
 
@@ -249,10 +296,10 @@ async function resolveModel(
   deterministic?: boolean,
   debug?: boolean,
   explicitConfig?: boolean,
-) {
+): Promise<{ model: ArchitectureModel; rawStructure?: RawStructure }> {
   // 1. Explicit path — trust the user
   if (modelPath) {
-    return loadModel(path.resolve(modelPath));
+    return { model: loadModel(path.resolve(modelPath)) };
   }
 
   // 2. Discover and classify projects
@@ -300,7 +347,7 @@ async function resolveModel(
       console.error(
         `Using model: ${path.relative(process.cwd(), autoModelPath)} (all containers cached)`,
       );
-      return existingModel;
+      return { model: existingModel, rawStructure };
     }
     console.error(
       `${deletedContainers.length} container(s) removed since last scan: ${deletedContainers.map((c) => c.path).join(", ")}`,
@@ -407,7 +454,7 @@ async function resolveModel(
     `Model written to ${path.relative(process.cwd(), autoModelPath)}`,
   );
 
-  return model;
+  return { model, rawStructure };
 }
 
 /**
@@ -618,6 +665,94 @@ function writeIfChanged(filePath: string, content: string): boolean {
   }
   fs.writeFileSync(filePath, content, "utf-8");
   return true;
+}
+
+/**
+ * Generate L4 code-level diagrams (one per qualifying component) and
+ * scaffold the matching user-facing files. Shared between the CLI command
+ * and the integration test so wiring stays validated end-to-end.
+ *
+ * Components with fewer than `config.code.minElements` code elements are
+ * skipped (matches the model-builder filter).
+ */
+export function generateCodeLevelDiagrams(opts: {
+  model: ArchitectureModel;
+  config: Config;
+  outputDir: string;
+  rawStructure?: RawStructure;
+}): { written: number; unchanged: number } {
+  const { model, config, outputDir, rawStructure } = opts;
+  let written = 0;
+  let unchanged = 0;
+
+  for (const container of model.containers) {
+    const components = model.components.filter(
+      (c) => c.containerId === container.id,
+    );
+    for (const component of components) {
+      const elementCount = (model.codeElements ?? []).filter(
+        (e) => e.componentId === component.id,
+      ).length;
+      if (elementCount < config.code.minElements) continue;
+
+      const compDir = path.join(
+        outputDir,
+        "containers",
+        container.id,
+        "components",
+        component.id,
+      );
+      const componentGenDir = path.join(compDir, "_generated");
+      fs.mkdirSync(componentGenDir, { recursive: true });
+
+      const lang = dominantLanguageForComponent(component, model, rawStructure);
+      const profile = getProfileForLanguage(lang);
+      const d2 = generateCodeDiagram(model, component, profile);
+      if (writeIfChanged(path.join(componentGenDir, "c4-code.d2"), d2)) {
+        written++;
+      } else {
+        unchanged++;
+      }
+
+      scaffoldCodeFile(path.join(compDir, "c4-code.d2"), {
+        containerName: container.name,
+        componentName: component.name,
+      });
+    }
+  }
+
+  return { written, unchanged };
+}
+
+function dominantLanguageForComponent(
+  component: Component,
+  _model: ArchitectureModel,
+  rawStructure?: RawStructure,
+): ProfileLanguage {
+  const counts: Record<ProfileLanguage, number> = {
+    java: 0,
+    typescript: 0,
+    python: 0,
+    c: 0,
+  };
+  if (rawStructure) {
+    for (const app of rawStructure.applications) {
+      for (const mod of app.modules) {
+        if (!component.moduleIds.includes(mod.id)) continue;
+        const lang = normalizeLanguage(app.language);
+        if (lang) counts[lang] += mod.files.length;
+      }
+    }
+  }
+  return selectProfileForComponent(counts);
+}
+
+function normalizeLanguage(raw: string): ProfileLanguage | null {
+  if (raw === "java") return "java";
+  if (raw === "typescript") return "typescript";
+  if (raw === "python") return "python";
+  if (raw === "c") return "c";
+  return null;
 }
 
 /**
