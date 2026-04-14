@@ -1,10 +1,13 @@
 import { describe, it, expect, afterAll } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import type { ArchitectureModel } from "../../src/analyzers/types.js";
 import { loadModel } from "../../src/core/model.js";
 import { generateContextDiagram } from "../../src/generator/d2/context.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateComponentDiagram } from "../../src/generator/d2/component.js";
+import { checkDrift } from "../../src/generator/d2/drift.js";
 import type { DriftReport } from "./helpers/types.js";
 import { extractD2ShapeIds, computeLineChurn } from "./helpers/metrics.js";
 import {
@@ -317,5 +320,39 @@ describe("Drift: Removal scenarios", () => {
       "container",
     ]);
     reports.push(report);
+  });
+});
+
+describe("Drift: c4-code scaffold references", () => {
+  it("reports drift when user-edited c4-code.d2 references a removed code element", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "drift-l4-"));
+    const compDir = path.join(tmp, "containers", "api", "components", "users");
+    fs.mkdirSync(compDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(compDir, "c4-code.d2"),
+      [`...@_generated/c4-code.d2`, `api_users_OldClass.label: "Ghost"`].join(
+        "\n",
+      ),
+    );
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "s", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [],
+      components: [],
+      relationships: [],
+      codeElements: [
+        {
+          id: "api.users.UserService",
+          componentId: "users",
+          kind: "class",
+          name: "UserService",
+        },
+      ],
+    } as unknown as ArchitectureModel;
+    const warnings = checkDrift(tmp, model);
+    expect(warnings.some((w) => w.id.includes("OldClass"))).toBe(true);
+    fs.rmSync(tmp, { recursive: true, force: true });
   });
 });
