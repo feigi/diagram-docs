@@ -1,13 +1,20 @@
 import { describe, it, expect } from "vitest";
 import {
+  attachCodeModel,
   buildSystemPrompt,
   buildUserMessage,
   buildPerAppUserMessage,
 } from "../../src/core/llm-model-builder.js";
 import type {
+  ArchitectureModel,
   ScannedApplication,
   RawStructure,
 } from "../../src/analyzers/types.js";
+import {
+  codeFixture,
+  codeFixtureComponents,
+  makeConfig,
+} from "./fixtures/code-model-fixture.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -253,5 +260,75 @@ describe("buildSystemPrompt config references", () => {
 
     // Should reference config near relevant context
     expect(prompt).toMatch(/\bconfig\b/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Tests: attachCodeModel — LLM path must populate deterministic L4 data
+// ---------------------------------------------------------------------------
+
+function makeLlmModel(): ArchitectureModel {
+  // Simulates a model parsed from LLM YAML: it has containers/components but
+  // no codeElements or codeRelationships (the LLM is not asked to produce L4).
+  return {
+    version: 1,
+    system: { name: "s", description: "" },
+    actors: [],
+    externalSystems: [],
+    containers: [
+      {
+        id: "api",
+        applicationId: "api",
+        name: "api",
+        description: "",
+        technology: "java",
+      },
+    ],
+    components: codeFixtureComponents,
+    relationships: [],
+  };
+}
+
+describe("attachCodeModel (LLM code-level population)", () => {
+  it("populates codeElements and codeRelationships from rawStructure when levels.code is enabled", () => {
+    const model = makeLlmModel();
+    expect(model.codeElements).toBeUndefined();
+    expect(model.codeRelationships).toBeUndefined();
+
+    const config = makeConfig(true);
+    const enriched = attachCodeModel(model, codeFixture, config);
+
+    expect(enriched.codeElements).toBeDefined();
+    expect(enriched.codeElements!.map((e) => e.id).sort()).toEqual([
+      "api.users.Auditable",
+      "api.users.UserService",
+    ]);
+    expect(enriched.codeRelationships).toEqual([
+      {
+        sourceId: "api.users.UserService",
+        targetId: "api.users.Auditable",
+        kind: "implements",
+      },
+    ]);
+  });
+
+  it("leaves codeElements unset when levels.code is disabled", () => {
+    const model = makeLlmModel();
+    const config = makeConfig(false);
+    const enriched = attachCodeModel(model, codeFixture, config);
+
+    expect(enriched.codeElements).toBeUndefined();
+    expect(enriched.codeRelationships).toBeUndefined();
+  });
+
+  it("preserves all other model fields", () => {
+    const model = makeLlmModel();
+    const config = makeConfig(true);
+    const enriched = attachCodeModel(model, codeFixture, config);
+
+    expect(enriched.containers).toEqual(model.containers);
+    expect(enriched.components).toEqual(model.components);
+    expect(enriched.system).toEqual(model.system);
+    expect(enriched.relationships).toEqual(model.relationships);
   });
 });

@@ -16,6 +16,32 @@ import type {
 import { architectureModelSchema } from "./model.js";
 import { DebugLogWriter, prepareDebugDir } from "./debug-logger.js";
 import { buildModel } from "./model-builder.js";
+import { buildCodeModel } from "./code-model.js";
+
+/**
+ * Attach deterministic code-level data (classes/interfaces and their relationships)
+ * to an LLM-produced architecture model. The LLM is not asked to generate L4
+ * content — it's extracted deterministically from the rawStructure, mirroring
+ * what buildModel does on the non-LLM path. Safe to call even when
+ * `levels.code` is disabled (returns the model unchanged).
+ */
+export function attachCodeModel(
+  model: ArchitectureModel,
+  rawStructure: RawStructure,
+  config: Config,
+): ArchitectureModel {
+  const { codeElements, codeRelationships } = buildCodeModel(
+    rawStructure,
+    model.components,
+    { levels: config.levels, code: config.code },
+  );
+  return {
+    ...model,
+    codeElements: codeElements.length > 0 ? codeElements : undefined,
+    codeRelationships:
+      codeRelationships.length > 0 ? codeRelationships : undefined,
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Error types
@@ -1554,8 +1580,9 @@ export async function buildModelWithLLM(
     );
   }
 
+  let validated: ArchitectureModel;
   try {
-    return architectureModelSchema.parse(parsed) as ArchitectureModel;
+    validated = architectureModelSchema.parse(parsed) as ArchitectureModel;
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     throw new LLMOutputError(
@@ -1564,6 +1591,9 @@ export async function buildModelWithLLM(
       { cause: err },
     );
   }
+
+  // Attach deterministic code-level data — LLM path does not produce L4 content.
+  return attachCodeModel(validated, options.rawStructure, options.config);
 }
 
 /**

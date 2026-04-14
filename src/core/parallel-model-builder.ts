@@ -15,6 +15,7 @@ import {
   isProgrammingError,
   rethrowIfFatal,
   isRecoverableLLMError,
+  attachCodeModel,
   buildPerAppSystemPrompt,
   buildPerAppUserMessage,
   buildSynthesisSystemPrompt,
@@ -911,5 +912,6 @@ export async function buildModelParallel(
   if (!merged.system.description)
     merged.system.description = config.system.description;
 
-  return merged;
+  // Attach deterministic code-level data — LLM path does not produce L4 content.
+  return attachCodeModel(merged, rawStructure, config);
 }
