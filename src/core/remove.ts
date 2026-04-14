@@ -77,6 +77,23 @@ export async function collectRemovePaths(
 }
 
 /**
+ * Log a warning when architecture-model.yaml exists but cannot be parsed.
+ * Discovery falls back to a filesystem glob, but the user should know the
+ * model is unreadable — otherwise corruption is masked until next `generate`.
+ */
+function warnModelParseFailure(
+  configDir: string,
+  modelPath: string,
+  err: unknown,
+): void {
+  const reason = err instanceof Error ? err.message : String(err);
+  const rel = path.relative(configDir, modelPath);
+  console.error(
+    `Warning: could not parse ${rel} (${reason}); falling back to filesystem walk.`,
+  );
+}
+
+/**
  * Discover per-application .diagram-docs cache dirs.
  *
  * Strategy:
@@ -96,8 +113,8 @@ async function discoverSubmoduleCacheDirs(
           container.path ?? container.applicationId.replace(/-/g, "/");
         return path.join(configDir, appPath, ".diagram-docs");
       });
-    } catch {
-      // Fall through to filesystem walk
+    } catch (err) {
+      warnModelParseFailure(configDir, modelPath, err);
     }
   }
 
@@ -135,8 +152,8 @@ async function discoverSubmoduleConfigStubs(
           container.path ?? container.applicationId.replace(/-/g, "/");
         return path.join(configDir, appPath, "diagram-docs.yaml");
       });
-    } catch {
-      // Fall through to filesystem walk
+    } catch (err) {
+      warnModelParseFailure(configDir, modelPath, err);
     }
   }
 
@@ -176,8 +193,8 @@ async function discoverSubmoduleDirs(
         const docsDir = override?.docsDir ?? config.submodules.docsDir;
         return path.join(configDir, appPath, docsDir, "architecture");
       });
-    } catch {
-      // Fall through to filesystem walk
+    } catch (err) {
+      warnModelParseFailure(configDir, modelPath, err);
     }
   }
 
