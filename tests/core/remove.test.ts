@@ -132,6 +132,61 @@ describe("collectRemovePaths — default (no --all)", () => {
     // Root should appear exactly once (deduplication)
     expect(result.filter((p) => p === rootCacheDir)).toHaveLength(1);
   });
+
+  it("includes submodule diagram-docs.yaml stubs discovered from architecture-model.yaml", async () => {
+    const rootConfigPath = touch("diagram-docs.yaml");
+
+    const model = {
+      version: 1,
+      system: { name: "Test", description: "" },
+      actors: [],
+      containers: [
+        {
+          id: "svc-auth",
+          applicationId: "svc-auth",
+          name: "Auth",
+          path: "services/auth",
+          technology: "Node.js",
+          description: "",
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, "architecture-model.yaml"),
+      stringifyYaml(model),
+      "utf-8",
+    );
+
+    const subStub = touch("services/auth/diagram-docs.yaml");
+
+    const config = makeConfig();
+    const result = await collectRemovePaths(
+      tmpDir,
+      rootConfigPath,
+      config,
+      false,
+    );
+    expect(result).toContain(subStub);
+    // Root config appears exactly once — it's a direct candidate, and the
+    // glob fallback that would otherwise pick it up is only used when the
+    // model is absent.
+    expect(result.filter((p) => p === rootConfigPath)).toHaveLength(1);
+  });
+
+  it("falls back to filesystem walk for submodule stubs when model is absent", async () => {
+    const rootConfigPath = touch("diagram-docs.yaml");
+    const subStub = touch("apps/worker/diagram-docs.yaml");
+
+    const config = makeConfig();
+    const result = await collectRemovePaths(
+      tmpDir,
+      rootConfigPath,
+      config,
+      false,
+    );
+    expect(result).toContain(subStub);
+    expect(result.filter((p) => p === rootConfigPath)).toHaveLength(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
