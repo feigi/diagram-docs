@@ -6,9 +6,12 @@ import { discoverApplications } from "../../src/core/discovery.js";
 import { getAnalyzer } from "../../src/analyzers/registry.js";
 import { slugify } from "../../src/core/slugify.js";
 import { loadModel } from "../../src/core/model.js";
+import { buildModel } from "../../src/core/model-builder.js";
 import { generateContextDiagram } from "../../src/generator/d2/context.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateComponentDiagram } from "../../src/generator/d2/component.js";
+import { generateCodeLevelDiagrams } from "../../src/cli/commands/generate.js";
+import { configSchema } from "../../src/config/schema.js";
 import type {
   RawStructure,
   ScannedApplication,
@@ -282,6 +285,111 @@ describe("per-container scanning", () => {
     // All projects should have a type
     for (const proj of projects) {
       expect(["container", "library"]).toContain(proj.type);
+    }
+  });
+});
+
+describe("Integration: L4 code-level pipeline", () => {
+  const CODE_OUTPUT_DIR = path.join(MONOREPO, "test-code-output");
+
+  afterAll(() => {
+    if (fs.existsSync(CODE_OUTPUT_DIR)) {
+      fs.rmSync(CODE_OUTPUT_DIR, { recursive: true });
+    }
+  });
+
+  it("generates c4-code.d2 files per component when levels.code is on", async () => {
+    // Enable L4 + collapse to one component per container so the user-api
+    // container (2 Java classes) clears the minElements: 2 threshold.
+    const { config: baseConfig } = loadConfig(CONFIG_PATH);
+    const config = configSchema.parse({
+      ...baseConfig,
+      levels: { ...baseConfig.levels, code: true },
+      code: { includePrivate: false, includeMembers: true, minElements: 2 },
+      abstraction: { ...baseConfig.abstraction, granularity: "overview" },
+    });
+
+    // 1. Scan with levels.code enabled so analyzers populate codeElements.
+    const discovered = await discoverApplications(MONOREPO, config);
+    const applications: ScannedApplication[] = [];
+    for (const app of discovered) {
+      const analyzer = getAnalyzer(app.analyzerId);
+      const result = await analyzer!.analyze(path.resolve(MONOREPO, app.path), {
+        exclude: config.scan.exclude,
+        abstraction: config.abstraction,
+        levels: config.levels,
+        code: config.code,
+      });
+      const relativeId = slugify(app.path);
+      const absolutePrefix = slugify(path.resolve(MONOREPO, app.path));
+      result.path = app.path;
+      result.id = relativeId;
+      for (const mod of result.modules) {
+        if (mod.id.startsWith(absolutePrefix)) {
+          mod.id = relativeId + mod.id.slice(absolutePrefix.length);
+        }
+      }
+      applications.push(result);
+    }
+
+    const rawStructure: RawStructure = {
+      version: 1,
+      scannedAt: new Date().toISOString(),
+      checksum: "test",
+      applications,
+    };
+
+    // 2. Build model — expect codeElements to be populated for at least one
+    //    component meeting minElements.
+    const model = buildModel({ config, rawStructure });
+    expect(model.codeElements && model.codeElements.length).toBeGreaterThan(0);
+
+    // 3. Invoke the L4 wiring exposed by the generate command.
+    if (!fs.existsSync(CODE_OUTPUT_DIR)) {
+      fs.mkdirSync(CODE_OUTPUT_DIR, { recursive: true });
+    }
+    const result = generateCodeLevelDiagrams({
+      model,
+      config,
+      outputDir: CODE_OUTPUT_DIR,
+      rawStructure,
+    });
+
+    expect(result.written).toBeGreaterThan(0);
+
+    // 4. Find a component that should have been emitted and verify both files.
+    const elementCountByComponent = new Map<string, number>();
+    for (const el of model.codeElements ?? []) {
+      elementCountByComponent.set(
+        el.componentId,
+        (elementCountByComponent.get(el.componentId) ?? 0) + 1,
+      );
+    }
+    const eligible = model.components.filter(
+      (c) =>
+        (elementCountByComponent.get(c.id) ?? 0) >= config.code.minElements,
+    );
+    expect(eligible.length).toBeGreaterThan(0);
+
+    for (const component of eligible) {
+      const compDir = path.join(
+        CODE_OUTPUT_DIR,
+        "containers",
+        component.containerId,
+        "components",
+        component.id,
+      );
+      const generatedFile = path.join(compDir, "_generated", "c4-code.d2");
+      const scaffoldFile = path.join(compDir, "c4-code.d2");
+
+      expect(fs.existsSync(generatedFile)).toBe(true);
+      expect(fs.existsSync(scaffoldFile)).toBe(true);
+
+      const generatedContent = fs.readFileSync(generatedFile, "utf-8");
+      expect(generatedContent).toContain("C4 Code-level diagram");
+
+      const scaffoldContent = fs.readFileSync(scaffoldFile, "utf-8");
+      expect(scaffoldContent).toContain("...@_generated/c4-code.d2");
     }
   });
 });
