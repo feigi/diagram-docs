@@ -65,6 +65,73 @@
                 "metadata": {
                   "type": "object",
                   "additionalProperties": { "type": "string" }
+                },
+                "codeElements": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "required": ["id", "kind", "name", "location"],
+                    "properties": {
+                      "id": { "type": "string" },
+                      "kind": { "type": "string" },
+                      "name": { "type": "string" },
+                      "visibility": {
+                        "type": "string",
+                        "enum": ["public", "internal", "private"]
+                      },
+                      "parentId": { "type": "string" },
+                      "members": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["name", "kind"],
+                          "properties": {
+                            "name": { "type": "string" },
+                            "kind": {
+                              "type": "string",
+                              "enum": ["field", "method"]
+                            },
+                            "signature": { "type": "string" },
+                            "visibility": {
+                              "type": "string",
+                              "enum": ["public", "internal", "private"]
+                            }
+                          }
+                        }
+                      },
+                      "tags": {
+                        "type": "array",
+                        "items": { "type": "string" }
+                      },
+                      "references": {
+                        "type": "array",
+                        "items": {
+                          "type": "object",
+                          "required": ["targetName", "kind"],
+                          "properties": {
+                            "targetName": { "type": "string" },
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "extends",
+                                "implements",
+                                "uses",
+                                "contains"
+                              ]
+                            }
+                          }
+                        }
+                      },
+                      "location": {
+                        "type": "object",
+                        "required": ["file", "line"],
+                        "properties": {
+                          "file": { "type": "string" },
+                          "line": { "type": "integer" }
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
