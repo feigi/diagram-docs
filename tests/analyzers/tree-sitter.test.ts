@@ -1,6 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
+import TreeSitter from "web-tree-sitter";
 import {
-  loadLanguage,
   runQuery,
   resetLoaderForTesting,
 } from "../../src/analyzers/tree-sitter.js";
@@ -15,19 +15,42 @@ describe("tree-sitter loader", () => {
     expect(names).toContain("Foo");
   });
 
-  it("caches grammars across invocations", async () => {
+  it("caches grammars across invocations (only loads each grammar once)", async () => {
     resetLoaderForTesting();
-    const src = `def f(): pass`;
+    const spy = vi.spyOn(TreeSitter.Language, "load");
     await runQuery(
       "python",
-      src,
+      `def f(): pass`,
       `(function_definition name: (identifier) @n)`,
     );
-    const matches = await runQuery(
+    await runQuery(
       "python",
-      src,
+      `def g(): pass`,
       `(function_definition name: (identifier) @n)`,
     );
-    expect(matches.length).toBe(1);
+    const pythonLoadCalls = spy.mock.calls.filter(
+      (args) =>
+        typeof args[0] === "string" &&
+        args[0].includes("tree-sitter-python.wasm"),
+    );
+    expect(pythonLoadCalls.length).toBe(1);
+    spy.mockRestore();
+  });
+
+  it("deduplicates concurrent loads of the same grammar", async () => {
+    resetLoaderForTesting();
+    const spy = vi.spyOn(TreeSitter.Language, "load");
+    await Promise.all([
+      runQuery("java", `class A {}`, `(class_declaration) @c`),
+      runQuery("java", `class B {}`, `(class_declaration) @c`),
+      runQuery("java", `class C {}`, `(class_declaration) @c`),
+    ]);
+    const javaLoadCalls = spy.mock.calls.filter(
+      (args) =>
+        typeof args[0] === "string" &&
+        args[0].includes("tree-sitter-java.wasm"),
+    );
+    expect(javaLoadCalls.length).toBe(1);
+    spy.mockRestore();
   });
 });
