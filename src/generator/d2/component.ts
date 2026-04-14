@@ -77,7 +77,22 @@ export function generateComponentDiagram(
         { class: "container" },
       );
     } else {
-      w.shape(toD2Id(refId), refId);
+      const otherComponent = model.components?.find((c) => c.id === refId);
+      if (otherComponent) {
+        const parentContainer = model.containers.find(
+          (c) => c.id === otherComponent.containerId,
+        );
+        const containerLabel = parentContainer
+          ? `in ${parentContainer.name}`
+          : otherComponent.containerId;
+        w.shape(
+          toD2Id(refId),
+          `${otherComponent.name}\\n\\n[Component: ${otherComponent.technology}]\\n${wrapText(containerLabel)} | ${refId}`,
+          { class: "component" },
+        );
+      } else {
+        w.shape(toD2Id(refId), refId);
+      }
     }
   }
 

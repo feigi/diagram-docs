@@ -70,3 +70,7 @@ relationships:
     targetId: user-api
     label: "Fetches user details"
     technology: HTTP
+  - sourceId: order-handler
+    targetId: user-controller
+    label: "Calls user lookup endpoint"
+    technology: HTTP

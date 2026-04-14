@@ -30,6 +30,7 @@ import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
 import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
+import { removeStaleContainerDirs } from "../../generator/d2/cleanup.js";
 import type { Config } from "../../config/schema.js";
 import {
   readManifest,
@@ -91,6 +92,9 @@ export const generateCommand = new Command("generate")
 
     const outputDir = path.resolve(configDir, config.output.dir);
     const generatedDir = path.join(outputDir, "_generated");
+
+    // Remove scaffold/generated dirs for containers deleted since last scan.
+    removeStaleContainerDirs(outputDir, model);
 
     // Ensure output directories exist
     if (!fs.existsSync(generatedDir)) {
@@ -267,14 +271,25 @@ async function resolveModel(
 
   const staleContainers = staleProjects.filter((p) => p.type === "container");
 
-  // 4. If nothing changed, reuse existing model
+  // 4. If nothing changed, reuse existing model — but first check for deletions.
   const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
 
   if (staleContainers.length === 0 && fs.existsSync(autoModelPath)) {
-    console.error(
-      `Using model: ${path.relative(process.cwd(), autoModelPath)} (all containers cached)`,
+    const existingModel = loadModel(autoModelPath);
+    const discoveredIds = new Set(containers.map((c) => slugify(c.path)));
+    const deletedContainers = existingModel.containers.filter(
+      (c) => c.path != null && !discoveredIds.has(slugify(c.path)),
     );
-    return loadModel(autoModelPath);
+    if (deletedContainers.length === 0) {
+      console.error(
+        `Using model: ${path.relative(process.cwd(), autoModelPath)} (all containers cached)`,
+      );
+      return existingModel;
+    }
+    console.error(
+      `${deletedContainers.length} container(s) removed since last scan: ${deletedContainers.map((c) => c.path).join(", ")}`,
+    );
+    // Fall through to rebuild the model without the deleted containers.
   }
 
   if (staleContainers.length > 0) {

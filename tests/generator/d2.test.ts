@@ -169,10 +169,14 @@ describe("D2 Component Diagram", () => {
     );
   });
 
-  it("is deterministic across runs", () => {
+  it("renders cross-container component reference with friendly name and raw id", () => {
     const model = loadModel(MODEL_PATH);
-    const d2a = generateComponentDiagram(model, "user-api");
-    const d2b = generateComponentDiagram(model, "user-api");
-    expect(d2a).toBe(d2b);
+    // order-service's order-handler has a relationship to user-controller (in user-api)
+    const d2 = generateComponentDiagram(model, "order-service");
+
+    expect(d2).toContain("User Controller");
+    expect(d2).toContain("user-controller");
+    expect(d2).toContain("class: component");
+    expect(d2).toContain("in User API");
   });
 });
