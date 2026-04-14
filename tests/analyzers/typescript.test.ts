@@ -202,6 +202,25 @@ describe("TypeScript Analyzer", () => {
       true,
     );
   });
+
+  it("populates codeElements on each module when levels.code is on", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, {
+      ...defaultConfig,
+      levels: { context: true, container: true, component: true, code: true },
+      code: { includePrivate: false, includeMembers: true, minElements: 2 },
+    });
+    const anyModuleHasCode = result.modules.some(
+      (m) => m.codeElements && m.codeElements.length > 0,
+    );
+    expect(anyModuleHasCode).toBe(true);
+  });
+
+  it("omits codeElements when levels.code is off", async () => {
+    const result = await typescriptAnalyzer.analyze(FIXTURES, defaultConfig);
+    for (const m of result.modules) {
+      expect(m.codeElements).toBeUndefined();
+    }
+  });
 });
 
 const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
