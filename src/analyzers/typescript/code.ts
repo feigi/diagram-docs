@@ -155,6 +155,38 @@ function collectMembers(declNode: SyntaxNode): CodeMember[] {
       const name = child.childForFieldName("name")?.text ?? "?";
       const params = child.childForFieldName("parameters")?.text ?? "()";
       const ret = child.childForFieldName("return_type")?.text ?? "";
+      // TypeScript constructor shorthand: `constructor(private readonly x: T)`
+      // declares `x` as a field. Emit each shorthand parameter as its own
+      // field member so L4 diagrams see the state. The constructor method
+      // itself is still emitted below (fall through).
+      if (name === "constructor") {
+        const paramsNode = child.childForFieldName("parameters");
+        for (const p of paramsNode?.namedChildren ?? []) {
+          if (p.type !== "required_parameter") continue;
+          const mod = (p.namedChildren ?? []).find(
+            (c) => c.type === "accessibility_modifier",
+          );
+          if (!mod) continue; // plain param, not a shorthand field
+          const idNode = (p.namedChildren ?? []).find(
+            (c) => c.type === "identifier",
+          );
+          if (!idNode) continue;
+          const typeAnn = (p.namedChildren ?? []).find(
+            (c) => c.type === "type_annotation",
+          );
+          members.push({
+            name: idNode.text,
+            kind: "field",
+            signature: typeAnn ? `${idNode.text}${typeAnn.text}` : idNode.text,
+            visibility:
+              mod.text === "private"
+                ? "private"
+                : mod.text === "protected"
+                  ? "internal"
+                  : "public",
+          });
+        }
+      }
       members.push({
         name,
         kind: "method",
