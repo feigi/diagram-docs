@@ -95,6 +95,18 @@ describe("Integration: Submodule per-folder docs", () => {
     expect(d2).toContain("docs/architecture/component.svg");
 
     // 4. Generate per-folder submodule docs
+    // Snapshot which stub paths are absent before generation so cleanup only
+    // removes stubs this test created — not pre-existing committed fixtures
+    // (e.g. services/api-gateway/diagram-docs.yaml is tracked in git).
+    const preexistingStubs = new Set(
+      model.containers
+        .map((c) => {
+          const appPath = c.path ?? c.applicationId.replace(/-/g, "/");
+          return path.join(MONOREPO, appPath, "diagram-docs.yaml");
+        })
+        .filter((p) => fs.existsSync(p)),
+    );
+
     const subResults = generateSubmoduleDocs(
       MONOREPO,
       OUTPUT_DIR,
@@ -104,9 +116,19 @@ describe("Integration: Submodule per-folder docs", () => {
 
     expect(subResults.length).toBeGreaterThan(0);
 
-    // Track for cleanup
+    // Track for cleanup (both the docs subtree and the new app-root stub).
+    // rmSync with { recursive: true } handles single files too.
+    // Skip stub cleanup for pre-existing files (committed fixtures must survive).
     for (const sub of subResults) {
       trackDir(path.join(MONOREPO, sub.applicationPath, "docs"));
+      const stubPath = path.join(
+        MONOREPO,
+        sub.applicationPath,
+        "diagram-docs.yaml",
+      );
+      if (!preexistingStubs.has(stubPath)) {
+        trackDir(stubPath);
+      }
     }
 
     // Verify per-folder docs were created
@@ -229,5 +251,86 @@ describe("Integration: Submodule per-folder docs", () => {
         expect(content).toContain(`# ${key}`);
       }
     }
+  });
+
+  it("preserves an existing diagram-docs.yaml at a submodule root", () => {
+    const MODEL_PATH = path.resolve(__dirname, "../fixtures/model.yaml");
+    const model = loadModel(MODEL_PATH);
+
+    const tmpRoot = path.join(MONOREPO, "test-submodule-stub-preserve");
+    trackDir(tmpRoot);
+
+    const config = configSchema.parse({
+      submodules: { enabled: true },
+      levels: { context: true, container: true, component: true },
+    });
+
+    // Pre-create a populated stub for one submodule
+    const appPath = "services/user/api";
+    const stubPath = path.join(tmpRoot, appPath, "diagram-docs.yaml");
+    fs.mkdirSync(path.dirname(stubPath), { recursive: true });
+    const userContent = "system:\n  name: My Custom Name\n";
+    fs.writeFileSync(stubPath, userContent, "utf-8");
+
+    generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config);
+
+    expect(fs.readFileSync(stubPath, "utf-8")).toBe(userContent);
+  });
+
+  it("does not scaffold submodule stubs when component diagrams are disabled", () => {
+    const MODEL_PATH = path.resolve(__dirname, "../fixtures/model.yaml");
+    const model = loadModel(MODEL_PATH);
+
+    const tmpRoot = path.join(MONOREPO, "test-submodule-stub-nocomponent");
+    trackDir(tmpRoot);
+
+    const config = configSchema.parse({
+      submodules: { enabled: true },
+      levels: { context: true, container: true, component: false },
+    });
+
+    generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config);
+
+    for (const container of model.containers) {
+      const appPath =
+        container.path ?? container.applicationId.replace(/-/g, "/");
+      const stubPath = path.join(tmpRoot, appPath, "diagram-docs.yaml");
+      expect(fs.existsSync(stubPath)).toBe(false);
+    }
+  });
+
+  it("does not scaffold a stub for a submodule excluded via override", () => {
+    const MODEL_PATH = path.resolve(__dirname, "../fixtures/model.yaml");
+    const model = loadModel(MODEL_PATH);
+
+    const tmpRoot = path.join(MONOREPO, "test-submodule-stub-exclude");
+    trackDir(tmpRoot);
+
+    const config = configSchema.parse({
+      submodules: {
+        enabled: true,
+        overrides: {
+          "services-order-service": { exclude: true },
+        },
+      },
+      levels: { context: true, container: true, component: true },
+    });
+
+    generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config);
+
+    const excludedAppPath = "services/order/service";
+    const excludedStub = path.join(
+      tmpRoot,
+      excludedAppPath,
+      "diagram-docs.yaml",
+    );
+    expect(fs.existsSync(excludedStub)).toBe(false);
+
+    const includedStub = path.join(
+      tmpRoot,
+      "services/user/api",
+      "diagram-docs.yaml",
+    );
+    expect(fs.existsSync(includedStub)).toBe(true);
   });
 });
