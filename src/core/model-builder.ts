@@ -11,6 +11,7 @@ import type {
 import type { Config } from "../config/schema.js";
 import { slugify } from "./slugify.js";
 import { humanizeName, lastSegment, inferTechnology } from "./humanize.js";
+import { buildCodeModel } from "./code-model.js";
 import {
   detectRole,
   detectExternalSystems,
@@ -182,6 +183,13 @@ export function buildModel({
     config.externalSystems,
   );
 
+  // Code-level data (classes/interfaces/relationships within components)
+  const { codeElements, codeRelationships } = buildCodeModel(
+    rawStructure,
+    components,
+    { levels: config.levels, code: config.code },
+  );
+
   return {
     version: 1,
     system: {
@@ -193,6 +201,9 @@ export function buildModel({
     containers,
     components,
     relationships,
+    codeElements: codeElements.length > 0 ? codeElements : undefined,
+    codeRelationships:
+      codeRelationships.length > 0 ? codeRelationships : undefined,
   };
 }
 
