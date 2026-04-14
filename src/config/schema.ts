@@ -33,6 +33,15 @@ export const configSchema = z.object({
       context: z.boolean().default(true),
       container: z.boolean().default(true),
       component: z.boolean().default(true),
+      code: z.boolean().default(false),
+    })
+    .default({}),
+
+  code: z
+    .object({
+      includePrivate: z.boolean().default(false),
+      includeMembers: z.boolean().default(true),
+      minElements: z.number().int().min(1).default(2),
     })
     .default({}),
 
