@@ -49,6 +49,13 @@ export async function collectRemovePaths(
   );
   candidates.push(...submoduleCacheDirs);
 
+  // 5. submodule diagram-docs.yaml stubs (always removed — scaffolded by `generate`)
+  const submoduleConfigStubs = await discoverSubmoduleConfigStubs(
+    configDir,
+    modelPath,
+  );
+  candidates.push(...submoduleConfigStubs);
+
   if (all) {
     // Discover submodule architecture dirs before the model is marked for deletion
     const submoduleDirs = await discoverSubmoduleDirs(
@@ -57,10 +64,10 @@ export async function collectRemovePaths(
       config,
     );
 
-    // 5. {config.output.dir}/ — entire output folder
+    // 6. {config.output.dir}/ — entire output folder
     candidates.push(path.resolve(configDir, config.output.dir));
 
-    // 6. submodule {appPath}/{docsDir}/architecture/ dirs
+    // 7. submodule {appPath}/{docsDir}/architecture/ dirs
     candidates.push(...submoduleDirs);
   }
 
@@ -106,6 +113,44 @@ async function discoverSubmoduleCacheDirs(
   // Exclude the root .diagram-docs (already handled as a direct candidate)
   const rootCache = path.join(configDir, ".diagram-docs");
   return matches.filter((m) => m !== rootCache);
+}
+
+/**
+ * Discover per-application diagram-docs.yaml stubs scaffolded by `generate`.
+ *
+ * Strategy:
+ * 1. Read architecture-model.yaml and derive {appPath}/diagram-docs.yaml paths.
+ * 2. Fallback: glob for all diagram-docs.yaml files, excluding the root config.
+ */
+async function discoverSubmoduleConfigStubs(
+  configDir: string,
+  modelPath: string,
+): Promise<string[]> {
+  if (fs.existsSync(modelPath)) {
+    try {
+      const raw = fs.readFileSync(modelPath, "utf-8");
+      const model = architectureModelSchema.parse(parseYaml(raw));
+      return model.containers.map((container) => {
+        const appPath =
+          container.path ?? container.applicationId.replace(/-/g, "/");
+        return path.join(configDir, appPath, "diagram-docs.yaml");
+      });
+    } catch {
+      // Fall through to filesystem walk
+    }
+  }
+
+  const ignoreOpts = {
+    cwd: configDir,
+    ignore: ["**/node_modules/**", "**/.git/**"],
+    absolute: true,
+  };
+
+  const matches = await glob("**/diagram-docs.yaml", ignoreOpts);
+
+  // Exclude the root diagram-docs.yaml (already handled as a direct candidate)
+  const rootConfig = path.join(configDir, "diagram-docs.yaml");
+  return matches.filter((m) => m !== rootConfig);
 }
 
 /**
