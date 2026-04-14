@@ -281,6 +281,8 @@ export async function runScan({
   const scanConfig = {
     exclude: effectiveExcludes,
     abstraction: effectiveConfig.abstraction,
+    levels: effectiveConfig.levels,
+    code: effectiveConfig.code,
   };
 
   const applications: ScannedApplication[] = [];
@@ -452,6 +454,8 @@ export async function runProjectScan(options: {
   const scanConfig = {
     exclude: effectiveExcludes,
     abstraction: effectiveConfig.abstraction,
+    levels: effectiveConfig.levels,
+    code: effectiveConfig.code,
   };
 
   const result = await analyzer.analyze(projectAbsPath, scanConfig);
