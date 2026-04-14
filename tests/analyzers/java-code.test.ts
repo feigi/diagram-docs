@@ -8,6 +8,11 @@ const FIXTURE = path.resolve(
   "../fixtures/code-level/java/UserService.java",
 );
 
+const MULTI_FIXTURE = path.resolve(
+  __dirname,
+  "../fixtures/code-level/java/MultipleInterfaces.java",
+);
+
 describe("java code extraction", () => {
   it("extracts classes, interfaces, and enums", async () => {
     const source = fs.readFileSync(FIXTURE, "utf-8");
@@ -49,5 +54,62 @@ describe("java code extraction", () => {
     expect(memberNames).toEqual(
       expect.arrayContaining(["findByName", "getAuditLog"]),
     );
+  });
+});
+
+describe("java code extraction: multi-interface and generic parents", () => {
+  it("captures all entries in an implements list in order", async () => {
+    const source = `package p; class Foo implements A, B, C {}`;
+    const els = await extractJavaCode("Foo.java", source);
+    const foo = els.find((e) => e.name === "Foo")!;
+    expect(foo.references).toEqual([
+      { targetName: "A", kind: "implements" },
+      { targetName: "B", kind: "implements" },
+      { targetName: "C", kind: "implements" },
+    ]);
+  });
+
+  it("strips generic parameters from extends and implements targets", async () => {
+    const source = `package p;
+import java.util.ArrayList;
+import java.io.Serializable;
+class Foo extends ArrayList<String> implements Comparable<Foo>, Serializable {}`;
+    const els = await extractJavaCode("Foo.java", source);
+    const foo = els.find((e) => e.name === "Foo")!;
+    expect(foo.references).toEqual([
+      { targetName: "ArrayList", kind: "extends" },
+      { targetName: "Comparable", kind: "implements" },
+      { targetName: "Serializable", kind: "implements" },
+    ]);
+  });
+
+  it("captures multiple parents for an interface extends list", async () => {
+    const source = `package p; interface Super extends A, B {}`;
+    const els = await extractJavaCode("Super.java", source);
+    const sup = els.find((e) => e.name === "Super")!;
+    expect(sup.references).toEqual([
+      { targetName: "A", kind: "extends" },
+      { targetName: "B", kind: "extends" },
+    ]);
+  });
+
+  it("extracts multi-interface and generic parents from MultipleInterfaces fixture", async () => {
+    const source = fs.readFileSync(MULTI_FIXTURE, "utf-8");
+    const els = await extractJavaCode(MULTI_FIXTURE, source);
+
+    const combined = els.find((e) => e.name === "Combined")!;
+    expect(combined.references).toEqual([
+      { targetName: "Alpha", kind: "extends" },
+      { targetName: "Beta", kind: "extends" },
+      { targetName: "Gamma", kind: "extends" },
+    ]);
+
+    const bag = els.find((e) => e.name === "Bag")!;
+    expect(bag.references).toEqual([
+      { targetName: "ArrayList", kind: "extends" },
+      { targetName: "Alpha", kind: "implements" },
+      { targetName: "Comparable", kind: "implements" },
+      { targetName: "Beta", kind: "implements" },
+    ]);
   });
 });
