@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { buildModel } from "../../src/core/model-builder.js";
 import type { RawStructure } from "../../src/analyzers/types.js";
 import { configSchema } from "../../src/config/schema.js";
+import {
+  codeFixture,
+  makeConfig as makeCodeConfig,
+} from "./fixtures/code-model-fixture.js";
 
 function makeConfig(overrides = {}) {
   return configSchema.parse(overrides);
@@ -999,5 +1003,27 @@ describe("buildModel", () => {
       "Message listener",
     );
     expect(byId("app-plain").description).toContain("module");
+  });
+
+  // ---------------------------------------------------------------------------
+  // Code-level data attachment
+  // ---------------------------------------------------------------------------
+
+  it("attaches codeElements and codeRelationships when levels.code is on", () => {
+    const model = buildModel({
+      config: makeCodeConfig(true),
+      rawStructure: codeFixture,
+    });
+    expect(model.codeElements).toBeDefined();
+    expect(model.codeElements!.length).toBeGreaterThan(0);
+    expect(model.codeRelationships!.length).toBeGreaterThan(0);
+  });
+
+  it("does not populate codeElements when levels.code is off", () => {
+    const model = buildModel({
+      config: makeCodeConfig(false),
+      rawStructure: codeFixture,
+    });
+    expect(model.codeElements ?? []).toEqual([]);
   });
 });
