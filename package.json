@@ -6,6 +6,10 @@
   "bin": {
     "diagram-docs": "./dist/cli/index.js"
   },
+  "files": [
+    "dist/",
+    "assets/"
+  ],
   "scripts": {
     "prepare": "test -z \"$CI\" && husky || true",
     "prepack": "tsc",
@@ -26,6 +30,7 @@
     "chalk": "^5.6.2",
     "commander": "^13.1.0",
     "glob": "^11.0.1",
+    "web-tree-sitter": "^0.21.0",
     "yaml": "^2.7.0",
     "zod": "^3.24.2"
   },
@@ -40,6 +45,10 @@
     "husky": "^9.1.7",
     "jsondiffpatch": "^0.7.3",
     "prettier": "^3.8.1",
+    "tree-sitter-c": "^0.24.1",
+    "tree-sitter-java": "^0.23.5",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
     "typescript-eslint": "^8.57.2",
