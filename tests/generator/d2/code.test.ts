@@ -89,4 +89,86 @@ describe("generateCodeDiagram", () => {
     );
     expect(a).toBe(b);
   });
+
+  it("emits class members inside shape:class containers", () => {
+    const modelWithMembers: ArchitectureModel = {
+      ...model,
+      codeElements: [
+        {
+          id: "api.users.UserService",
+          componentId: "users",
+          kind: "class",
+          name: "UserService",
+          visibility: "public",
+          members: [
+            { name: "users", kind: "field", signature: "users: List<User>" },
+            {
+              name: "findByName",
+              kind: "method",
+              signature: "findByName(name: String): User",
+            },
+          ],
+        },
+      ],
+      codeRelationships: [],
+    } as any;
+    const d2 = generateCodeDiagram(
+      modelWithMembers,
+      component,
+      getProfileForLanguage("java"),
+    );
+    expect(d2).toContain("shape: class");
+    expect(d2).toContain("findByName(name: String): User");
+    expect(d2).toContain("users: List<User>");
+  });
+
+  it("C profile groups types, public functions, and internal functions", () => {
+    const cComponent: Component = { ...component, id: "ht" } as any;
+    const cModel: ArchitectureModel = {
+      ...model,
+      codeElements: [
+        {
+          id: "lib.ht.hash_table",
+          componentId: "ht",
+          kind: "struct",
+          name: "hash_table",
+          visibility: "public",
+          members: [
+            {
+              name: "entries",
+              kind: "field",
+              signature: "entries: hash_entry**",
+            },
+            { name: "count", kind: "field", signature: "count: size_t" },
+          ],
+        },
+        {
+          id: "lib.ht.hash_insert",
+          componentId: "ht",
+          kind: "function",
+          name: "hash_insert",
+          visibility: "public",
+        },
+        {
+          id: "lib.ht.rehash",
+          componentId: "ht",
+          kind: "function",
+          name: "rehash",
+          visibility: "private",
+        },
+      ],
+      codeRelationships: [],
+    } as any;
+    const d2 = generateCodeDiagram(
+      cModel,
+      cComponent,
+      getProfileForLanguage("c"),
+    );
+    expect(d2).toMatch(/types:.*\{/);
+    expect(d2).toMatch(/public:.*\{/);
+    expect(d2).toMatch(/internal:.*\{/);
+    expect(d2).toContain("hash_table");
+    expect(d2).toContain("hash_insert");
+    expect(d2).toContain("rehash");
+  });
 });
