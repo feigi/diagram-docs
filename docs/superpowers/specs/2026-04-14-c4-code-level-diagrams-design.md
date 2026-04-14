@@ -2,7 +2,7 @@
 
 ## Goal
 
-Add a fourth C4 level — the **code** level, per the C4 spec's terminology — to diagram-docs. Each component gets its own D2 diagram showing the code-level building blocks inside it: classes/interfaces/enums for Java, classes and module-level functions for Python, structs/typedefs/functions for C. The diagram renders types, their relationships (inheritance, containment, usage), and public members.
+Add a fourth C4 level — the **code** level, per the C4 spec's terminology — to diagram-docs. Each component gets its own D2 diagram showing the code-level building blocks inside it: classes/interfaces/enums for Java; classes/interfaces/type aliases/enums and module-level functions for TypeScript; classes and module-level functions for Python; structs/typedefs/functions for C. The diagram renders types, their relationships (inheritance, containment, usage), and public members.
 
 This is a structural view, not a behavioral one — method-call graphs are explicitly out of scope for v1.
 
@@ -10,8 +10,8 @@ This is a structural view, not a behavioral one — method-call graphs are expli
 
 ### In scope (v1)
 
-- Per-component L4 diagrams for Java, Python, and C.
-- Tree-sitter-based extraction for all three languages.
+- Per-component L4 diagrams for all four currently-registered languages: Java, TypeScript, Python, and C.
+- Tree-sitter-based extraction for all four languages.
 - Public-only elements and members by default, with config to include private.
 - Fields and methods shown with type signatures inside `shape: class` boxes.
 - Cross-component references rendered as external nodes in the source's diagram.
@@ -23,7 +23,7 @@ This is a structural view, not a behavioral one — method-call graphs are expli
 
 - Method-call graphs and any behavioral/dynamic analysis.
 - LLM enrichment of class/function descriptions.
-- TypeScript and other languages (the existing Java/Python/C analyzer set).
+- Languages beyond the currently-registered four (Java, TypeScript, Python, C). Adding a new language uses the established pattern (analyzer `code.ts` + tree-sitter queries + rendering profile).
 - Fully-resolved fully-qualified type names for stdlib or third-party references — these are dropped silently.
 - Per-component manual configuration (e.g., "always include private for this component") — the settings in `diagram-docs.yaml` apply globally in v1.
 
@@ -138,12 +138,12 @@ Resolution uses the existing `ScannedModule.imports` table together with the glo
 
 `RawCodeReference.kind` uses the vocabulary found in source syntax; `CodeRelationship.kind` uses the abstract semantic vocabulary. The model-builder applies this fixed mapping:
 
-| Raw kind     | Model kind   | Notes                                                   |
-| ------------ | ------------ | ------------------------------------------------------- |
-| `extends`    | `inherits`   | Java `extends`, Python base class in class declaration. |
-| `implements` | `implements` | Java `implements`. No Python equivalent in v1.          |
-| `uses`       | `uses`       | Field, parameter, or return type references.            |
-| `contains`   | `contains`   | Struct field references another struct (C).             |
+| Raw kind     | Model kind   | Notes                                                              |
+| ------------ | ------------ | ------------------------------------------------------------------ |
+| `extends`    | `inherits`   | Java/TypeScript `extends`, Python base class in class declaration. |
+| `implements` | `implements` | Java/TypeScript `implements`. No Python equivalent in v1.          |
+| `uses`       | `uses`       | Field, parameter, or return type references.                       |
+| `contains`   | `contains`   | Struct field references another struct (C).                        |
 
 ### Schemas
 
@@ -237,13 +237,14 @@ interface LanguageRenderingProfile {
 
 ### Profile selection
 
-A component's profile is chosen by the dominant language among its modules — the language owning the most files in the component. Ties break in a deterministic, documented order: Java > Python > C. Mixed-language components default to the dominant language's profile. This rule is documented in the spec and covered by a test.
+A component's profile is chosen by the dominant language among its modules — the language owning the most files in the component. Ties break in a deterministic, documented order: Java > TypeScript > Python > C. Mixed-language components default to the dominant language's profile. This rule is documented in the spec and covered by a test.
 
 ### Profiles
 
-**Java / Python profile:**
+**Java / TypeScript / Python profile** (shared; they render near-identically):
 
-- Each class, interface, or enum → `shape: class` node with fields and methods listed inside.
+- Each class, interface, enum, or TypeScript type alias → `shape: class` node with fields and methods listed inside.
+- Module-level functions (TypeScript, Python) → plain boxes outside any class scope.
 - No grouping sub-scopes by default.
 - `inherits` and `implements` edges rendered with labels.
 - `uses` edges rendered without labels (to avoid visual noise).
@@ -251,8 +252,15 @@ A component's profile is chosen by the dominant language among its modules — t
 
 **Python-specific nuances:**
 
-- Module-level functions render as plain boxes outside any class scope.
 - When type hints are absent from a signature, the signature field is omitted rather than shown with synthetic `any` placeholders.
+- No `implements` edges (no separate interface construct).
+
+**TypeScript-specific nuances:**
+
+- `interface` and `type` aliases both render as `shape: class` nodes. `type` aliases that are simple unions of primitives (e.g., `type Id = string`) are collapsed into their usage site rather than shown as nodes.
+- TypeScript `implements` on a class produces `implements` edges; `extends` on a class produces `inherits` edges; `extends` on an interface (multiple inheritance of interfaces) also produces `inherits` edges.
+- Access modifiers (`public` / `protected` / `private`) map to the shared `visibility` field. Members without an explicit modifier default to `public`, matching TypeScript semantics.
+- Generic type parameters are stripped from signatures in v1 to keep rendering compact (same treatment as Java generics).
 
 **C profile:**
 
@@ -275,17 +283,20 @@ A new shared module `src/analyzers/tree-sitter.ts`:
 
 - Loads WASM grammars once per language via `web-tree-sitter`.
 - Exposes `runQuery(language, source, queryPath) → QueryMatch[]`.
-- WASM grammars for Java, Python, and C are bundled under `assets/tree-sitter/`.
+- WASM grammars for Java, TypeScript, Python, and C are bundled under `assets/tree-sitter/`.
 
 ### Per-language additions
 
 Each analyzer gets a new `code.ts` file that runs tree-sitter queries and builds `RawCodeElement[]`:
 
 - `src/analyzers/java/code.ts` + `src/analyzers/java/queries/code.scm`
+- `src/analyzers/typescript/code.ts` + `src/analyzers/typescript/queries/code.scm`
 - `src/analyzers/python/code.ts` + `src/analyzers/python/queries/code.scm`
 - `src/analyzers/c/code.ts` + `src/analyzers/c/queries/code.scm`
 
 Each analyzer's `index.ts` calls its `extractCode()` only when `config.levels.code: true` and merges the result into each `ScannedModule.codeElements`.
+
+The TypeScript analyzer's query also covers `.tsx` files. Declaration files (`*.d.ts`), already excluded from module discovery in v1, are also skipped for code extraction.
 
 ### C preprocessor handling
 
@@ -305,9 +316,10 @@ When `llm-model-builder.ts` is the active model-building path (for description e
 
 ### Unit tests
 
-- `tests/analyzers/java-code.test.ts`, `tests/analyzers/python-code.test.ts`, `tests/analyzers/c-code.test.ts` — feed small source-file fixtures into each analyzer and assert `RawCodeElement[]` matches expected shape (ids, kinds, members, references).
+- `tests/analyzers/java-code.test.ts`, `tests/analyzers/typescript-code.test.ts`, `tests/analyzers/python-code.test.ts`, `tests/analyzers/c-code.test.ts` — feed small source-file fixtures into each analyzer and assert `RawCodeElement[]` matches expected shape (ids, kinds, members, references).
 - Edge cases per language:
   - **Java**: inner classes, generics, annotations.
+  - **TypeScript**: `interface` vs `type` aliases, class with `extends` + `implements`, access modifiers, module-level functions in `.ts` and `.tsx`, generics stripping.
   - **Python**: decorated classes, type-hint-less functions, multiple inheritance.
   - **C**: typedef aliasing, static vs. extern visibility, forward declarations.
 
@@ -372,5 +384,5 @@ Explicitly deferred:
 
 - **Call-graph extraction.** A behavioral view may land as a separate `levels.code.callGraph: true` option in a follow-up PR.
 - **LLM description enrichment.** Can be added as a parallel pass to the existing `llm-model-builder.ts` without schema changes (descriptions are optional fields).
-- **TypeScript / other languages.** Pattern is established; any new language implements a `code.ts` + queries file + profile.
+- **Additional languages beyond Java / TypeScript / Python / C.** The pattern is established; any new language implements a `code.ts` + queries file + profile.
 - **Per-component config overrides.** Global flags suffice for v1.
