@@ -50,13 +50,14 @@ Source code  ──▶  .diagram-docs/raw-structure.json  ──▶  architectur
 
 **Model** — Scan output is converted into `architecture-model.yaml`. In deterministic mode, a rule-based builder maps modules to components, detects external systems from dependencies, and infers actors from annotations. In LLM mode, the deterministic model is generated first as an anchor, then refined by an LLM agent for better descriptions, grouping, and relationship labels. The tool shells out to Claude Code or Copilot CLI — it never calls an LLM API directly.
 
-**Generate** — The architecture model is rendered as D2 diagrams at three C4 levels:
+**Generate** — The architecture model is rendered as D2 diagrams at up to four [C4](https://c4model.com) levels:
 
-| Level          | File              | Shows                              |
-| -------------- | ----------------- | ---------------------------------- |
-| Context (L1)   | `c1-context.d2`   | System, actors, external systems   |
-| Container (L2) | `c2-container.d2` | Applications within the system     |
-| Component (L3) | `c3-component.d2` | Components within each application |
+| Level          | File              | Shows                                                      |
+| -------------- | ----------------- | ---------------------------------------------------------- |
+| Context (L1)   | `c1-context.d2`   | System, actors, external systems                           |
+| Container (L2) | `c2-container.d2` | Applications within the system                             |
+| Component (L3) | `c3-component.d2` | Components within each application                         |
+| Code (L4)      | `c4-code.d2`      | Classes, interfaces, functions within each component (opt) |
 
 ## Supported languages
 
@@ -90,6 +91,11 @@ docs/architecture/
       c3-component.d2       # User-facing
       _generated/
         c3-component.d2
+      components/           # Only when levels.code: true
+        <id>/
+          c4-code.d2        # User-facing
+          _generated/
+            c4-code.d2
 ```
 
 All output should be checked into version control. The `manifest.yaml` checksums enable incremental builds — without it, CI will re-scan and rebuild everything on each run.
@@ -139,6 +145,7 @@ levels:
   context: true # L1
   container: true # L2
   component: true # L3
+  code: false # L4 — opt-in, see "C4 Code-Level Diagrams" below
 
 abstraction:
   granularity: balanced # detailed | balanced | overview
@@ -185,6 +192,38 @@ submodules:
 ### External systems
 
 Dependencies like PostgreSQL, Kafka, and Redis are auto-detected from build files. Config entries take precedence and let you specify `usedBy` relationships explicitly.
+
+## C4 Code-Level Diagrams
+
+The fourth [C4](https://c4model.com) level — "Code" (L4) — zooms inside a component and shows the classes, interfaces, and functions it contains. It's opt-in because most systems don't need it; turn it on for a specific container only when a component is complex enough to warrant its own diagram.
+
+Enable it in `diagram-docs.yaml`:
+
+```yaml
+levels:
+  code: true
+
+code:
+  includePrivate: false # Include private classes / functions
+  includeMembers: true # Render fields/methods/properties inside types
+  minElements: 2 # Skip components that would have fewer elements
+```
+
+One diagram is generated per component that meets `minElements`, at:
+
+- `docs/architecture/containers/<container>/components/<component>/c4-code.d2` — user-facing scaffold (edit freely)
+- `.../_generated/c4-code.d2` — overwritten each run, imported by the scaffold
+
+### Supported languages
+
+All four registered analyzers support code-level extraction:
+
+| Language   | Extracted                                                                                                                                           |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Java       | Classes, interfaces, enums; public members rendered by default                                                                                      |
+| TypeScript | Classes, interfaces, type aliases, module-level functions; access modifiers (`private` / `protected` / `public`) respected                          |
+| Python     | Classes and module-level functions; `_`-prefixed names treated as private                                                                           |
+| C          | Structs, typedefs, functions; `static` functions treated as private; grouped into **Types / Public API / Internal** sub-scopes within the component |
 
 ## Architecture model
 

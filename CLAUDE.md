@@ -39,12 +39,13 @@ npm run bench              # Performance benchmarks (vitest bench)
 
 ### Key Modules
 
-- **`src/analyzers/`** — Plugin-based language analyzers (Java, Python, C). Each implements `LanguageAnalyzer` interface from `types.ts`, registered in `registry.ts`.
+- **`src/analyzers/`** — Plugin-based language analyzers (Java, TypeScript, Python, C). Each implements `LanguageAnalyzer` interface from `types.ts`, registered in `registry.ts`. `tree-sitter.ts` is a shared WASM grammar loader used for code-level extraction.
 - **`src/cli/commands/`** — Commander.js commands: `init`, `scan`, `generate`, `model`.
 - **`src/config/`** — Zod-validated config from `diagram-docs.yaml` (`schema.ts` + `loader.ts`).
-- **`src/core/`** — Discovery, manifest caching (checksums for skip-unchanged), model building, humanization, slugification.
-- **`src/generator/d2/`** — D2 generators per C4 level (`context.ts`, `container.ts`, `component.ts`), plus `writer.ts` (D2 syntax builder), `stability.ts` (deterministic ordering), `drift.ts` (stale reference detection), `scaffold.ts`/`submodule-scaffold.ts` (user-facing file generation).
+- **`src/core/`** — Discovery, manifest caching (checksums for skip-unchanged), model building, humanization, slugification. `code-model.ts` resolves code elements and qualified IDs for L4.
+- **`src/generator/d2/`** — D2 generators per C4 level (`context.ts`, `container.ts`, `component.ts`, `code.ts`), plus `writer.ts` (D2 syntax builder), `stability.ts` (deterministic ordering), `drift.ts` (stale reference detection), `scaffold.ts`/`submodule-scaffold.ts`/`code-scaffold.ts` (user-facing file generation). `code-profiles.ts` provides language-specific rendering profiles for the L4 generator.
 - **`src/schemas/`** — JSON Schemas for `raw-structure.json` and `architecture-model.yaml`.
+- **`assets/tree-sitter/`** — Bundled tree-sitter WASM grammars (Java, TypeScript, Python, C) loaded by `src/analyzers/tree-sitter.ts` for code-level parsing.
 
 ### Core Types (`src/analyzers/types.ts`)
 
@@ -54,7 +55,7 @@ npm run bench              # Performance benchmarks (vitest bench)
 
 ### Output Structure
 
-Generated files go in `_generated/` subdirs (overwritten each run). User-facing files are scaffolded once and never overwritten — they use D2 `@import` to merge with generated content.
+Generated files go in `_generated/` subdirs (overwritten each run). User-facing files are scaffolded once and never overwritten — they use D2 `@import` to merge with generated content. When L4 is enabled (`levels.code: true`), per-component diagrams are written under `docs/architecture/containers/<container>/components/<component>/c4-code.d2` (with a matching `_generated/` sibling).
 
 ## Code Conventions
 
