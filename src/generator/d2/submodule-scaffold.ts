@@ -31,7 +31,6 @@ export function generateSubmoduleDocs(
 ): SubmoduleOutputInfo[] {
   const results: SubmoduleOutputInfo[] = [];
   const subCfg = config.submodules;
-  let changedCount = 0;
   let unchangedCount = 0;
 
   for (const container of model.containers) {
@@ -53,22 +52,22 @@ export function generateSubmoduleDocs(
     const d2Files: string[] = [];
     let changed = false;
 
-    // Scaffold per-submodule config stub (create-once, gated on component-level diagrams)
     if (config.levels.component) {
+      // Scaffold per-submodule config stub (create-once). Logged separately
+      // and does not flip `changed` — matches the user-facing c3-component.d2
+      // scaffold below, where create-once artifacts are announced by their own
+      // path rather than folded into the per-container "Generated:" summary.
       const stubPath = path.join(repoRoot, appPath, "diagram-docs.yaml");
       if (!fs.existsSync(stubPath)) {
-        fs.mkdirSync(path.dirname(stubPath), { recursive: true });
         fs.writeFileSync(
           stubPath,
           buildSubmoduleConfigStub(repoRoot, appPath),
           "utf-8",
         );
-        changed = true;
+        console.error(`Scaffolded: ${path.relative(repoRoot, stubPath)}`);
       }
-    }
 
-    // Generate component diagram (only when enabled)
-    if (config.levels.component) {
+      // Generate component diagram
       const d2 = generateComponentDiagram(model, container.id);
       if (writeIfChanged(path.join(generatedDir, "c3-component.d2"), d2))
         changed = true;
@@ -125,16 +124,13 @@ export function generateSubmoduleDocs(
     });
 
     if (changed) {
-      changedCount++;
       console.error(`Generated: ${path.relative(repoRoot, outputDir)}/`);
     } else {
       unchangedCount++;
     }
   }
 
-  if (unchangedCount > 0 && changedCount === 0) {
-    console.error(`${unchangedCount} submodule doc(s) unchanged.`);
-  } else if (unchangedCount > 0) {
+  if (unchangedCount > 0) {
     console.error(`${unchangedCount} submodule doc(s) unchanged.`);
   }
 
