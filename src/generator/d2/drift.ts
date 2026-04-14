@@ -43,6 +43,35 @@ export function checkDrift(
     warnings.push(...fileWarnings);
   }
 
+  // Code-level diagram files (C4). These reference code-element IDs which
+  // use underscores and may preserve source-identifier casing, so we check
+  // them against a distinct id set using a permissive pattern.
+  if (model.codeElements && model.codeElements.length > 0) {
+    const codeIds = new Set<string>();
+    for (const el of model.codeElements) {
+      codeIds.add(toD2Id(el.id));
+    }
+    if (fs.existsSync(containersDir)) {
+      for (const containerEntry of fs.readdirSync(containersDir)) {
+        const componentsDir = path.join(
+          containersDir,
+          containerEntry,
+          "components",
+        );
+        if (!fs.existsSync(componentsDir)) continue;
+        for (const componentEntry of fs.readdirSync(componentsDir)) {
+          const codeFile = path.join(
+            componentsDir,
+            componentEntry,
+            "c4-code.d2",
+          );
+          if (!fs.existsSync(codeFile)) continue;
+          warnings.push(...checkCodeFile(codeFile, codeIds));
+        }
+      }
+    }
+  }
+
   return warnings;
 }
 
@@ -146,6 +175,82 @@ function checkId(
   if (validIds.has(rootId)) return;
 
   // Also check if it's a nested ref where the parent is valid
+  const parts = rootId.split(".");
+  for (let i = parts.length - 1; i >= 1; i--) {
+    const prefix = parts.slice(0, i).join(".");
+    if (validIds.has(prefix)) return;
+  }
+
+  warnings.push({
+    file,
+    line,
+    id: rootId,
+    message: `Reference to "${rootId}" not found in architecture model`,
+  });
+}
+
+// Code-level identifiers use underscores and may include uppercase chars
+// (e.g. class names). Connection lines use the same shape as C3 drift.
+const CODE_ID_LINE = /^([A-Za-z0-9_][A-Za-z0-9_.-]*)/;
+const CODE_CONNECTION =
+  /^([A-Za-z0-9_][A-Za-z0-9_.-]*)\s*->\s*([A-Za-z0-9_][A-Za-z0-9_.-]*)/;
+
+/**
+ * Parse a user c4-code.d2 file and check for references to code-element IDs
+ * that no longer exist in the model. Only examines lines after the last
+ * spread import (`...@`).
+ */
+function checkCodeFile(
+  filePath: string,
+  validIds: Set<string>,
+): DriftWarning[] {
+  const content = fs.readFileSync(filePath, "utf-8");
+  const lines = content.split("\n");
+  const relPath = path.basename(filePath);
+  const warnings: DriftWarning[] = [];
+
+  let customizationStart = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trimStart().startsWith("...@")) {
+      customizationStart = i + 1;
+    }
+  }
+
+  for (let i = customizationStart; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if (!line || line.startsWith("#")) continue;
+
+    const connMatch = line.match(CODE_CONNECTION);
+    if (connMatch) {
+      checkCodeId(connMatch[1], relPath, i + 1, validIds, warnings);
+      checkCodeId(connMatch[2], relPath, i + 1, validIds, warnings);
+      continue;
+    }
+
+    const idMatch = line.match(CODE_ID_LINE);
+    if (idMatch) {
+      checkCodeId(idMatch[1], relPath, i + 1, validIds, warnings);
+    }
+  }
+
+  return warnings;
+}
+
+/**
+ * Check whether a code-level ID (or its prefix) exists in the valid set.
+ * Strips trailing D2 property segments before comparing.
+ */
+function checkCodeId(
+  raw: string,
+  file: string,
+  line: number,
+  validIds: Set<string>,
+  warnings: DriftWarning[],
+): void {
+  const rootId = extractRootId(raw);
+  if (!rootId) return;
+  if (validIds.has(rootId)) return;
+
   const parts = rootId.split(".");
   for (let i = parts.length - 1; i >= 1; i--) {
     const prefix = parts.slice(0, i).join(".");
