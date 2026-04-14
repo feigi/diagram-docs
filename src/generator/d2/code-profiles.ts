@@ -9,6 +9,22 @@ export function getProfileForLanguage(
   return lang === "c" ? cProfile : javaTsPyProfile;
 }
 
+export function selectProfileForComponent(
+  fileCountsByLanguage: Record<ProfileLanguage, number>,
+): ProfileLanguage {
+  const order: ProfileLanguage[] = ["java", "typescript", "python", "c"];
+  let winner: ProfileLanguage = "java";
+  let winnerCount = -1;
+  for (const lang of order) {
+    const count = fileCountsByLanguage[lang] ?? 0;
+    if (count > winnerCount) {
+      winner = lang;
+      winnerCount = count;
+    }
+  }
+  return winner;
+}
+
 function escapeLabel(s: string): string {
   return s.replace(/"/g, '\\"');
 }

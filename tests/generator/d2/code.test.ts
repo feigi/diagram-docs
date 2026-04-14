@@ -1,6 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { generateCodeDiagram } from "../../../src/generator/d2/code.js";
-import { getProfileForLanguage } from "../../../src/generator/d2/code-profiles.js";
+import {
+  getProfileForLanguage,
+  selectProfileForComponent,
+} from "../../../src/generator/d2/code-profiles.js";
 import type {
   ArchitectureModel,
   Component,
@@ -120,6 +123,28 @@ describe("generateCodeDiagram", () => {
     expect(d2).toContain("shape: class");
     expect(d2).toContain("findByName(name: String): User");
     expect(d2).toContain("users: List<User>");
+  });
+
+  it("selectProfileForComponent picks C when most files are .c/.h", () => {
+    const result = selectProfileForComponent({
+      java: 1,
+      c: 5,
+      python: 0,
+      typescript: 0,
+    });
+    expect(result).toBe("c");
+  });
+
+  it("selectProfileForComponent applies tiebreak Java > TS > Python > C", () => {
+    expect(
+      selectProfileForComponent({ java: 3, typescript: 3, python: 0, c: 0 }),
+    ).toBe("java");
+    expect(
+      selectProfileForComponent({ typescript: 3, python: 3, java: 0, c: 0 }),
+    ).toBe("typescript");
+    expect(
+      selectProfileForComponent({ python: 3, c: 3, java: 0, typescript: 0 }),
+    ).toBe("python");
   });
 
   it("C profile groups types, public functions, and internal functions", () => {
