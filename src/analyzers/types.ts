@@ -127,6 +127,9 @@ export interface ArchitectureModel {
   codeRelationships?: CodeRelationship[];
 }
 
+/** Single component entry from ArchitectureModel.components */
+export type Component = ArchitectureModel["components"][number];
+
 export interface CodeElement {
   id: string;
   componentId: string;
