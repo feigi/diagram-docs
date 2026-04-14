@@ -49,4 +49,32 @@ describe("typescript code extraction", () => {
       expect.arrayContaining([{ targetName: "Auditable", kind: "implements" }]),
     );
   });
+
+  it("captures constructor shorthand parameters as fields", async () => {
+    const els = await extractTypeScriptCode(
+      FIXTURE,
+      fs.readFileSync(FIXTURE, "utf-8"),
+    );
+    // `User` class declares `constructor(private readonly name: string)` —
+    // the `name` parameter is a TS shorthand that declares a private field.
+    const user = els.find((e) => e.name === "User")!;
+    expect(user.members).toBeDefined();
+    const nameField = user.members!.find(
+      (m) => m.name === "name" && m.kind === "field",
+    );
+    expect(nameField).toBeDefined();
+    expect(nameField).toMatchObject({
+      name: "name",
+      kind: "field",
+      visibility: "private",
+    });
+    expect(nameField!.signature).toContain("name");
+    expect(nameField!.signature).toContain("string");
+
+    // The constructor itself should still be recorded as a method, so we
+    // don't lose the method shape when shorthand is present.
+    const ctor = user.members!.find((m) => m.name === "constructor");
+    expect(ctor).toBeDefined();
+    expect(ctor!.kind).toBe("method");
+  });
 });
