@@ -158,6 +158,9 @@ function buildSubmoduleConfigStub(repoRoot: string, appPath: string): string {
   const { config, defaults } = buildDefaultConfig(path.join(repoRoot, appPath));
   const humanName = config.system.name;
 
+  // Every body line must be commented so the stub parses to `null` and is
+  // inert under the cascading-config merge. Uncommented keys would shadow the
+  // repo-root config unintentionally.
   const body = stringifyYaml(defaults, { lineWidth: 120 });
   const commentedBody = body
     .split("\n")

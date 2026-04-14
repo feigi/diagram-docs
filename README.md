@@ -103,13 +103,17 @@ Container diagrams include drill-down links to component diagrams. All output is
 With submodules enabled, each application also gets its own docs directory:
 
 ```
-<app-path>/docs/architecture/
-  c3-component.d2
-  architecture-model.yaml    # Model fragment for reference
-  styles.d2
-  _generated/
+<app-path>/
+  diagram-docs.yaml          # Scaffolded override stub (fully commented by default)
+  docs/architecture/
     c3-component.d2
+    architecture-model.yaml    # Model fragment for reference
+    styles.d2
+    _generated/
+      c3-component.d2
 ```
+
+The `<app-path>/diagram-docs.yaml` stub is scaffolded once per submodule as a starting point for per-application config overrides. Its body is a commented-out copy of the defaults, so the file is inert on creation — values only take effect when you uncomment them. The cascading resolver merges it over the repo-root `diagram-docs.yaml` closest-parent-wins, letting each app tweak settings (e.g. `abstraction.granularity`, `scan.exclude`, `levels.component`) without touching the root. Commit the stubs you want to keep; discard the rest — they're recreated on the next `generate` if you run it from a fresh state.
 
 ## Configuration
 
