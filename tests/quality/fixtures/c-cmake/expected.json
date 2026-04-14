@@ -24,5 +24,9 @@
     }
   ],
   "externalDependencies": [],
-  "metadata": {}
+  "metadata": {},
+  "codeElements": [
+    { "name": "add", "kind": "function" },
+    { "name": "multiply", "kind": "function" }
+  ]
 }

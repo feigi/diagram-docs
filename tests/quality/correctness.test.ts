@@ -66,6 +66,21 @@ const defaultScanConfig = {
   abstraction: { granularity: "balanced" as const, excludePatterns: [] },
 };
 
+const codeLevelScanConfig = {
+  ...defaultScanConfig,
+  levels: {
+    context: true,
+    container: true,
+    component: true,
+    code: true,
+  },
+  code: {
+    includePrivate: false,
+    includeMembers: true,
+    minElements: 2,
+  },
+};
+
 const reports: CorrectnessReport[] = [];
 
 afterAll(() => {
@@ -196,6 +211,49 @@ describe("Correctness: Analyzer accuracy", () => {
 
         const metrics = computeSetMetrics(foundMeta, expectedMeta);
         expect(metrics.recall).toBeGreaterThanOrEqual(0.5);
+      });
+
+      it("code-element extraction (precision/recall >= 0.8)", async () => {
+        if (!expected.codeElements || expected.codeElements.length === 0) {
+          return; // No ground truth for code elements — skip.
+        }
+
+        const analyzer = getAnalyzer(fixture.analyzerId)!;
+        const codeResult = await analyzer.analyze(
+          fixture.appPath,
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          codeLevelScanConfig as any,
+        );
+
+        const foundKeys: string[] = [];
+        for (const mod of codeResult.modules) {
+          for (const el of mod.codeElements ?? []) {
+            foundKeys.push(`${el.kind}::${el.name}`);
+          }
+        }
+        const expectedKeys = expected.codeElements.map(
+          (e) => `${e.kind}::${e.name}`,
+        );
+
+        // Deduplicate both sides: set-level comparison (name+kind).
+        const uniqueFound = [...new Set(foundKeys)];
+        const uniqueExpected = [...new Set(expectedKeys)];
+
+        const metrics = computeSetMetrics(uniqueFound, uniqueExpected);
+
+        const existing = reports.find((r) => r.fixture === fixture.name);
+        if (existing) {
+          existing.categories["codeElements"] = metrics;
+        }
+
+        expect(
+          metrics.precision,
+          `precision too low for ${fixture.name}: missing=${metrics.missing.join(",")} extra=${metrics.extra.join(",")}`,
+        ).toBeGreaterThanOrEqual(0.8);
+        expect(
+          metrics.recall,
+          `recall too low for ${fixture.name}: missing=${metrics.missing.join(",")} extra=${metrics.extra.join(",")}`,
+        ).toBeGreaterThanOrEqual(0.8);
       });
 
       it("computes full report", async () => {

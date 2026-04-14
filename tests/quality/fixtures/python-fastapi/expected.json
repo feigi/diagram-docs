@@ -43,5 +43,10 @@
     "orders": {
       "framework": "fastapi"
     }
-  }
+  },
+  "codeElements": [
+    { "name": "Order", "kind": "class" },
+    { "name": "OrderHandler", "kind": "class" },
+    { "name": "get_session", "kind": "function" }
+  ]
 }
