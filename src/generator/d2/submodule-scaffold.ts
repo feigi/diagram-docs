@@ -155,8 +155,8 @@ function writeIfChanged(filePath: string, content: string): boolean {
 }
 
 function buildSubmoduleConfigStub(repoRoot: string, appPath: string): string {
-  const { defaults } = buildDefaultConfig(path.join(repoRoot, appPath));
-  const humanName = (defaults.system as { name: string }).name;
+  const { config, defaults } = buildDefaultConfig(path.join(repoRoot, appPath));
+  const humanName = config.system.name;
 
   const body = stringifyYaml(defaults, { lineWidth: 120 });
   const commentedBody = body
