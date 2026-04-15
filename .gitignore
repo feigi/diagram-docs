@@ -8,6 +8,7 @@ bench-results.json
 .diagram-docs/logs/
 *.tgz
 .serena/
+.ralph/
 
 # GSD planning docs (local-only)
 .planning/

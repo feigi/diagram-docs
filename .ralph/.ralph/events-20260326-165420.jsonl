@@ -1,2 +1,0 @@
-{"ts":"2026-03-26T16:54:20.366623+00:00","iteration":0,"hat":"loop","topic":"review.start","triggered":"planner","payload":"review main branch"}
-{"ts":"2026-03-26T16:54:27.751735+00:00","iteration":5,"hat":"loop","topic":"loop.terminate","payload":"## Reason\nconsecutive_failures\n\n## Status\nToo many consecutive failures.\n\n## Summary\n- Iterations: 5\n- Duration: 7s\n- Exit code: 1"}
