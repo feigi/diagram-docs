@@ -7,5 +7,12 @@ npm run format
 npm run lint -- --fix
 
 if [ -n "$STAGED_FILES" ]; then
-  printf '%s\n' "$STAGED_FILES" | while IFS= read -r f; do git add -- "$f"; done
+  # Re-add paths still present in the working tree (captures format/lint
+  # rewrites). Skip deleted paths — their deletion is already staged and
+  # `git add <missing>` would abort the hook under `set -e`.
+  printf '%s\n' "$STAGED_FILES" | while IFS= read -r f; do
+    if [ -e "$f" ]; then
+      git add -- "$f"
+    fi
+  done
 fi
