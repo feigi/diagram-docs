@@ -95,7 +95,10 @@ export async function extractCCode(
       const isStatic = hasStaticStorage(node);
       const references = collectFunctionReferences(node);
       const existing = seen.get(name);
-      // Definitions win over prototypes; static definitions override a prior public entry.
+      // Real definitions always win over prototypes. When a name already has a
+      // definition, only replace it with another definition if the new one is
+      // static — narrowing visibility from public to private is informative;
+      // widening would lose the earlier static entry unintentionally.
       if (
         !existing ||
         (fnDef && (existing.visibility === "public" ? isStatic : true))

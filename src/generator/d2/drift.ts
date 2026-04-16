@@ -77,7 +77,7 @@ export function checkDrift(
 
 /**
  * Build the set of all valid D2 identifiers from the model.
- * Includes both bare IDs and nested forms (e.g. "system.los-cha").
+ * Includes both bare IDs and nested forms (e.g. "system.component-id").
  */
 function buildValidIdSet(model: ArchitectureModel): Set<string> {
   const ids = new Set<string>();
