@@ -19,6 +19,10 @@ interface ResolveContext {
   byComponentName: Map<string, CodeElement[]>; // key: `${componentId}:${name}`
   byContainerName: Map<string, CodeElement[]>; // key: `${containerId}:${name}`
   byContainerNameExcludingOwn: Map<string, CodeElement[]>; // key: `${ownContainerId}:${name}` — same-container candidates outside owner's component
+  /** Index of elements that carry a qualifiedName, keyed by `${componentId}:${qualifiedName}`. Always exactly one element per key when populated by analyzer. */
+  byComponentQualifiedName: Map<string, CodeElement>;
+  /** Container-scope FQN index, keyed by `${containerId}:${qualifiedName}`. */
+  byContainerQualifiedName: Map<string, CodeElement>;
 }
 
 export function buildCodeModel(
@@ -88,6 +92,7 @@ export function buildCodeModel(
         containerId: owner.containerId,
         kind: re.kind,
         name: re.name,
+        qualifiedName: re.qualifiedName,
         visibility: re.visibility,
         members: filteredMembers,
         tags: re.tags,
@@ -111,10 +116,28 @@ export function buildCodeModel(
     byComponentName: new Map(),
     byContainerName: new Map(),
     byContainerNameExcludingOwn: new Map(),
+    byComponentQualifiedName: new Map(),
+    byContainerQualifiedName: new Map(),
   };
   for (const el of filteredElements) {
     pushIndexed(ctx.byComponentName, `${el.componentId}:${el.name}`, el);
     pushIndexed(ctx.byContainerName, `${el.containerId}:${el.name}`, el);
+    if (el.qualifiedName) {
+      // FQN keys are unique per element by construction (the FQN includes
+      // the package). If two elements collide on FQN we keep the
+      // lexicographically-first id for determinism — same tie-breaker as
+      // the simple-name path.
+      const compKey = `${el.componentId}:${el.qualifiedName}`;
+      const existing = ctx.byComponentQualifiedName.get(compKey);
+      if (!existing || el.id.localeCompare(existing.id) < 0) {
+        ctx.byComponentQualifiedName.set(compKey, el);
+      }
+      const contKey = `${el.containerId}:${el.qualifiedName}`;
+      const existingC = ctx.byContainerQualifiedName.get(contKey);
+      if (!existingC || el.id.localeCompare(existingC.id) < 0) {
+        ctx.byContainerQualifiedName.set(contKey, el);
+      }
+    }
   }
   for (const list of ctx.byComponentName.values()) list.sort(byId);
   for (const list of ctx.byContainerName.values()) list.sort(byId);
@@ -277,6 +300,20 @@ function resolveReference(
   ctx: ResolveContext,
   onCollision: (count: number, where: string, pickedId: string) => void,
 ): CodeElement | null {
+  // FQN-keyed lookups first — these are unambiguous when the analyzer was
+  // able to resolve the reference from imports/package context. Skip the
+  // collision warning since the package qualifies the type.
+  if (ref.targetQualifiedName) {
+    const fqnComp = ctx.byComponentQualifiedName.get(
+      `${owner.componentId}:${ref.targetQualifiedName}`,
+    );
+    if (fqnComp) return fqnComp;
+    const fqnCont = ctx.byContainerQualifiedName.get(
+      `${owner.containerId}:${ref.targetQualifiedName}`,
+    );
+    if (fqnCont) return fqnCont;
+  }
+
   const sameComp = ctx.byComponentName.get(
     `${owner.componentId}:${ref.targetName}`,
   );
