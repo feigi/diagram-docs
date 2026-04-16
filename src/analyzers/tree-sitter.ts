@@ -30,9 +30,16 @@ export async function loadLanguage(
   await initOnce();
   let p = grammarCache.get(lang);
   if (!p) {
-    p = TreeSitter.Language.load(
-      path.join(ASSETS_DIR, `tree-sitter-${lang}.wasm`),
-    );
+    const wasmPath = path.join(ASSETS_DIR, `tree-sitter-${lang}.wasm`);
+    p = TreeSitter.Language.load(wasmPath).catch((err: unknown) => {
+      grammarCache.delete(lang);
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `Failed to load tree-sitter grammar for "${lang}" from ${wasmPath}. ` +
+          `Ensure assets/tree-sitter/tree-sitter-${lang}.wasm ships alongside the ` +
+          `compiled output (typically dist/). Underlying error: ${msg}`,
+      );
+    });
     grammarCache.set(lang, p);
   }
   return p;
@@ -74,8 +81,9 @@ export function createQueryLoader(queryPath: string): () => Promise<string> {
 }
 
 /**
- * Reads all files in parallel and runs `extractFn` on each.
- * Callers pass fully-resolved absolute paths.
+ * Reads all files in parallel and runs `extractFn` on each. Per-file errors
+ * (read failures, parse-library throws) are isolated and logged to stderr —
+ * one bad file must not blackhole code-level extraction for the whole module.
  */
 export async function extractCodeElementsForFiles(
   filePaths: string[],
@@ -83,8 +91,16 @@ export async function extractCodeElementsForFiles(
 ): Promise<RawCodeElement[]> {
   const results = await Promise.all(
     filePaths.map(async (fp) => {
-      const source = await readFile(fp, "utf-8");
-      return extractFn(fp, source);
+      try {
+        const source = await readFile(fp, "utf-8");
+        return await extractFn(fp, source);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `Warning: code-level extraction failed for ${fp}: ${msg}\n`,
+        );
+        return [] as RawCodeElement[];
+      }
     }),
   );
   return results.flat();

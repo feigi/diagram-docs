@@ -64,12 +64,27 @@ export interface ModuleImport {
   isExternal: boolean;
 }
 
+/**
+ * Universe of code-element kinds emitted by language analyzers.
+ * Java emits `class | interface | enum`; TypeScript adds `type` (alias) and
+ * `function`; Python emits `class | function`; C emits `struct | typedef |
+ * function`. Keeping this as a closed union catches analyzer typos at compile
+ * time and tells generators the full domain to render against.
+ */
+export type CodeElementKind =
+  | "class"
+  | "interface"
+  | "enum"
+  | "type"
+  | "function"
+  | "struct"
+  | "typedef";
+
 export interface RawCodeElement {
   id: string;
-  kind: string;
+  kind: CodeElementKind;
   name: string;
   visibility?: "public" | "internal" | "private";
-  parentId?: string;
   members?: CodeMember[];
   tags?: string[];
   references?: RawCodeReference[];
@@ -83,6 +98,12 @@ export interface CodeMember {
   visibility?: "public" | "internal" | "private";
 }
 
+/**
+ * `extends` is the syntactic source-level keyword (Java/TS extends, Python
+ * superclass list); it maps to the semantic `inherits` on the resolved
+ * CodeRelationship after model-build. Kept distinct so analyzers stay
+ * close to the source vocabulary.
+ */
 export interface RawCodeReference {
   targetName: string;
   kind: "extends" | "implements" | "uses" | "contains";
@@ -133,10 +154,10 @@ export type Component = ArchitectureModel["components"][number];
 export interface CodeElement {
   id: string;
   componentId: string;
-  kind: string;
+  containerId: string;
+  kind: CodeElementKind;
   name: string;
   visibility?: "public" | "internal" | "private";
-  parentElementId?: string;
   members?: CodeMember[];
   tags?: string[];
 }
