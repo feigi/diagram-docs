@@ -14,7 +14,7 @@ import {
   padRight,
 } from "./terminal-utils.js";
 
-const MIN_LOG_LINES = 3;
+const MIN_LOG_LINES = 2;
 const FRAME_OVERHEAD = 4; // top + 2 status rows + bottom
 
 /** Strip newlines and collapse whitespace to produce a single safe line. */
