@@ -803,6 +803,25 @@ function spawnCopilotJsonl(
   });
 }
 
+/**
+ * Whether an LLMCallError looks like a transient Copilot CLI auth failure.
+ * This happens when multiple copilot instances start simultaneously and race
+ * during OAuth token validation against the GitHub/GHES host.
+ */
+function isTransientCopilotAuthError(err: unknown): boolean {
+  if (!(err instanceof LLMCallError)) return false;
+  const msg = err.message;
+  return (
+    msg.includes("Authentication token") ||
+    msg.includes("fetch failed") ||
+    // copilot exited with code 1 and produced no meaningful output
+    (msg.includes("copilot exited with code 1") && msg.includes("(no output)"))
+  );
+}
+
+/** Max retries for transient copilot auth failures. */
+const COPILOT_MAX_RETRIES = 3;
+
 const copilotProvider: LLMProvider = {
   name: "GitHub Copilot CLI",
   supportsTools: true,
@@ -812,9 +831,38 @@ const copilotProvider: LLMProvider = {
   },
 
   async generate(systemPrompt, userMessage, model, onProgress) {
-    // Copilot CLI has no --system-prompt-file, so combine into one prompt.
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
-    return spawnCopilotJsonl(combinedPrompt, model, 900_000, onProgress);
+
+    for (let attempt = 0; attempt <= COPILOT_MAX_RETRIES; attempt++) {
+      try {
+        return await spawnCopilotJsonl(
+          combinedPrompt,
+          model,
+          900_000,
+          onProgress,
+        );
+      } catch (err) {
+        if (attempt < COPILOT_MAX_RETRIES && isTransientCopilotAuthError(err)) {
+          // Exponential backoff with jitter to desynchronize concurrent retries
+          const baseMs = 2_000 * 2 ** attempt;
+          const jitterMs = Math.floor(Math.random() * baseMs);
+          const delayMs = baseMs + jitterMs;
+          if (onProgress) {
+            onProgress({
+              line: `Transient auth error, retrying in ${(delayMs / 1000).toFixed(1)}s (attempt ${attempt + 1}/${COPILOT_MAX_RETRIES})…`,
+              final: true,
+              kind: "thinking",
+            });
+          }
+          await new Promise((resolve) => setTimeout(resolve, delayMs));
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    // Unreachable, but satisfies TypeScript
+    throw new LLMCallError("Exhausted retries for copilot");
   },
 };
 
