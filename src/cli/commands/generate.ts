@@ -341,7 +341,8 @@ async function resolveModel(
   // 3. Per-project scan with caching (cascading per-project config)
   const getProjectConfig = explicitConfig
     ? undefined
-    : (absPath: string) => buildEffectiveConfig(resolveConfig(absPath));
+    : (absPath: string) =>
+        buildEffectiveConfig(resolveConfig(absPath, configDir));
   const { rawStructure, projectResults, staleProjects } = await runScanAll({
     rootDir: configDir,
     config: effectiveConfig,

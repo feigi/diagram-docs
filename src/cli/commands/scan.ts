@@ -50,7 +50,8 @@ export const scanCommand = new Command("scan")
     // Otherwise, resolve per-project cascading config.
     const resolveProjectEffectiveConfig = options.config
       ? () => buildEffectiveConfig(config)
-      : (absPath: string) => buildEffectiveConfig(resolveConfig(absPath));
+      : (absPath: string) =>
+          buildEffectiveConfig(resolveConfig(absPath, configDir));
 
     try {
       // Check if we're in a project subdirectory (has a build file)
