@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
-import { runQuery, createQueryLoader } from "../tree-sitter.js";
+import { runQueryScoped, createQueryLoader } from "../tree-sitter.js";
 import type {
   RawCodeElement,
   CodeMember,
@@ -19,55 +19,55 @@ export async function extractJavaCode(
   source: string,
 ): Promise<RawCodeElement[]> {
   const query = await getQuery();
-  const matches = await runQuery("java", source, query);
+  return runQueryScoped("java", source, query, (matches) => {
+    const byDecl = new Map<
+      number,
+      { kind: CodeElementKind; captures: (typeof matches)[0]["captures"] }
+    >();
 
-  const byDecl = new Map<
-    number,
-    { kind: CodeElementKind; captures: (typeof matches)[0]["captures"] }
-  >();
+    for (const m of matches) {
+      const decl = m.captures.find(
+        (c) =>
+          c.name === "class.decl" ||
+          c.name === "interface.decl" ||
+          c.name === "enum.decl",
+      );
+      if (!decl) continue;
+      const kind: CodeElementKind =
+        decl.name === "class.decl"
+          ? "class"
+          : decl.name === "interface.decl"
+            ? "interface"
+            : "enum";
+      byDecl.set(decl.node.startIndex, { kind, captures: m.captures });
+    }
 
-  for (const m of matches) {
-    const decl = m.captures.find(
-      (c) =>
-        c.name === "class.decl" ||
-        c.name === "interface.decl" ||
-        c.name === "enum.decl",
-    );
-    if (!decl) continue;
-    const kind: CodeElementKind =
-      decl.name === "class.decl"
-        ? "class"
-        : decl.name === "interface.decl"
-          ? "interface"
-          : "enum";
-    byDecl.set(decl.node.startIndex, { kind, captures: m.captures });
-  }
+    const elements: RawCodeElement[] = [];
+    for (const [, entry] of byDecl) {
+      const nameCap = entry.captures.find((c) => c.name.endsWith(".name"));
+      if (!nameCap) continue;
+      const declCap = entry.captures.find((c) => c.name.endsWith(".decl"))!;
+      const id = nameCap.node.text;
 
-  const elements: RawCodeElement[] = [];
-  for (const [, entry] of byDecl) {
-    const nameCap = entry.captures.find((c) => c.name.endsWith(".name"));
-    if (!nameCap) continue;
-    const declCap = entry.captures.find((c) => c.name.endsWith(".decl"))!;
-    const id = nameCap.node.text;
+      const references = collectReferences(declCap.node, entry.kind);
 
-    const references = collectReferences(declCap.node, entry.kind);
-
-    const members = collectMembers(declCap.node);
-    const element: RawCodeElement = {
-      id,
-      name: id,
-      kind: entry.kind,
-      visibility: inferVisibility(declCap.node),
-      members: members.length > 0 ? members : undefined,
-      references: references.length > 0 ? references : undefined,
-      location: {
-        file: filePath,
-        line: declCap.node.startPosition.row + 1,
-      },
-    };
-    elements.push(element);
-  }
-  return elements;
+      const members = collectMembers(declCap.node);
+      const element: RawCodeElement = {
+        id,
+        name: id,
+        kind: entry.kind,
+        visibility: inferVisibility(declCap.node),
+        members: members.length > 0 ? members : undefined,
+        references: references.length > 0 ? references : undefined,
+        location: {
+          file: filePath,
+          line: declCap.node.startPosition.row + 1,
+        },
+      };
+      elements.push(element);
+    }
+    return elements;
+  });
 }
 
 function typeName(node: SyntaxNode): string | null {
@@ -141,7 +141,8 @@ function collectMembers(declNode: SyntaxNode): CodeMember[] {
     if (child.type === "class_body" || child.type === "interface_body") {
       for (const bodyChild of child.namedChildren ?? []) {
         if (bodyChild.type === "method_declaration") {
-          const name = bodyChild.childForFieldName("name")?.text ?? "?";
+          const name = bodyChild.childForFieldName("name")?.text;
+          if (!name) continue;
           const params =
             bodyChild.childForFieldName("parameters")?.text ?? "()";
           const ret = bodyChild.childForFieldName("type")?.text ?? "void";
@@ -153,12 +154,13 @@ function collectMembers(declNode: SyntaxNode): CodeMember[] {
           });
         } else if (bodyChild.type === "field_declaration") {
           const declarator = bodyChild.childForFieldName("declarator");
-          const fieldName = declarator?.childForFieldName("name")?.text ?? "?";
-          const type = bodyChild.childForFieldName("type")?.text ?? "?";
+          const fieldName = declarator?.childForFieldName("name")?.text;
+          if (!fieldName) continue;
+          const type = bodyChild.childForFieldName("type")?.text;
           members.push({
             name: fieldName,
             kind: "field",
-            signature: `${fieldName}: ${type}`,
+            signature: type ? `${fieldName}: ${type}` : fieldName,
             visibility: inferVisibility(bodyChild),
           });
         }

@@ -10,7 +10,7 @@
 (enum_declaration
   name: (identifier) @enum.name) @enum.decl
 
-;; Public methods inside classes or interfaces
+;; Methods inside classes or interfaces (visibility filtered downstream via inferVisibility)
 (method_declaration
   (modifiers)? @method.modifiers
   type: (_) @method.return

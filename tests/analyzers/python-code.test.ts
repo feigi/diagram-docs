@@ -55,6 +55,18 @@ describe("python code extraction", () => {
     );
   });
 
+  it("captures decorated methods (@property, @classmethod, @staticmethod)", async () => {
+    const els = await extractPythonCode(
+      FIXTURE,
+      fs.readFileSync(FIXTURE, "utf-8"),
+    );
+    const user = els.find((e) => e.name === "User")!;
+    const memberNames = (user.members ?? []).map((m) => m.name).sort();
+    expect(memberNames).toEqual(
+      expect.arrayContaining(["anonymous", "display_name", "is_valid"]),
+    );
+  });
+
   it("returns gracefully on malformed source", async () => {
     const broken = `class Broken:\n    def oops(self\n`;
     const elements = await extractPythonCode("/tmp/broken.py", broken);

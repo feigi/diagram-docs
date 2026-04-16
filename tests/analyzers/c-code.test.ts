@@ -106,6 +106,39 @@ describe("c code extraction", () => {
     expect(names).toEqual(["arr", "cb", "name"]);
   });
 
+  it("prototype then static definition: replaces prototype, narrows to private", async () => {
+    const src = `
+      void do_thing(int x);
+      static void do_thing(int x) { (void)x; }
+    `;
+    const els = await extractCCode("inline.c", src);
+    const fn = els.find((e) => e.name === "do_thing")!;
+    expect(fn.visibility).toBe("private");
+    // Location should point at the definition (line 3), not the prototype.
+    expect(fn.location.line).toBeGreaterThan(1);
+  });
+
+  it("static definition then later non-static definition: keeps static", async () => {
+    const src = `
+      static void helper(void) {}
+      void helper(void) {}
+    `;
+    const els = await extractCCode("inline.c", src);
+    const fn = els.find((e) => e.name === "helper")!;
+    expect(fn.visibility).toBe("private");
+  });
+
+  it("prototype then non-static definition: promotes to definition location", async () => {
+    const src = `
+      void exposed(int x);
+      void exposed(int x) { (void)x; }
+    `;
+    const els = await extractCCode("inline.c", src);
+    const fn = els.find((e) => e.name === "exposed")!;
+    expect(fn.visibility).toBe("public");
+    expect(fn.location.line).toBeGreaterThan(2);
+  });
+
   it("returns gracefully on malformed source", async () => {
     const broken = `struct Broken { int a;\nvoid oops( {`;
     const elements = await extractCCode("/tmp/broken.c", broken);

@@ -1,5 +1,5 @@
 import { D2Writer } from "./writer.js";
-import { toD2Id, sortById, sortRelationships } from "./stability.js";
+import { sortById, sortRelationships } from "./stability.js";
 import type {
   ArchitectureModel,
   Component,
@@ -46,6 +46,3 @@ export function generateCodeDiagram(
   profile.renderRelationships(w, [...internal, ...external]);
   return w.toString();
 }
-
-// Re-export toD2Id for profiles to use for D2-safe identifiers.
-export { toD2Id };

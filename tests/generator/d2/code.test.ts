@@ -147,6 +147,20 @@ describe("generateCodeDiagram", () => {
     ).toBe("python");
   });
 
+  it("selectProfileForComponent returns null when every count is zero", () => {
+    expect(
+      selectProfileForComponent({ java: 0, typescript: 0, python: 0, c: 0 }),
+    ).toBeNull();
+  });
+
+  it("selectProfileForComponent picks C even when C is alphabetically last", () => {
+    // Regression: initial winner must not default to Java when C-only counts
+    // arrive — otherwise a C-only component silently renders with Java shapes.
+    expect(
+      selectProfileForComponent({ java: 0, typescript: 0, python: 0, c: 5 }),
+    ).toBe("c");
+  });
+
   it("C profile groups types, public functions, and internal functions", () => {
     const cComponent: Component = { ...component, id: "ht" } as any;
     const cModel: ArchitectureModel = {

@@ -307,6 +307,7 @@ describe("attachCodeModel (LLM code-level population)", () => {
       {
         sourceId: "api.users.UserService",
         targetId: "api.users.Auditable",
+        targetName: "Auditable",
         kind: "implements",
       },
     ]);

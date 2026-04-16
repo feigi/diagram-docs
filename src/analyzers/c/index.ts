@@ -90,8 +90,26 @@ export const cAnalyzer: LanguageAnalyzer = {
           filePaths,
           extractCCode,
         );
-        // Dedupe by name within module (collapse .h/.c pairs)
-        const dedup = new Map(allElements.map((e) => [e.name, e]));
+        // Dedupe by name for public symbols (collapse .h prototype + .c
+        // definition). For static (file-scope) symbols, key by file+name so
+        // distinct statics in different .c files are preserved. Definitions
+        // from .c files win over .h prototypes for location accuracy.
+        const dedup = new Map<string, (typeof allElements)[number]>();
+        for (const el of allElements) {
+          const isStatic = el.visibility === "private";
+          const key = isStatic ? `${el.location.file}::${el.name}` : el.name;
+          const existing = dedup.get(key);
+          if (!existing) {
+            dedup.set(key, el);
+            continue;
+          }
+          if (
+            el.location.file.endsWith(".c") &&
+            existing.location.file.endsWith(".h")
+          ) {
+            dedup.set(key, el);
+          }
+        }
         if (dedup.size > 0) module.codeElements = Array.from(dedup.values());
       }
 
