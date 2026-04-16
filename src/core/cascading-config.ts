@@ -7,10 +7,18 @@ const CONFIG_FILENAMES = ["diagram-docs.yaml", "diagram-docs.yml"];
 
 /**
  * Resolve config for a directory by walking up the tree, merging
- * closest-parent-wins (like .eslintrc). Stops at .git or filesystem root.
+ * closest-parent-wins (like .eslintrc). Stops at `stopAt` (if given),
+ * otherwise stops at a .git boundary or filesystem root.
+ *
+ * Pass `stopAt` (the root configDir) when scanning projects that may be
+ * independent git repos (e.g. submodules) so the root diagram-docs.yaml
+ * is still found and inherited.
  */
-export function resolveConfig(dir: string): Config {
-  const configs = collectConfigs(path.resolve(dir));
+export function resolveConfig(dir: string, stopAt?: string): Config {
+  const configs = collectConfigs(
+    path.resolve(dir),
+    stopAt ? path.resolve(stopAt) : undefined,
+  );
 
   if (configs.length === 0) {
     return configSchema.parse({});
@@ -53,9 +61,20 @@ export function findRootConfig(startDir: string): string | null {
 
 /**
  * Collect raw parsed YAML configs from dir upward.
- * Returns closest-first order. Stops at .git or filesystem root.
+ * Returns closest-first order.
+ *
+ * If `stopAt` is provided the walk stops after processing that directory
+ * (inclusive). This lets callers cross .git boundaries, which is necessary
+ * in monorepos where each sub-project is its own git repo (e.g. submodules)
+ * but still needs to inherit the root diagram-docs.yaml.
+ *
+ * Without `stopAt` the walk stops at the first .git boundary or the
+ * filesystem root — the original behaviour.
  */
-function collectConfigs(startDir: string): Record<string, unknown>[] {
+function collectConfigs(
+  startDir: string,
+  stopAt?: string,
+): Record<string, unknown>[] {
   const configs: Record<string, unknown>[] = [];
   let dir = startDir;
 
@@ -72,7 +91,11 @@ function collectConfigs(startDir: string): Record<string, unknown>[] {
       }
     }
 
-    if (fs.existsSync(path.join(dir, ".git"))) break;
+    if (stopAt) {
+      if (dir === stopAt) break;
+    } else {
+      if (fs.existsSync(path.join(dir, ".git"))) break;
+    }
 
     const parent = path.dirname(dir);
     if (parent === dir) break;
