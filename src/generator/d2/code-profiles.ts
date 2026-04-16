@@ -9,12 +9,17 @@ export function getProfileForLanguage(
   return lang === "c" ? cProfile : javaTsPyProfile;
 }
 
+/**
+ * Pick the language profile with the highest file count. Returns null when
+ * every count is zero — caller must decide how to handle the ambiguous case
+ * (warn + default, skip, etc.) rather than silently picking a language.
+ */
 export function selectProfileForComponent(
   fileCountsByLanguage: Record<ProfileLanguage, number>,
-): ProfileLanguage {
+): ProfileLanguage | null {
   const order: ProfileLanguage[] = ["java", "typescript", "python", "c"];
-  let winner: ProfileLanguage = "java";
-  let winnerCount = -1;
+  let winner: ProfileLanguage | null = null;
+  let winnerCount = 0;
   for (const lang of order) {
     const count = fileCountsByLanguage[lang] ?? 0;
     if (count > winnerCount) {
@@ -26,7 +31,7 @@ export function selectProfileForComponent(
 }
 
 function escapeLabel(s: string): string {
-  return s.replace(/"/g, '\\"');
+  return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ");
 }
 
 const javaTsPyProfile: LanguageRenderingProfile = {
@@ -60,9 +65,8 @@ const javaTsPyProfile: LanguageRenderingProfile = {
     for (const r of externalRels) {
       if (seen.has(r.targetId)) continue;
       seen.add(r.targetId);
-      w.shape(toD2Id(r.targetId), r.targetId.split(".").pop() ?? r.targetId, {
-        style: "dashed",
-      });
+      const label = r.targetName ?? r.targetId.split(".").pop() ?? r.targetId;
+      w.shape(toD2Id(r.targetId), label, { style: "dashed" });
     }
   },
   renderRelationships(w, rels) {
@@ -116,9 +120,8 @@ const cProfile: LanguageRenderingProfile = {
     for (const r of externalRels) {
       if (seen.has(r.targetId)) continue;
       seen.add(r.targetId);
-      w.shape(toD2Id(r.targetId), r.targetId.split(".").pop() ?? r.targetId, {
-        style: "dashed",
-      });
+      const label = r.targetName ?? r.targetId.split(".").pop() ?? r.targetId;
+      w.shape(toD2Id(r.targetId), label, { style: "dashed" });
     }
   },
   renderRelationships(w, rels) {

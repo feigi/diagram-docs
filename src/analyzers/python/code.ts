@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
-import { runQuery, createQueryLoader } from "../tree-sitter.js";
+import { runQueryScoped, createQueryLoader } from "../tree-sitter.js";
 import type { RawCodeElement, CodeMember, RawCodeReference } from "../types.js";
 
 type SyntaxNode = TreeSitter.SyntaxNode;
@@ -14,34 +14,34 @@ export async function extractPythonCode(
   source: string,
 ): Promise<RawCodeElement[]> {
   const query = await getQuery();
-  const matches = await runQuery("python", source, query);
+  return runQueryScoped("python", source, query, (matches) => {
+    const elements: RawCodeElement[] = [];
+    for (const m of matches) {
+      const decl = m.captures.find(
+        (c) => c.name === "class.decl" || c.name === "fn.decl",
+      );
+      const nameCap = m.captures.find(
+        (c) => c.name === "class.name" || c.name === "fn.name",
+      );
+      if (!decl || !nameCap) continue;
+      const name = nameCap.node.text;
+      const kind = decl.name === "class.decl" ? "class" : "function";
 
-  const elements: RawCodeElement[] = [];
-  for (const m of matches) {
-    const decl = m.captures.find(
-      (c) => c.name === "class.decl" || c.name === "fn.decl",
-    );
-    const nameCap = m.captures.find(
-      (c) => c.name === "class.name" || c.name === "fn.name",
-    );
-    if (!decl || !nameCap) continue;
-    const name = nameCap.node.text;
-    const kind = decl.name === "class.decl" ? "class" : "function";
+      const references = kind === "class" ? collectBaseClasses(decl.node) : [];
+      const members = kind === "class" ? collectPythonMembers(decl.node) : [];
 
-    const references = kind === "class" ? collectBaseClasses(decl.node) : [];
-    const members = kind === "class" ? collectPythonMembers(decl.node) : [];
-
-    elements.push({
-      id: name,
-      name,
-      kind,
-      visibility: name.startsWith("_") ? "private" : "public",
-      members: members.length > 0 ? members : undefined,
-      references: references.length > 0 ? references : undefined,
-      location: { file: filePath, line: decl.node.startPosition.row + 1 },
-    });
-  }
-  return elements;
+      elements.push({
+        id: name,
+        name,
+        kind,
+        visibility: name.startsWith("_") ? "private" : "public",
+        members: members.length > 0 ? members : undefined,
+        references: references.length > 0 ? references : undefined,
+        location: { file: filePath, line: decl.node.startPosition.row + 1 },
+      });
+    }
+    return elements;
+  });
 }
 
 function baseName(node: SyntaxNode): string | null {
@@ -76,17 +76,31 @@ function collectPythonMembers(classNode: SyntaxNode): CodeMember[] {
   if (!body) return [];
   const members: CodeMember[] = [];
   for (const child of body.namedChildren) {
-    if (child.type === "function_definition") {
-      const name = child.childForFieldName("name")?.text ?? "?";
-      const params = child.childForFieldName("parameters")?.text ?? "()";
-      const ret = child.childForFieldName("return_type")?.text;
-      members.push({
-        name,
-        kind: "method",
-        signature: ret ? `${name}${params} -> ${ret}` : `${name}${params}`,
-        visibility: name.startsWith("_") ? "private" : "public",
-      });
-    }
+    // decorated_definition wraps a function_definition when @decorators are
+    // applied (e.g. @property, @classmethod, @staticmethod). Unwrap so the
+    // underlying method is captured.
+    const fn =
+      child.type === "function_definition"
+        ? child
+        : child.type === "decorated_definition"
+          ? (child.childForFieldName("definition") ??
+            (child.namedChildren ?? []).find(
+              (c) => c.type === "function_definition",
+            ) ??
+            null)
+          : null;
+    if (!fn) continue;
+    const nameNode = fn.childForFieldName("name");
+    if (!nameNode) continue;
+    const name = nameNode.text;
+    const params = fn.childForFieldName("parameters")?.text ?? "()";
+    const ret = fn.childForFieldName("return_type")?.text;
+    members.push({
+      name,
+      kind: "method",
+      signature: ret ? `${name}${params} -> ${ret}` : `${name}${params}`,
+      visibility: name.startsWith("_") ? "private" : "public",
+    });
   }
   return members;
 }

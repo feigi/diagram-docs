@@ -1592,7 +1592,6 @@ export async function buildModelWithLLM(
     );
   }
 
-  // Attach deterministic code-level data — LLM path does not produce L4 content.
   return attachCodeModel(validated, options.rawStructure, options.config);
 }
 

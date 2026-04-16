@@ -1,7 +1,7 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
-import { runQuery, createQueryLoader } from "../tree-sitter.js";
+import { runQueryScoped, createQueryLoader } from "../tree-sitter.js";
 import type {
   RawCodeElement,
   CodeMember,
@@ -26,49 +26,49 @@ export async function extractTypeScriptCode(
   source: string,
 ): Promise<RawCodeElement[]> {
   const query = await getQuery();
-  const matches = await runQuery("typescript", source, query);
+  return runQueryScoped("typescript", source, query, (matches) => {
+    const byDecl = new Map<
+      number,
+      { kind: CodeElementKind; declNode: SyntaxNode; nameNode: SyntaxNode }
+    >();
 
-  const byDecl = new Map<
-    number,
-    { kind: CodeElementKind; declNode: SyntaxNode; nameNode: SyntaxNode }
-  >();
+    for (const m of matches) {
+      const decl = m.captures.find((c) => c.name.endsWith(".decl"));
+      const nameCap = m.captures.find((c) => c.name.endsWith(".name"));
+      if (!decl || !nameCap) continue;
+      const kind = KIND_BY_DECL[decl.name];
+      if (!kind) continue;
+      byDecl.set(decl.node.startIndex, {
+        kind,
+        declNode: decl.node,
+        nameNode: nameCap.node,
+      });
+    }
 
-  for (const m of matches) {
-    const decl = m.captures.find((c) => c.name.endsWith(".decl"));
-    const nameCap = m.captures.find((c) => c.name.endsWith(".name"));
-    if (!decl || !nameCap) continue;
-    const kind = KIND_BY_DECL[decl.name];
-    if (!kind) continue;
-    byDecl.set(decl.node.startIndex, {
-      kind,
-      declNode: decl.node,
-      nameNode: nameCap.node,
-    });
-  }
+    const elements: RawCodeElement[] = [];
+    for (const [, entry] of byDecl) {
+      const id = entry.nameNode.text;
+      const references = collectReferences(entry.declNode, entry.kind);
+      const members =
+        entry.kind === "class" || entry.kind === "interface"
+          ? collectMembers(entry.declNode)
+          : [];
 
-  const elements: RawCodeElement[] = [];
-  for (const [, entry] of byDecl) {
-    const id = entry.nameNode.text;
-    const references = collectReferences(entry.declNode, entry.kind);
-    const members =
-      entry.kind === "class" || entry.kind === "interface"
-        ? collectMembers(entry.declNode)
-        : [];
-
-    elements.push({
-      id,
-      name: id,
-      kind: entry.kind,
-      visibility: "public",
-      members: members.length > 0 ? members : undefined,
-      references: references.length > 0 ? references : undefined,
-      location: {
-        file: filePath,
-        line: entry.declNode.startPosition.row + 1,
-      },
-    });
-  }
-  return elements;
+      elements.push({
+        id,
+        name: id,
+        kind: entry.kind,
+        visibility: "public",
+        members: members.length > 0 ? members : undefined,
+        references: references.length > 0 ? references : undefined,
+        location: {
+          file: filePath,
+          line: entry.declNode.startPosition.row + 1,
+        },
+      });
+    }
+    return elements;
+  });
 }
 
 function typeName(node: SyntaxNode): string | null {
@@ -147,7 +147,8 @@ function collectMembers(declNode: SyntaxNode): CodeMember[] {
       child.type === "method_definition" ||
       child.type === "method_signature"
     ) {
-      const name = child.childForFieldName("name")?.text ?? "?";
+      const name = child.childForFieldName("name")?.text;
+      if (!name) continue;
       const params = child.childForFieldName("parameters")?.text ?? "()";
       const ret = child.childForFieldName("return_type")?.text ?? "";
       // TypeScript constructor shorthand: `constructor(private readonly x: T)`
@@ -192,7 +193,8 @@ function collectMembers(declNode: SyntaxNode): CodeMember[] {
       child.type === "public_field_definition" ||
       child.type === "property_signature"
     ) {
-      const name = child.childForFieldName("name")?.text ?? "?";
+      const name = child.childForFieldName("name")?.text;
+      if (!name) continue;
       const type = child.childForFieldName("type")?.text ?? "";
       members.push({
         name,

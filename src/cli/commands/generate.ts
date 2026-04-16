@@ -182,7 +182,6 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    // L4: Code-level diagrams (one per component)
     if (config.levels.code) {
       const codeResult = generateCodeLevelDiagrams({
         model,
@@ -474,9 +473,6 @@ async function resolveModel(
   return { model, rawStructure };
 }
 
-/**
- * Build an architecture model from scan output using deterministic or LLM mode.
- */
 async function buildModelFromScan(
   rawStructure: import("../../analyzers/types.js").RawStructure,
   configDir: string,
@@ -589,6 +585,7 @@ function renderD2Files(d2Files: string[], config: Config): void {
 
   let rendered = 0;
   let skipped = 0;
+  let failed = 0;
   for (const d2Path of d2Files) {
     if (!fs.existsSync(d2Path)) continue;
 
@@ -596,9 +593,6 @@ function renderD2Files(d2Files: string[], config: Config): void {
     const outPath = d2Path.replace(/\.d2$/, `.${ext}`);
     const relPath = path.relative(process.cwd(), outPath);
 
-    // Skip rendering if the output is already newer than all D2 inputs.
-    // The user-facing D2 file imports _generated/*.d2 and styles.d2,
-    // so check all three.
     if (isUpToDate(d2Path, outPath)) {
       skipped++;
       continue;
@@ -618,20 +612,26 @@ function renderD2Files(d2Files: string[], config: Config): void {
       rendered++;
       console.error(`Rendered: ${relPath}`);
     } catch (err: unknown) {
+      const errObj = err as NodeJS.ErrnoException & {
+        signal?: string;
+        status?: number;
+      };
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes("ENOENT")) {
+      if (errObj.code === "ENOENT") {
         console.error(
           "Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install",
         );
         return;
       }
-      if (msg.includes("ETIMEDOUT") || msg.includes("killed")) {
+      if (errObj.signal === "SIGTERM" || errObj.code === "ETIMEDOUT") {
         console.error(
           `Warning: rendering timed out for ${relPath} (diagram may be too large)`,
         );
+        failed++;
         continue;
       }
       console.error(`Warning: failed to render ${relPath}: ${msg}`);
+      failed++;
     }
   }
   if (rendered > 0) {
@@ -642,12 +642,14 @@ function renderD2Files(d2Files: string[], config: Config): void {
   if (skipped > 0) {
     console.error(`Skipped ${skipped} unchanged file(s).`);
   }
+  if (failed > 0) {
+    console.error(
+      `Error: ${failed} diagram(s) failed to render. Process will exit with a non-zero status.`,
+    );
+    process.exitCode = 1;
+  }
 }
 
-/**
- * Check if the rendered output is up-to-date with all D2 source files
- * that contribute to it (the user file, its _generated/ import, and styles.d2).
- */
 function isUpToDate(d2Path: string, outPath: string): boolean {
   if (!fs.existsSync(outPath)) return false;
 
@@ -655,26 +657,29 @@ function isUpToDate(d2Path: string, outPath: string): boolean {
   const dir = path.dirname(d2Path);
   const base = path.basename(d2Path, ".d2");
 
-  // Collect all D2 files that feed into this output
   const sources = [d2Path];
 
   const generatedFile = path.join(dir, "_generated", `${base}.d2`);
   if (fs.existsSync(generatedFile)) sources.push(generatedFile);
 
-  const stylesFile = path.join(dir, "styles.d2");
-  if (fs.existsSync(stylesFile)) sources.push(stylesFile);
-
-  // For component diagrams nested in containers/, styles.d2 is two levels up
-  const parentStyles = path.join(dir, "..", "..", "styles.d2");
-  if (fs.existsSync(parentStyles)) sources.push(parentStyles);
+  // Walk ancestors looking for styles.d2. L1/L2 sit beside it, L3 component
+  // diagrams are two levels down, L4 code diagrams four levels down. Cap the
+  // walk so we never climb outside a typical project tree.
+  let ancestor = dir;
+  for (let i = 0; i < 8; i++) {
+    const candidate = path.join(ancestor, "styles.d2");
+    if (fs.existsSync(candidate)) {
+      sources.push(candidate);
+      break;
+    }
+    const parent = path.dirname(ancestor);
+    if (parent === ancestor) break;
+    ancestor = parent;
+  }
 
   return sources.every((src) => fs.statSync(src).mtimeMs <= outMtime);
 }
 
-/**
- * Write a file only if its content has changed.
- * Returns true if the file was written, false if it was already up-to-date.
- */
 function writeIfChanged(filePath: string, content: string): boolean {
   if (fs.existsSync(filePath)) {
     const existing = fs.readFileSync(filePath, "utf-8");
@@ -745,10 +750,18 @@ export function generateCodeLevelDiagrams(opts: {
         unchanged++;
       }
 
-      scaffoldCodeFile(path.join(compDir, "c4-code.d2"), {
-        containerName: container.name,
-        componentName: component.name,
-      });
+      try {
+        scaffoldCodeFile(path.join(compDir, "c4-code.d2"), {
+          containerName: container.name,
+          componentName: component.name,
+          outputDir,
+        });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(
+          `Warning: failed to scaffold c4-code.d2 for component "${component.id}" in container "${container.id}": ${msg}`,
+        );
+      }
     }
   }
 
@@ -788,7 +801,15 @@ function dominantLanguageForComponent(
       if (lang) counts[lang] += 1;
     }
   }
-  return selectProfileForComponent(counts);
+  const picked = selectProfileForComponent(counts);
+  if (!picked) {
+    console.error(
+      `Warning: cannot infer language for component "${component.id}"; defaulting to java profile. ` +
+        `Pass --model with a rawStructure or ensure components contain at least one kind-distinct element.`,
+    );
+    return "java";
+  }
+  return picked;
 }
 
 function languageFromKind(kind: CodeElement["kind"]): ProfileLanguage | null {
@@ -815,10 +836,6 @@ function normalizeLanguage(raw: string): ProfileLanguage | null {
   return null;
 }
 
-/**
- * Post-process rendered SVG files to inject edge-click interactivity.
- * Operates on the .svg counterpart of each .d2 source path.
- */
 function postProcessSVGs(d2Files: string[]): void {
   for (const d2Path of d2Files) {
     const svgPath = d2Path.replace(/\.d2$/, ".svg");

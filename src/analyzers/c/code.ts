@@ -1,7 +1,11 @@
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
-import { runQuery, createQueryLoader } from "../tree-sitter.js";
+import {
+  runQueryScoped,
+  createQueryLoader,
+  type QueryMatch,
+} from "../tree-sitter.js";
 import type { RawCodeElement, CodeMember, RawCodeReference } from "../types.js";
 
 type SyntaxNode = TreeSitter.SyntaxNode;
@@ -47,9 +51,17 @@ export async function extractCCode(
   source: string,
 ): Promise<RawCodeElement[]> {
   const query = await getQuery();
-  const matches = await runQuery("c", source, query);
+  return runQueryScoped("c", source, query, (matches) =>
+    extractFromMatches(filePath, matches),
+  );
+}
 
+function extractFromMatches(
+  filePath: string,
+  matches: QueryMatch[],
+): RawCodeElement[] {
   const seen = new Map<string, RawCodeElement>();
+  const definedNames = new Set<string>();
   for (const m of matches) {
     const structDecl = m.captures.find((c) => c.name === "struct.decl");
     const typedefDecl = m.captures.find((c) => c.name === "typedef.decl");
@@ -95,14 +107,18 @@ export async function extractCCode(
       const isStatic = hasStaticStorage(node);
       const references = collectFunctionReferences(node);
       const existing = seen.get(name);
-      // Real definitions always win over prototypes. When a name already has a
-      // definition, only replace it with another definition if the new one is
-      // static — narrowing visibility from public to private is informative;
-      // widening would lose the earlier static entry unintentionally.
-      if (
+      const newIsDef = Boolean(fnDef);
+      // Resolution rules (each row assumes replacement only when it fires):
+      //   1. First sighting: always accept.
+      //   2. Existing came from a prototype, new is a definition: promote so
+      //      location points at the real definition.
+      //   3. New is a static definition and existing is public: narrow
+      //      visibility. Never widen private → public.
+      const replace =
         !existing ||
-        (fnDef && (existing.visibility === "public" ? isStatic : true))
-      ) {
+        (newIsDef && !definedNames.has(name)) ||
+        (newIsDef && existing.visibility === "public" && isStatic);
+      if (replace) {
         seen.set(name, {
           id: name,
           name,
@@ -114,6 +130,7 @@ export async function extractCCode(
             line: node.startPosition.row + 1,
           },
         });
+        if (newIsDef) definedNames.add(name);
       }
     }
   }
@@ -136,9 +153,10 @@ function collectStructBody(structNode: SyntaxNode): StructBody {
     if (child.type !== "field_declaration") continue;
     const declaratorNode = child.childForFieldName("declarator");
     const name = fieldName(declaratorNode);
+    if (!name) continue;
     const typeNode = child.childForFieldName("type");
-    const typeText = typeNode?.text ?? "?";
-    members.push({ name, kind: "field", signature: `${name}: ${typeText}` });
+    const signature = typeNode?.text ? `${name}: ${typeNode.text}` : name;
+    members.push({ name, kind: "field", signature });
 
     const refName = typeNameFromNode(typeNode);
     if (refName && !BUILTIN_TYPES.has(refName) && !refSeen.has(refName)) {
@@ -149,31 +167,20 @@ function collectStructBody(structNode: SyntaxNode): StructBody {
   return { members, references };
 }
 
-/**
- * Walk a declarator tree (possibly nested pointer_declarator / array_declarator
- * / parenthesized_declarator / function_declarator wrappers) to find the
- * underlying field or identifier name.
- */
-function fieldName(node: SyntaxNode | null): string {
-  if (!node) return "?";
+function fieldName(node: SyntaxNode | null): string | null {
+  if (!node) return null;
   if (node.type === "field_identifier" || node.type === "identifier") {
     return node.text;
   }
   const inner = node.childForFieldName("declarator");
   if (inner) return fieldName(inner);
-  // Fallback: scan named children for an identifier (e.g. parenthesized_declarator).
   for (const child of node.namedChildren ?? []) {
     const recovered = fieldName(child);
-    if (recovered !== "?") return recovered;
+    if (recovered) return recovered;
   }
-  return "?";
+  return null;
 }
 
-/**
- * Walk a declarator tree (pointer_declarator wrappers, possibly multi-level)
- * to find the function_declarator's identifier. Returns null when the tree
- * does not terminate in a function_declarator with a plain identifier name.
- */
 function findFunctionNameInDeclarator(node: SyntaxNode | null): string | null {
   if (!node) return null;
   if (node.type === "function_declarator") {
@@ -197,10 +204,6 @@ function findFunctionNameInDeclarator(node: SyntaxNode | null): string | null {
   return null;
 }
 
-/**
- * Locate the function_declarator node inside a (possibly wrapped) declarator
- * subtree. Used to access the parameter list for extracting `uses` references.
- */
 function findFunctionDeclarator(node: SyntaxNode | null): SyntaxNode | null {
   if (!node) return null;
   if (node.type === "function_declarator") return node;
@@ -226,11 +229,9 @@ function hasStaticStorage(node: SyntaxNode): boolean {
   return false;
 }
 
-/**
- * Extract the type-identifier name from a type node (ignoring qualifiers,
- * modifiers, pointer suffixes). Returns null for primitives, sized ints, etc.
- * when no user-defined type identifier is present.
- */
+// Returns the identifier text for a type node. For primitives / sized ints,
+// returns the primitive name (callers filter via BUILTIN_TYPES). For
+// struct/union specifiers, returns the tag. Null when no identifier is present.
 function typeNameFromNode(node: SyntaxNode | null): string | null {
   if (!node) return null;
   if (node.type === "type_identifier") return node.text;
@@ -261,10 +262,8 @@ function collectFunctionReferences(fnNode: SyntaxNode): RawCodeReference[] {
     refs.push({ targetName: name, kind: "uses" });
   };
 
-  // Return type is the `type` field on the function_definition / declaration.
   push(typeNameFromNode(fnNode.childForFieldName("type")));
 
-  // Parameters live under the inner function_declarator.
   const fnDeclarator = findFunctionDeclarator(
     fnNode.childForFieldName("declarator"),
   );

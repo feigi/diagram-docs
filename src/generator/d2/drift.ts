@@ -10,10 +10,6 @@ export interface DriftWarning {
   message: string;
 }
 
-/**
- * Check user-facing D2 files for references to IDs that no longer
- * exist in the generated model. Returns warnings for stale references.
- */
 export function checkDrift(
   outputDir: string,
   model: ArchitectureModel,
@@ -37,10 +33,13 @@ export function checkDrift(
     }
   }
 
+  const modelOpts: DriftCheckOptions = {
+    caseInsensitive: false,
+    pattern: ID_PATTERNS.kebab,
+  };
   for (const filePath of userFiles) {
     if (!fs.existsSync(filePath)) continue;
-    const fileWarnings = checkFile(filePath, validIds);
-    warnings.push(...fileWarnings);
+    warnings.push(...checkFile(filePath, validIds, modelOpts));
   }
 
   // Code-level diagram files (C4). These reference code-element IDs which
@@ -51,6 +50,10 @@ export function checkDrift(
     for (const el of model.codeElements) {
       codeIds.add(toD2Id(el.id));
     }
+    const codeOpts: DriftCheckOptions = {
+      caseInsensitive: true,
+      pattern: ID_PATTERNS.code,
+    };
     if (fs.existsSync(containersDir)) {
       for (const containerEntry of fs.readdirSync(containersDir)) {
         const componentsDir = path.join(
@@ -66,7 +69,7 @@ export function checkDrift(
             "c4-code.d2",
           );
           if (!fs.existsSync(codeFile)) continue;
-          warnings.push(...checkCodeFile(codeFile, codeIds));
+          warnings.push(...checkFile(codeFile, codeIds, codeOpts));
         }
       }
     }
@@ -75,10 +78,6 @@ export function checkDrift(
   return warnings;
 }
 
-/**
- * Build the set of all valid D2 identifiers from the model.
- * Includes both bare IDs and nested forms (e.g. "system.component-id").
- */
 function buildValidIdSet(model: ArchitectureModel): Set<string> {
   const ids = new Set<string>();
 
@@ -113,21 +112,45 @@ function buildValidIdSet(model: ArchitectureModel): Set<string> {
   return ids;
 }
 
-// Patterns that indicate a D2 identifier reference
-const ID_LINE = /^([a-z0-9][a-z0-9.-]*)/;
-const CONNECTION = /^([a-z0-9][a-z0-9.-]*)\s*->\s*([a-z0-9][a-z0-9.-]*)/;
+const ID_PATTERNS = {
+  // Model-level IDs: kebab-case, lowercase.
+  kebab: {
+    idLine: /^([a-z0-9][a-z0-9.-]*)/,
+    connection: /^([a-z0-9][a-z0-9.-]*)\s*->\s*([a-z0-9][a-z0-9.-]*)/,
+    // Code-level identifiers use underscores and may preserve source casing,
+    // so the permissive pattern accepts uppercase.
+  },
+  code: {
+    idLine: /^([A-Za-z0-9_][A-Za-z0-9_.-]*)/,
+    connection:
+      /^([A-Za-z0-9_][A-Za-z0-9_.-]*)\s*->\s*([A-Za-z0-9_][A-Za-z0-9_.-]*)/,
+  },
+} as const;
 
-/**
- * Parse a user D2 file and check for references to unknown IDs.
- * Only examines lines after the last spread import (`...@`).
- */
-function checkFile(filePath: string, validIds: Set<string>): DriftWarning[] {
-  const content = fs.readFileSync(filePath, "utf-8");
+interface DriftCheckOptions {
+  caseInsensitive: boolean;
+  pattern: { idLine: RegExp; connection: RegExp };
+}
+
+function checkFile(
+  filePath: string,
+  validIds: Set<string>,
+  opts: DriftCheckOptions,
+): DriftWarning[] {
+  let content: string;
+  try {
+    content = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(
+      `Warning: cannot read ${filePath} for drift check: ${msg}\n`,
+    );
+    return [];
+  }
   const lines = content.split("\n");
   const relPath = path.basename(filePath);
   const warnings: DriftWarning[] = [];
 
-  // Find the last spread import line
   let customizationStart = 0;
   for (let i = 0; i < lines.length; i++) {
     if (lines[i].trimStart().startsWith("...@")) {
@@ -139,119 +162,37 @@ function checkFile(filePath: string, validIds: Set<string>): DriftWarning[] {
     const line = lines[i].trim();
     if (!line || line.startsWith("#")) continue;
 
-    // Check connection lines (two IDs)
-    const connMatch = line.match(CONNECTION);
+    const connMatch = line.match(opts.pattern.connection);
     if (connMatch) {
-      checkId(connMatch[1], relPath, i + 1, validIds, warnings);
-      checkId(connMatch[2], relPath, i + 1, validIds, warnings);
+      checkId(connMatch[1], relPath, i + 1, validIds, warnings, opts);
+      checkId(connMatch[2], relPath, i + 1, validIds, warnings, opts);
       continue;
     }
 
-    // Check shape/property lines (one ID)
-    const idMatch = line.match(ID_LINE);
+    const idMatch = line.match(opts.pattern.idLine);
     if (idMatch) {
-      checkId(idMatch[1], relPath, i + 1, validIds, warnings);
+      checkId(idMatch[1], relPath, i + 1, validIds, warnings, opts);
     }
   }
 
   return warnings;
 }
 
-/**
- * Check whether an ID (or its root) exists in the valid set.
- * For "foo.bar.baz", checks "foo.bar.baz", "foo.bar", and "foo".
- */
 function checkId(
   raw: string,
   file: string,
   line: number,
   validIds: Set<string>,
   warnings: DriftWarning[],
-): void {
-  // Strip trailing property segments like ".style.fill" or ".class"
-  const rootId = extractRootId(raw);
-  if (!rootId) return;
-
-  if (validIds.has(rootId)) return;
-
-  // Also check if it's a nested ref where the parent is valid
-  const parts = rootId.split(".");
-  for (let i = parts.length - 1; i >= 1; i--) {
-    const prefix = parts.slice(0, i).join(".");
-    if (validIds.has(prefix)) return;
-  }
-
-  warnings.push({
-    file,
-    line,
-    id: rootId,
-    message: `Reference to "${rootId}" not found in architecture model`,
-  });
-}
-
-// Code-level identifiers use underscores and may include uppercase chars
-// (e.g. class names). Connection lines use the same shape as C3 drift.
-const CODE_ID_LINE = /^([A-Za-z0-9_][A-Za-z0-9_.-]*)/;
-const CODE_CONNECTION =
-  /^([A-Za-z0-9_][A-Za-z0-9_.-]*)\s*->\s*([A-Za-z0-9_][A-Za-z0-9_.-]*)/;
-
-/**
- * Parse a user c4-code.d2 file and check for references to code-element IDs
- * that no longer exist in the model. Only examines lines after the last
- * spread import (`...@`).
- */
-function checkCodeFile(
-  filePath: string,
-  validIds: Set<string>,
-): DriftWarning[] {
-  const content = fs.readFileSync(filePath, "utf-8");
-  const lines = content.split("\n");
-  const relPath = path.basename(filePath);
-  const warnings: DriftWarning[] = [];
-
-  let customizationStart = 0;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].trimStart().startsWith("...@")) {
-      customizationStart = i + 1;
-    }
-  }
-
-  for (let i = customizationStart; i < lines.length; i++) {
-    const line = lines[i].trim();
-    if (!line || line.startsWith("#")) continue;
-
-    const connMatch = line.match(CODE_CONNECTION);
-    if (connMatch) {
-      checkCodeId(connMatch[1], relPath, i + 1, validIds, warnings);
-      checkCodeId(connMatch[2], relPath, i + 1, validIds, warnings);
-      continue;
-    }
-
-    const idMatch = line.match(CODE_ID_LINE);
-    if (idMatch) {
-      checkCodeId(idMatch[1], relPath, i + 1, validIds, warnings);
-    }
-  }
-
-  return warnings;
-}
-
-/**
- * Check whether a code-level ID (or its prefix) exists in the valid set.
- * Strips trailing D2 property segments before comparing.
- */
-function checkCodeId(
-  raw: string,
-  file: string,
-  line: number,
-  validIds: Set<string>,
-  warnings: DriftWarning[],
+  opts: DriftCheckOptions,
 ): void {
   const rootId = extractRootId(raw);
   if (!rootId) return;
-  if (validIds.has(rootId)) return;
 
-  const parts = rootId.split(".");
+  const lookup = opts.caseInsensitive ? rootId.toLowerCase() : rootId;
+  if (validIds.has(lookup)) return;
+
+  const parts = lookup.split(".");
   for (let i = parts.length - 1; i >= 1; i--) {
     const prefix = parts.slice(0, i).join(".");
     if (validIds.has(prefix)) return;
@@ -304,10 +245,6 @@ const D2_PROPS = new Set([
   "target-arrowhead",
 ]);
 
-/**
- * Given a raw D2 reference like "system.los-cha.style.fill",
- * strip known property segments from the end to get "system.los-cha".
- */
 function extractRootId(raw: string): string | null {
   const parts = raw.split(".");
   // Walk backwards, dropping known D2 properties

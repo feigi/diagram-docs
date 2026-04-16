@@ -183,7 +183,6 @@ export function buildModel({
     config.externalSystems,
   );
 
-  // Code-level data (classes/interfaces/relationships within components)
   const { codeElements, codeRelationships } = buildCodeModel(
     rawStructure,
     components,
