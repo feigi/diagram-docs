@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import type {
   LanguageAnalyzer,
@@ -9,8 +8,8 @@ import type {
   ExternalDep,
   InternalImport,
   ModuleImport,
-  RawCodeElement,
 } from "../types.js";
+import { extractCodeElementsForFiles } from "../tree-sitter.js";
 import { slugify } from "../../core/slugify.js";
 import { parseJavaImports } from "./imports.js";
 import { extractPackages, detectClassAnnotations } from "./packages.js";
@@ -114,13 +113,13 @@ export const javaAnalyzer: LanguageAnalyzer = {
       };
 
       if (config.levels?.code) {
-        const allElements: RawCodeElement[] = [];
-        for (const file of module.files.filter((f) => f.endsWith(".java"))) {
-          const fullPath = path.join(searchBase, file);
-          const source = await fsp.readFile(fullPath, "utf-8");
-          const elements = await extractJavaCode(fullPath, source);
-          allElements.push(...elements);
-        }
+        const filePaths = module.files
+          .filter((f) => f.endsWith(".java"))
+          .map((f) => path.join(searchBase, f));
+        const allElements = await extractCodeElementsForFiles(
+          filePaths,
+          extractJavaCode,
+        );
         if (allElements.length > 0) module.codeElements = allElements;
       }
 

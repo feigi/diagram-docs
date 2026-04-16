@@ -1,13 +1,13 @@
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
-import { runQuery } from "../tree-sitter.js";
+import { runQuery, createQueryLoader } from "../tree-sitter.js";
 import type { RawCodeElement, CodeMember, RawCodeReference } from "../types.js";
 
 type SyntaxNode = TreeSitter.SyntaxNode;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const getQuery = createQueryLoader(path.join(__dirname, "queries", "code.scm"));
 
 /** Builtin/stdlib type names we suppress when emitting references. */
 const BUILTIN_TYPES = new Set([
@@ -41,16 +41,6 @@ const BUILTIN_TYPES = new Set([
   "clock_t",
   "off_t",
 ]);
-
-let cachedQuery: string | null = null;
-async function getQuery(): Promise<string> {
-  if (cachedQuery) return cachedQuery;
-  cachedQuery = await fs.readFile(
-    path.join(__dirname, "queries", "code.scm"),
-    "utf-8",
-  );
-  return cachedQuery;
-}
 
 export async function extractCCode(
   filePath: string,

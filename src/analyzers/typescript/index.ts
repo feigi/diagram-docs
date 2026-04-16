@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import type {
   LanguageAnalyzer,
@@ -9,8 +8,8 @@ import type {
   ExternalDep,
   InternalImport,
   ModuleImport,
-  RawCodeElement,
 } from "../types.js";
+import { extractCodeElementsForFiles } from "../tree-sitter.js";
 import { slugify } from "../../core/slugify.js";
 import { parseTypeScriptImports } from "./imports.js";
 import { extractTypeScriptModules, resolveSourceRoot } from "./modules.js";
@@ -174,16 +173,16 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
       };
 
       if (config.levels?.code) {
-        const allElements: RawCodeElement[] = [];
-        for (const file of module.files.filter(
-          (f) =>
-            (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.endsWith(".d.ts"),
-        )) {
-          const fullPath = path.join(sourceRoot, file);
-          const source = await fsp.readFile(fullPath, "utf-8");
-          const elements = await extractTypeScriptCode(fullPath, source);
-          allElements.push(...elements);
-        }
+        const filePaths = module.files
+          .filter(
+            (f) =>
+              (f.endsWith(".ts") || f.endsWith(".tsx")) && !f.endsWith(".d.ts"),
+          )
+          .map((f) => path.join(sourceRoot, f));
+        const allElements = await extractCodeElementsForFiles(
+          filePaths,
+          extractTypeScriptCode,
+        );
         if (allElements.length > 0) module.codeElements = allElements;
       }
 
