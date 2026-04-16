@@ -105,4 +105,10 @@ describe("c code extraction", () => {
     const names = (widget.members ?? []).map((m) => m.name).sort();
     expect(names).toEqual(["arr", "cb", "name"]);
   });
+
+  it("returns gracefully on malformed source", async () => {
+    const broken = `struct Broken { int a;\nvoid oops( {`;
+    const elements = await extractCCode("/tmp/broken.c", broken);
+    expect(Array.isArray(elements)).toBe(true);
+  });
 });
