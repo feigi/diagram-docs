@@ -45,6 +45,31 @@ export interface ScanResult {
 }
 
 /**
+ * Build the config fingerprint fed into the scan cache checksum. Any config
+ * key that an analyzer or scan-phase code path branches on MUST be included
+ * here — otherwise toggling that key silently hits stale cache and the
+ * downstream feature appears disabled. The whole-repo scan also folds in
+ * `scan.include` (via `includeScanInclude`); per-project scans operate on
+ * already-discovered paths so it's omitted there.
+ */
+export function buildScanFingerprint(
+  effectiveExcludes: string[],
+  config: Config,
+  options?: { includeScanInclude?: boolean },
+): string {
+  const fingerprint: Record<string, unknown> = {
+    exclude: effectiveExcludes,
+    abstraction: config.abstraction,
+    levels: config.levels,
+    code: config.code,
+  };
+  if (options?.includeScanInclude) {
+    fingerprint.include = config.scan.include;
+  }
+  return JSON.stringify(fingerprint);
+}
+
+/**
  * Post-scan pass: match externalDependencies against other apps'
  * publishedAs coordinates. Matches are promoted to internalImports.
  */
@@ -239,11 +264,11 @@ export async function runScan({
 
   // Check cache — include scan-relevant config so config changes invalidate it
   const manifest = readManifest(rootDir) ?? createDefaultManifest();
-  const configFingerprint = JSON.stringify({
-    exclude: effectiveExcludes,
-    include: effectiveConfig.scan.include,
-    abstraction: effectiveConfig.abstraction,
-  });
+  const configFingerprint = buildScanFingerprint(
+    effectiveExcludes,
+    effectiveConfig,
+    { includeScanInclude: true },
+  );
   let spinnerIdx = 0;
   const isTTY = process.stderr.isTTY;
   const spinnerTimer = isTTY
@@ -426,10 +451,10 @@ export async function runProjectScan(options: {
 
   const effectiveExcludes = effectiveConfig.scan.exclude;
 
-  const configFingerprint = JSON.stringify({
-    exclude: effectiveExcludes,
-    abstraction: effectiveConfig.abstraction,
-  });
+  const configFingerprint = buildScanFingerprint(
+    effectiveExcludes,
+    effectiveConfig,
+  );
 
   const checksum = await computeProjectChecksum(
     projectAbsPath,
