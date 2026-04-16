@@ -820,7 +820,10 @@ function isTransientCopilotAuthError(err: unknown): boolean {
 }
 
 /** Max retries for transient copilot auth failures. */
-const COPILOT_MAX_RETRIES = 3;
+const COPILOT_MAX_RETRIES = 5;
+
+/** Tracks how many copilot generate() calls are active right now. */
+let activeCopilotCalls = 0;
 
 const copilotProvider: LLMProvider = {
   name: "GitHub Copilot CLI",
@@ -833,36 +836,51 @@ const copilotProvider: LLMProvider = {
   async generate(systemPrompt, userMessage, model, onProgress) {
     const combinedPrompt = `${systemPrompt}\n\n---\n\n${userMessage}`;
 
-    for (let attempt = 0; attempt <= COPILOT_MAX_RETRIES; attempt++) {
-      try {
-        return await spawnCopilotJsonl(
-          combinedPrompt,
-          model,
-          900_000,
-          onProgress,
-        );
-      } catch (err) {
-        if (attempt < COPILOT_MAX_RETRIES && isTransientCopilotAuthError(err)) {
-          // Exponential backoff with jitter to desynchronize concurrent retries
-          const baseMs = 2_000 * 2 ** attempt;
-          const jitterMs = Math.floor(Math.random() * baseMs);
-          const delayMs = baseMs + jitterMs;
-          if (onProgress) {
-            onProgress({
-              line: `Transient auth error, retrying in ${(delayMs / 1000).toFixed(1)}s (attempt ${attempt + 1}/${COPILOT_MAX_RETRIES})…`,
-              final: true,
-              kind: "thinking",
-            });
-          }
-          await new Promise((resolve) => setTimeout(resolve, delayMs));
-          continue;
-        }
-        throw err;
-      }
+    // Stagger concurrent launches so they don't all hit GitHub OAuth validation
+    // at the same time, which causes "fetch failed" auth errors under parallel load.
+    if (activeCopilotCalls > 0) {
+      await new Promise((resolve) =>
+        setTimeout(resolve, Math.floor(Math.random() * 1500)),
+      );
     }
+    activeCopilotCalls++;
+    try {
+      for (let attempt = 0; attempt <= COPILOT_MAX_RETRIES; attempt++) {
+        try {
+          return await spawnCopilotJsonl(
+            combinedPrompt,
+            model,
+            900_000,
+            onProgress,
+          );
+        } catch (err) {
+          if (
+            attempt < COPILOT_MAX_RETRIES &&
+            isTransientCopilotAuthError(err)
+          ) {
+            // Exponential backoff with jitter to desynchronize concurrent retries
+            const baseMs = 3_000 * 2 ** attempt;
+            const jitterMs = Math.floor(Math.random() * baseMs);
+            const delayMs = baseMs + jitterMs;
+            if (onProgress) {
+              onProgress({
+                line: `Transient auth error, retrying in ${(delayMs / 1000).toFixed(1)}s (attempt ${attempt + 1}/${COPILOT_MAX_RETRIES})…`,
+                final: true,
+                kind: "thinking",
+              });
+            }
+            await new Promise((resolve) => setTimeout(resolve, delayMs));
+            continue;
+          }
+          throw err;
+        }
+      }
 
-    // Unreachable, but satisfies TypeScript
-    throw new LLMCallError("Exhausted retries for copilot");
+      // Unreachable, but satisfies TypeScript
+      throw new LLMCallError("Exhausted retries for copilot");
+    } finally {
+      activeCopilotCalls--;
+    }
   },
 };
 
