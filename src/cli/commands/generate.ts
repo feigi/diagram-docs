@@ -53,6 +53,7 @@ import {
 import {
   buildModelWithLLM,
   serializeModel,
+  attachCodeModel,
   LLMUnavailableError,
   LLMCallError,
   LLMOutputError,
@@ -347,7 +348,12 @@ async function resolveModel(
       console.error(
         `Using model: ${path.relative(process.cwd(), autoModelPath)} (all containers cached)`,
       );
-      return { model: existingModel, rawStructure };
+      // Re-attach deterministic L4 data: a cached on-disk model may predate
+      // when `levels.code` was enabled (or the previous build), so its
+      // codeElements/codeRelationships could be missing or stale relative to
+      // the current scan. attachCodeModel is a no-op when levels.code is off.
+      const enriched = attachCodeModel(existingModel, rawStructure, config);
+      return { model: enriched, rawStructure };
     }
     console.error(
       `${deletedContainers.length} container(s) removed since last scan: ${deletedContainers.map((c) => c.path).join(", ")}`,
