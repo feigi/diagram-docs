@@ -8,7 +8,7 @@ import type {
   ModuleImport,
 } from "../types.js";
 import { extractCodeElementsForFiles } from "../tree-sitter.js";
-import { slugify } from "../../core/slugify.js";
+import { slugify, slugifyPath } from "../../core/slugify.js";
 import { parseCIncludes } from "./includes.js";
 import { extractCStructure } from "./structure.js";
 import { extractCCode } from "./code.js";
@@ -23,7 +23,7 @@ export const cAnalyzer: LanguageAnalyzer = {
     appPath: string,
     config: ScanConfig,
   ): Promise<ScannedApplication> {
-    const appId = slugify(appPath);
+    const appId = slugifyPath(appPath);
     const appName = path.basename(appPath);
 
     const groups = await extractCStructure(appPath, config.exclude);

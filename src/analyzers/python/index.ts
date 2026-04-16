@@ -9,7 +9,7 @@ import type {
   ModuleImport,
 } from "../types.js";
 import { extractCodeElementsForFiles } from "../tree-sitter.js";
-import { slugify } from "../../core/slugify.js";
+import { slugify, slugifyPath } from "../../core/slugify.js";
 import { parsePythonImports } from "./imports.js";
 import { extractPythonModules, detectPythonFramework } from "./modules.js";
 import { collectConfigFiles } from "../config-files.js";
@@ -80,7 +80,7 @@ export const pythonAnalyzer: LanguageAnalyzer = {
     appPath: string,
     config: ScanConfig,
   ): Promise<ScannedApplication> {
-    const appId = slugify(appPath);
+    const appId = slugifyPath(appPath);
     const appName = path.basename(appPath);
 
     const pyModules = await extractPythonModules(appPath, config.exclude);
