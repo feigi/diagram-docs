@@ -12,7 +12,7 @@
   ],
   "scripts": {
     "prepare": "test -z \"$CI\" && husky || true",
-    "prepack": "tsc",
+    "prepack": "tsc && node scripts/copy-assets.mjs",
     "dev": "tsx src/cli/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
