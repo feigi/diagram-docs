@@ -36,12 +36,20 @@ describe("java code extraction", () => {
     const els = await extractJavaCode(FIXTURE, source);
     const svc = els.find((e) => e.name === "UserService")!;
     expect(svc.references).toEqual(
-      expect.arrayContaining([{ targetName: "Auditable", kind: "implements" }]),
+      expect.arrayContaining([
+        expect.objectContaining({
+          targetName: "Auditable",
+          kind: "implements",
+        }),
+      ]),
     );
     const user = els.find((e) => e.name === "User")!;
     expect(user.references).toEqual(
       expect.arrayContaining([
-        { targetName: "Serializable", kind: "implements" },
+        expect.objectContaining({
+          targetName: "Serializable",
+          kind: "implements",
+        }),
       ]),
     );
   });
@@ -62,7 +70,9 @@ describe("java code extraction: multi-interface and generic parents", () => {
     const source = `package p; class Foo implements A, B, C {}`;
     const els = await extractJavaCode("Foo.java", source);
     const foo = els.find((e) => e.name === "Foo")!;
-    expect(foo.references).toEqual([
+    expect(
+      foo.references?.map(({ targetName, kind }) => ({ targetName, kind })),
+    ).toEqual([
       { targetName: "A", kind: "implements" },
       { targetName: "B", kind: "implements" },
       { targetName: "C", kind: "implements" },
@@ -76,7 +86,9 @@ import java.io.Serializable;
 class Foo extends ArrayList<String> implements Comparable<Foo>, Serializable {}`;
     const els = await extractJavaCode("Foo.java", source);
     const foo = els.find((e) => e.name === "Foo")!;
-    expect(foo.references).toEqual([
+    expect(
+      foo.references?.map(({ targetName, kind }) => ({ targetName, kind })),
+    ).toEqual([
       { targetName: "ArrayList", kind: "extends" },
       { targetName: "Comparable", kind: "implements" },
       { targetName: "Serializable", kind: "implements" },
@@ -87,7 +99,9 @@ class Foo extends ArrayList<String> implements Comparable<Foo>, Serializable {}`
     const source = `package p; interface Super extends A, B {}`;
     const els = await extractJavaCode("Super.java", source);
     const sup = els.find((e) => e.name === "Super")!;
-    expect(sup.references).toEqual([
+    expect(
+      sup.references?.map(({ targetName, kind }) => ({ targetName, kind })),
+    ).toEqual([
       { targetName: "A", kind: "extends" },
       { targetName: "B", kind: "extends" },
     ]);
@@ -98,14 +112,21 @@ class Foo extends ArrayList<String> implements Comparable<Foo>, Serializable {}`
     const els = await extractJavaCode(MULTI_FIXTURE, source);
 
     const combined = els.find((e) => e.name === "Combined")!;
-    expect(combined.references).toEqual([
+    expect(
+      combined.references?.map(({ targetName, kind }) => ({
+        targetName,
+        kind,
+      })),
+    ).toEqual([
       { targetName: "Alpha", kind: "extends" },
       { targetName: "Beta", kind: "extends" },
       { targetName: "Gamma", kind: "extends" },
     ]);
 
     const bag = els.find((e) => e.name === "Bag")!;
-    expect(bag.references).toEqual([
+    expect(
+      bag.references?.map(({ targetName, kind }) => ({ targetName, kind })),
+    ).toEqual([
       { targetName: "ArrayList", kind: "extends" },
       { targetName: "Alpha", kind: "implements" },
       { targetName: "Comparable", kind: "implements" },
@@ -130,5 +151,57 @@ class Outer {
     const broken = `package com.example; public class Broken { void oops( }`;
     const elements = await extractJavaCode("/tmp/Broken.java", broken);
     expect(Array.isArray(elements)).toBe(true);
+  });
+});
+
+describe("java code extraction: qualified-name resolution", () => {
+  it("emits qualifiedName for top-level types using the package declaration", async () => {
+    const source = `package com.bmw.api; public class RouteSearchApi {}`;
+    const els = await extractJavaCode("RouteSearchApi.java", source);
+    expect(els[0].qualifiedName).toBe("com.bmw.api.RouteSearchApi");
+  });
+
+  it("omits qualifiedName when no package declaration is present (default package)", async () => {
+    const source = `public class Loose {}`;
+    const els = await extractJavaCode("Loose.java", source);
+    expect(els[0].qualifiedName).toBeUndefined();
+  });
+
+  it("resolves implements-target FQN via single-type imports", async () => {
+    const source = `package com.bmw.app;
+import com.bmw.api.v7.RouteSearchApi;
+public class RouteSearchControllerV7 implements RouteSearchApi {}`;
+    const els = await extractJavaCode("RouteSearchControllerV7.java", source);
+    const ctrl = els[0];
+    const ref = ctrl.references!.find((r) => r.targetName === "RouteSearchApi");
+    expect(ref?.targetQualifiedName).toBe("com.bmw.api.v7.RouteSearchApi");
+  });
+
+  it("falls back to same-package FQN when target is unimported", async () => {
+    const source = `package com.bmw.app;
+public class Foo extends Bar {}`;
+    const els = await extractJavaCode("Foo.java", source);
+    const ref = els[0].references!.find((r) => r.targetName === "Bar");
+    expect(ref?.targetQualifiedName).toBe("com.bmw.app.Bar");
+  });
+
+  it("ignores wildcard imports (cannot map a single FQN)", async () => {
+    const source = `package com.bmw.app;
+import com.bmw.api.v7.*;
+public class Foo implements RouteSearchApi {}`;
+    const els = await extractJavaCode("Foo.java", source);
+    const ref = els[0].references!.find(
+      (r) => r.targetName === "RouteSearchApi",
+    );
+    // Wildcard skipped → falls back to same-package guess.
+    expect(ref?.targetQualifiedName).toBe("com.bmw.app.RouteSearchApi");
+  });
+
+  it("ignores static imports", async () => {
+    const source = `package com.bmw.app;
+import static java.util.Collections.emptyList;
+public class Foo {}`;
+    const els = await extractJavaCode("Foo.java", source);
+    expect(els[0].qualifiedName).toBe("com.bmw.app.Foo");
   });
 });

@@ -19,7 +19,9 @@ export async function extractJavaCode(
   source: string,
 ): Promise<RawCodeElement[]> {
   const query = await getQuery();
-  return runQueryScoped("java", source, query, (matches) => {
+  return runQueryScoped("java", source, query, (matches, tree) => {
+    const fileCtx = extractFileContext(tree.rootNode);
+
     const byDecl = new Map<
       number,
       { kind: CodeElementKind; captures: (typeof matches)[0]["captures"] }
@@ -49,13 +51,16 @@ export async function extractJavaCode(
       const declCap = entry.captures.find((c) => c.name.endsWith(".decl"))!;
       const id = nameCap.node.text;
 
-      const references = collectReferences(declCap.node, entry.kind);
+      const references = collectReferences(declCap.node, entry.kind, fileCtx);
 
       const members = collectMembers(declCap.node);
       const element: RawCodeElement = {
         id,
         name: id,
         kind: entry.kind,
+        qualifiedName: fileCtx.packageName
+          ? `${fileCtx.packageName}.${id}`
+          : undefined,
         visibility: inferVisibility(declCap.node),
         members: members.length > 0 ? members : undefined,
         references: references.length > 0 ? references : undefined,
@@ -68,6 +73,57 @@ export async function extractJavaCode(
     }
     return elements;
   });
+}
+
+interface JavaFileContext {
+  /** Package declared by the source file, e.g. `com.example.foo`. Empty if unset (default package). */
+  packageName: string;
+  /** Map from simple type name to FQN, populated from non-static, non-wildcard imports. */
+  importMap: Map<string, string>;
+}
+
+function extractFileContext(root: SyntaxNode): JavaFileContext {
+  let packageName = "";
+  const importMap = new Map<string, string>();
+  for (const child of root.namedChildren ?? []) {
+    if (child.type === "package_declaration") {
+      const ident = (child.namedChildren ?? []).find(
+        (c) => c.type === "scoped_identifier" || c.type === "identifier",
+      );
+      if (ident) packageName = ident.text;
+    } else if (child.type === "import_declaration") {
+      // Skip `import static …` and `import …*` — neither maps a single
+      // simple name to a single FQN.
+      const text = child.text;
+      if (text.includes(" static ")) continue;
+      const ident = (child.namedChildren ?? []).find(
+        (c) => c.type === "scoped_identifier" || c.type === "identifier",
+      );
+      if (!ident) continue;
+      const isWildcard = (child.namedChildren ?? []).some(
+        (c) => c.type === "asterisk",
+      );
+      if (isWildcard) continue;
+      const fqn = ident.text;
+      const lastDot = fqn.lastIndexOf(".");
+      const simple = lastDot >= 0 ? fqn.slice(lastDot + 1) : fqn;
+      importMap.set(simple, fqn);
+    }
+  }
+  return { packageName, importMap };
+}
+
+function resolveTargetFqn(
+  simple: string,
+  ctx: JavaFileContext,
+): string | undefined {
+  const imported = ctx.importMap.get(simple);
+  if (imported) return imported;
+  // Java rule: unqualified, unimported types resolve to the file's own
+  // package (java.lang is always implicitly imported but those types are
+  // out-of-project anyway).
+  if (ctx.packageName) return `${ctx.packageName}.${simple}`;
+  return undefined;
 }
 
 function typeName(node: SyntaxNode): string | null {
@@ -84,9 +140,19 @@ function typeName(node: SyntaxNode): string | null {
 function collectReferences(
   declNode: SyntaxNode,
   elementKind: string,
+  fileCtx: JavaFileContext,
 ): RawCodeReference[] {
   const references: RawCodeReference[] = [];
   const children = declNode.namedChildren ?? [];
+
+  const push = (name: string, kind: RawCodeReference["kind"]) => {
+    const fqn = resolveTargetFqn(name, fileCtx);
+    references.push({
+      targetName: name,
+      ...(fqn ? { targetQualifiedName: fqn } : {}),
+      kind,
+    });
+  };
 
   if (elementKind === "class") {
     const superclass = children.find((c) => c.type === "superclass");
@@ -94,7 +160,7 @@ function collectReferences(
       for (const child of superclass.namedChildren ?? []) {
         const name = typeName(child);
         if (name) {
-          references.push({ targetName: name, kind: "extends" });
+          push(name, "extends");
           break;
         }
       }
@@ -107,9 +173,7 @@ function collectReferences(
       if (typeList) {
         for (const child of typeList.namedChildren ?? []) {
           const name = typeName(child);
-          if (name) {
-            references.push({ targetName: name, kind: "implements" });
-          }
+          if (name) push(name, "implements");
         }
       }
     }
@@ -124,9 +188,7 @@ function collectReferences(
       if (typeList) {
         for (const child of typeList.namedChildren ?? []) {
           const name = typeName(child);
-          if (name) {
-            references.push({ targetName: name, kind: "extends" });
-          }
+          if (name) push(name, "extends");
         }
       }
     }
