@@ -394,7 +394,7 @@ async function resolveModel(
   }));
 
   // 6. Build model
-  const model = await buildModelFromScan(
+  const builtModel = await buildModelFromScan(
     rawStructure,
     configDir,
     config,
@@ -403,6 +403,7 @@ async function resolveModel(
     libraryMeta,
     debug,
   );
+  const model = attachCodeModel(builtModel, rawStructure, config);
 
   // 7. Cache per-container model fragments
   for (const container of containers) {
