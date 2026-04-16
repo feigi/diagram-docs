@@ -101,17 +101,28 @@
       "default": [],
       "items": {
         "type": "object",
-        "required": ["id", "componentId", "kind", "name"],
+        "required": ["id", "componentId", "containerId", "kind", "name"],
         "properties": {
           "id": { "type": "string" },
           "componentId": { "type": "string" },
-          "kind": { "type": "string" },
+          "containerId": { "type": "string" },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "class",
+              "interface",
+              "enum",
+              "type",
+              "function",
+              "struct",
+              "typedef"
+            ]
+          },
           "name": { "type": "string" },
           "visibility": {
             "type": "string",
             "enum": ["public", "internal", "private"]
           },
-          "parentElementId": { "type": "string" },
           "members": {
             "type": "array",
             "items": {

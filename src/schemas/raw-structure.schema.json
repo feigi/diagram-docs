@@ -73,13 +73,23 @@
                     "required": ["id", "kind", "name", "location"],
                     "properties": {
                       "id": { "type": "string" },
-                      "kind": { "type": "string" },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "class",
+                          "interface",
+                          "enum",
+                          "type",
+                          "function",
+                          "struct",
+                          "typedef"
+                        ]
+                      },
                       "name": { "type": "string" },
                       "visibility": {
                         "type": "string",
                         "enum": ["public", "internal", "private"]
                       },
-                      "parentId": { "type": "string" },
                       "members": {
                         "type": "array",
                         "items": {

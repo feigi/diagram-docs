@@ -13,10 +13,18 @@ const codeMemberSchema = z.object({
 const codeElementSchema = z.object({
   id: z.string(),
   componentId: z.string(),
-  kind: z.string(),
+  containerId: z.string(),
+  kind: z.enum([
+    "class",
+    "interface",
+    "enum",
+    "type",
+    "function",
+    "struct",
+    "typedef",
+  ]),
   name: z.string(),
   visibility: z.enum(["public", "internal", "private"]).optional(),
-  parentElementId: z.string().optional(),
   members: z.array(codeMemberSchema).optional(),
   tags: z.array(z.string()).optional(),
 });
