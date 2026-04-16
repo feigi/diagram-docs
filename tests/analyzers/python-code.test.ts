@@ -54,4 +54,10 @@ describe("python code extraction", () => {
       expect.arrayContaining(["__init__", "get_name"]),
     );
   });
+
+  it("returns gracefully on malformed source", async () => {
+    const broken = `class Broken:\n    def oops(self\n`;
+    const elements = await extractPythonCode("/tmp/broken.py", broken);
+    expect(Array.isArray(elements)).toBe(true);
+  });
 });

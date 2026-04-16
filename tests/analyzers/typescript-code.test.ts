@@ -77,4 +77,10 @@ describe("typescript code extraction", () => {
     expect(ctor).toBeDefined();
     expect(ctor!.kind).toBe("method");
   });
+
+  it("returns gracefully on malformed source", async () => {
+    const broken = `export class Broken { method( {`;
+    const elements = await extractTypeScriptCode("/tmp/Broken.ts", broken);
+    expect(Array.isArray(elements)).toBe(true);
+  });
 });

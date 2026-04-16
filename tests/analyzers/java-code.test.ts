@@ -112,4 +112,10 @@ class Foo extends ArrayList<String> implements Comparable<Foo>, Serializable {}`
       { targetName: "Beta", kind: "implements" },
     ]);
   });
+
+  it("returns gracefully on malformed source (tree-sitter error-recovers)", async () => {
+    const broken = `package com.example; public class Broken { void oops( }`;
+    const elements = await extractJavaCode("/tmp/Broken.java", broken);
+    expect(Array.isArray(elements)).toBe(true);
+  });
 });
