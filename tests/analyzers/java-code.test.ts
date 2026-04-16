@@ -113,6 +113,19 @@ class Foo extends ArrayList<String> implements Comparable<Foo>, Serializable {}`
     ]);
   });
 
+  it("captures nested classes at all depths (tree-sitter query matches anywhere)", async () => {
+    const source = `package p;
+class Outer {
+  static class Inner {}
+  class InnerTwo {}
+}`;
+    const els = await extractJavaCode("Outer.java", source);
+    const names = els.map((e) => e.name).sort();
+    // All three declarations are captured; collision handling downstream
+    // deals with duplicate bare names across modules.
+    expect(names).toEqual(["Inner", "InnerTwo", "Outer"]);
+  });
+
   it("returns gracefully on malformed source (tree-sitter error-recovers)", async () => {
     const broken = `package com.example; public class Broken { void oops( }`;
     const elements = await extractJavaCode("/tmp/Broken.java", broken);

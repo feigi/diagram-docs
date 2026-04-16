@@ -8,7 +8,7 @@ diagram-docs is a TypeScript CLI that generates C4 architecture diagrams in D2 f
 
 1. **Scan** — Static analysis extracts code structure → `.diagram-docs/raw-structure.json`
 2. **Model** — Deterministic or LLM-agent-driven conversion → `architecture-model.yaml`
-3. **Generate** — Produces D2 diagrams (context/container/component levels) → `docs/architecture/`
+3. **Generate** — Produces D2 diagrams at up to four C4 levels (context/container/component/code) → `docs/architecture/`. The code level (L4) is opt-in via `levels.code: true`.
 
 The tool never calls an LLM itself. The agent sits between scan and generate, reading scan output and writing the architecture model.
 
@@ -35,7 +35,7 @@ npm run bench              # Performance benchmarks (vitest bench)
 
 ### Pipeline Flow
 
-`discovery.ts` finds apps by build files → language analyzers extract modules/imports/deps → `model-builder.ts` converts raw→architecture deterministically → D2 generators produce diagrams at three C4 levels.
+`discovery.ts` finds apps by build files → language analyzers extract modules/imports/deps (plus code elements for L4 when `levels.code: true`) → `model-builder.ts` converts raw→architecture deterministically → D2 generators produce diagrams at up to four C4 levels.
 
 ### Key Modules
 
@@ -67,10 +67,18 @@ Generated files go in `_generated/` subdirs (overwritten each run). User-facing 
 
 ## Testing
 
-Tests live in `tests/` using vitest with globals enabled. Fixtures in `tests/fixtures/monorepo/` (multi-language Java/Python/C sample). Quality tests measure precision/recall against ground truth fixtures in `tests/quality/fixtures/`.
+Tests live in `tests/` using vitest with globals enabled. Fixtures in `tests/fixtures/monorepo/` (multi-language Java/TypeScript/Python/C sample). Quality tests measure precision/recall against ground truth fixtures in `tests/quality/fixtures/`.
 
 ### Adding a Language Analyzer
 
 1. Create `src/analyzers/<language>/index.ts` implementing `LanguageAnalyzer`
 2. Register in `src/analyzers/registry.ts`
 3. Add ground truth fixture in `tests/quality/fixtures/` (see `TEMPLATE.md`)
+
+For L4 (code-level) support in the new language:
+
+4. Drop the tree-sitter WASM grammar into `assets/tree-sitter/tree-sitter-<language>.wasm` and add a matching ABI-v14-compatible dev dep in `package.json`
+5. Write the capture query at `src/analyzers/<language>/queries/code.scm`
+6. Implement `src/analyzers/<language>/code.ts` exporting an `extract<Language>Code` that calls `runQueryScoped` from `../tree-sitter.js`
+7. Gate the extraction inside `index.ts` on `config.levels?.code` and feed files through `extractCodeElementsForFiles`
+8. Add a rendering profile (or reuse an existing one) in `src/generator/d2/code-profiles.ts` and extend `normalizeLanguage`/`languageFromKind` in `src/cli/commands/generate.ts` so the profile is selected

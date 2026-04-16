@@ -13,14 +13,25 @@ const ASSETS_DIR = path.resolve(__dirname, "..", "..", "assets", "tree-sitter");
 
 let initPromise: Promise<void> | null = null;
 const grammarCache = new Map<SupportedLanguage, Promise<TreeSitter.Language>>();
+const parserCache = new Map<SupportedLanguage, TreeSitter>();
+const queryCache = new Map<string, TreeSitter.Query>();
 
 export function resetLoaderForTesting(): void {
   initPromise = null;
   grammarCache.clear();
+  for (const p of parserCache.values()) p.delete();
+  parserCache.clear();
+  for (const q of queryCache.values()) q.delete();
+  queryCache.clear();
 }
 
 function initOnce(): Promise<void> {
-  if (!initPromise) initPromise = TreeSitter.init();
+  if (!initPromise) {
+    initPromise = TreeSitter.init().catch((err) => {
+      initPromise = null;
+      throw err;
+    });
+  }
   return initPromise;
 }
 
@@ -50,27 +61,45 @@ export interface QueryMatch {
   captures: Array<{ name: string; node: TreeSitter.SyntaxNode }>;
 }
 
-export async function runQuery(
+/**
+ * Callback variant of runQuery that disposes the parser/tree/query after `fn`
+ * returns. Use this to avoid leaking WASM memory across many files — the
+ * node references passed to `fn` are only valid while the callback runs.
+ */
+export async function runQueryScoped<T>(
   lang: SupportedLanguage,
   source: string,
   queryText: string,
-): Promise<QueryMatch[]> {
+  fn: (matches: QueryMatch[]) => T | Promise<T>,
+): Promise<T> {
   const grammar = await loadLanguage(lang);
-  const parser = new TreeSitter();
-  parser.setLanguage(grammar);
+
+  let parser = parserCache.get(lang);
+  if (!parser) {
+    parser = new TreeSitter();
+    parser.setLanguage(grammar);
+    parserCache.set(lang, parser);
+  }
+
+  const queryCacheKey = `${lang}\0${queryText}`;
+  let query = queryCache.get(queryCacheKey);
+  if (!query) {
+    query = grammar.query(queryText);
+    queryCache.set(queryCacheKey, query);
+  }
+
   const tree = parser.parse(source);
-  const query = grammar.query(queryText);
-  const matches = query.matches(tree.rootNode);
-  return matches.map((m) => ({
-    pattern: m.pattern,
-    captures: m.captures.map((c) => ({ name: c.name, node: c.node })),
-  }));
+  try {
+    const matches: QueryMatch[] = query.matches(tree.rootNode).map((m) => ({
+      pattern: m.pattern,
+      captures: m.captures.map((c) => ({ name: c.name, node: c.node })),
+    }));
+    return await fn(matches);
+  } finally {
+    tree.delete();
+  }
 }
 
-/**
- * Returns a lazy-cached loader for a tree-sitter query file.
- * Call once at module level; the returned function reads and caches on first call.
- */
 export function createQueryLoader(queryPath: string): () => Promise<string> {
   let cached: string | null = null;
   return async () => {
@@ -80,21 +109,31 @@ export function createQueryLoader(queryPath: string): () => Promise<string> {
   };
 }
 
-/**
- * Reads all files in parallel and runs `extractFn` on each. Per-file errors
- * (read failures, parse-library throws) are isolated and logged to stderr —
- * one bad file must not blackhole code-level extraction for the whole module.
- */
+// Runs `extractFn` on each file in parallel. Read failures and extractor
+// throws are isolated per-file so one bad file can't blackhole the module.
+// Systemic failure (every file errored) is reported so users can distinguish
+// a broken grammar / ABI mismatch from per-file data quality issues.
 export async function extractCodeElementsForFiles(
   filePaths: string[],
   extractFn: (filePath: string, source: string) => Promise<RawCodeElement[]>,
 ): Promise<RawCodeElement[]> {
+  let extractionFailures = 0;
   const results = await Promise.all(
     filePaths.map(async (fp) => {
+      let source: string;
       try {
-        const source = await readFile(fp, "utf-8");
+        source = await readFile(fp, "utf-8");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `Warning: code-level extraction failed for ${fp} (read error): ${msg}\n`,
+        );
+        return [] as RawCodeElement[];
+      }
+      try {
         return await extractFn(fp, source);
       } catch (err) {
+        extractionFailures++;
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(
           `Warning: code-level extraction failed for ${fp}: ${msg}\n`,
@@ -103,5 +142,16 @@ export async function extractCodeElementsForFiles(
       }
     }),
   );
+  if (extractionFailures > 0) {
+    if (extractionFailures === filePaths.length) {
+      process.stderr.write(
+        `Warning: code-level extraction failed on all ${filePaths.length} file(s) — likely a grammar, query, or walker bug rather than per-file source issues.\n`,
+      );
+    } else {
+      process.stderr.write(
+        `Warning: code-level extraction failed for ${extractionFailures}/${filePaths.length} file(s); diagrams will be incomplete.\n`,
+      );
+    }
+  }
   return results.flat();
 }

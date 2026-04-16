@@ -91,12 +91,24 @@ export interface RawCodeElement {
   location: { file: string; line: number };
 }
 
-export interface CodeMember {
-  name: string;
-  kind: "field" | "method";
-  signature?: string;
-  visibility?: "public" | "internal" | "private";
-}
+/**
+ * Discriminated on `kind`: methods always carry a signature (the callable
+ * shape is the whole point), fields are signature-optional (a bare field
+ * name is still meaningful).
+ */
+export type CodeMember =
+  | {
+      name: string;
+      kind: "field";
+      signature?: string;
+      visibility?: "public" | "internal" | "private";
+    }
+  | {
+      name: string;
+      kind: "method";
+      signature: string;
+      visibility?: "public" | "internal" | "private";
+    };
 
 /**
  * `extends` is the syntactic source-level keyword (Java/TS extends, Python
@@ -165,6 +177,11 @@ export interface CodeElement {
 export interface CodeRelationship {
   sourceId: string;
   targetId: string;
+  /**
+   * Display name for the target element. Populated at resolve time so
+   * generators don't need to reverse-engineer a label from a qualified id.
+   */
+  targetName?: string;
   kind: "inherits" | "implements" | "uses" | "contains";
   label?: string;
 }

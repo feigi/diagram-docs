@@ -126,20 +126,34 @@
           "members": {
             "type": "array",
             "items": {
-              "type": "object",
-              "required": ["name", "kind"],
-              "properties": {
-                "name": { "type": "string" },
-                "kind": {
-                  "type": "string",
-                  "enum": ["field", "method"]
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": ["name", "kind"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "kind": { "type": "string", "const": "field" },
+                    "signature": { "type": "string" },
+                    "visibility": {
+                      "type": "string",
+                      "enum": ["public", "internal", "private"]
+                    }
+                  }
                 },
-                "signature": { "type": "string" },
-                "visibility": {
-                  "type": "string",
-                  "enum": ["public", "internal", "private"]
+                {
+                  "type": "object",
+                  "required": ["name", "kind", "signature"],
+                  "properties": {
+                    "name": { "type": "string" },
+                    "kind": { "type": "string", "const": "method" },
+                    "signature": { "type": "string" },
+                    "visibility": {
+                      "type": "string",
+                      "enum": ["public", "internal", "private"]
+                    }
+                  }
                 }
-              }
+              ]
             }
           },
           "tags": {
@@ -158,6 +172,7 @@
         "properties": {
           "sourceId": { "type": "string" },
           "targetId": { "type": "string" },
+          "targetName": { "type": "string" },
           "kind": {
             "type": "string",
             "enum": ["inherits", "implements", "uses", "contains"]
