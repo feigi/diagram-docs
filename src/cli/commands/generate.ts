@@ -47,6 +47,7 @@ import {
 import type { Config } from "../../config/schema.js";
 import type {
   ArchitectureModel,
+  CodeElement,
   Component,
   RawStructure,
 } from "../../analyzers/types.js";
@@ -191,6 +192,11 @@ export const generateCommand = new Command("generate")
       });
       filesWritten += codeResult.written;
       filesUnchanged += codeResult.unchanged;
+      const total = codeResult.written + codeResult.unchanged;
+      console.error(
+        `L4: ${total} component diagram(s) generated, ` +
+          `${codeResult.skipped} skipped (below code.minElements=${config.code.minElements}).`,
+      );
     }
 
     // Scaffold user-facing files (only creates, never overwrites)
@@ -691,10 +697,11 @@ export function generateCodeLevelDiagrams(opts: {
   config: Config;
   outputDir: string;
   rawStructure?: RawStructure;
-}): { written: number; unchanged: number } {
+}): { written: number; unchanged: number; skipped: number } {
   const { model, config, outputDir, rawStructure } = opts;
   let written = 0;
   let unchanged = 0;
+  let skipped = 0;
 
   const componentsByContainer = new Map<string, typeof model.components>();
   for (const c of model.components) {
@@ -714,7 +721,10 @@ export function generateCodeLevelDiagrams(opts: {
     const components = componentsByContainer.get(container.id) ?? [];
     for (const component of components) {
       const elementCount = elementCountByComponent.get(component.id) ?? 0;
-      if (elementCount < config.code.minElements) continue;
+      if (elementCount < config.code.minElements) {
+        skipped++;
+        continue;
+      }
 
       const compDir = path.join(
         outputDir,
@@ -742,12 +752,12 @@ export function generateCodeLevelDiagrams(opts: {
     }
   }
 
-  return { written, unchanged };
+  return { written, unchanged, skipped };
 }
 
 function dominantLanguageForComponent(
   component: Component,
-  _model: ArchitectureModel,
+  model: ArchitectureModel,
   rawStructure?: RawStructure,
 ): ProfileLanguage {
   const counts: Record<ProfileLanguage, number> = {
@@ -765,7 +775,36 @@ function dominantLanguageForComponent(
       }
     }
   }
+  const totalFromRaw =
+    counts.java + counts.typescript + counts.python + counts.c;
+  if (totalFromRaw === 0) {
+    // Fall back to inferring from already-resolved CodeElements when raw
+    // structure is unavailable (e.g. user passed --model directly). Without
+    // this, every component would silently render with the Java profile —
+    // wrong shapes for C-only components.
+    for (const el of model.codeElements ?? []) {
+      if (el.componentId !== component.id) continue;
+      const lang = languageFromKind(el.kind);
+      if (lang) counts[lang] += 1;
+    }
+  }
   return selectProfileForComponent(counts);
+}
+
+function languageFromKind(kind: CodeElement["kind"]): ProfileLanguage | null {
+  switch (kind) {
+    case "struct":
+    case "typedef":
+      return "c";
+    case "type":
+      return "typescript";
+    case "enum":
+      return "java";
+    case "class":
+    case "interface":
+    case "function":
+      return null; // ambiguous across languages
+  }
 }
 
 function normalizeLanguage(raw: string): ProfileLanguage | null {

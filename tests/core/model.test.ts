@@ -34,8 +34,9 @@ function sampleModel(): ArchitectureModel {
     relationships: [],
     codeElements: [
       {
-        id: "user-controller.UserController",
+        id: "user-api.user-controller.UserController",
         componentId: "user-controller",
+        containerId: "user-api",
         kind: "class",
         name: "UserController",
         visibility: "public",
@@ -55,16 +56,17 @@ function sampleModel(): ArchitectureModel {
         tags: ["entrypoint"],
       },
       {
-        id: "user-controller.UserRepository",
+        id: "user-api.user-controller.UserRepository",
         componentId: "user-controller",
+        containerId: "user-api",
         kind: "interface",
         name: "UserRepository",
       },
     ],
     codeRelationships: [
       {
-        sourceId: "user-controller.UserController",
-        targetId: "user-controller.UserRepository",
+        sourceId: "user-api.user-controller.UserController",
+        targetId: "user-api.user-controller.UserRepository",
         kind: "uses",
         label: "queries",
       },
@@ -84,7 +86,10 @@ describe("architectureModelSchema round-trip", () => {
 
     expect(parsed.codeElements).toBeDefined();
     expect(parsed.codeElements).toHaveLength(2);
-    expect(parsed.codeElements?.[0].id).toBe("user-controller.UserController");
+    expect(parsed.codeElements?.[0].id).toBe(
+      "user-api.user-controller.UserController",
+    );
+    expect(parsed.codeElements?.[0].containerId).toBe("user-api");
     expect(parsed.codeElements?.[0].members).toHaveLength(2);
     expect(parsed.codeElements?.[0].members?.[0]).toMatchObject({
       name: "getUser",
@@ -97,8 +102,8 @@ describe("architectureModelSchema round-trip", () => {
     expect(parsed.codeRelationships).toBeDefined();
     expect(parsed.codeRelationships).toHaveLength(1);
     expect(parsed.codeRelationships?.[0]).toMatchObject({
-      sourceId: "user-controller.UserController",
-      targetId: "user-controller.UserRepository",
+      sourceId: "user-api.user-controller.UserController",
+      targetId: "user-api.user-controller.UserRepository",
       kind: "uses",
       label: "queries",
     });

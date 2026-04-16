@@ -2,14 +2,19 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
 import { runQuery, createQueryLoader } from "../tree-sitter.js";
-import type { RawCodeElement, CodeMember, RawCodeReference } from "../types.js";
+import type {
+  RawCodeElement,
+  CodeMember,
+  RawCodeReference,
+  CodeElementKind,
+} from "../types.js";
 
 type SyntaxNode = TreeSitter.SyntaxNode;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const getQuery = createQueryLoader(path.join(__dirname, "queries", "code.scm"));
 
-const KIND_BY_DECL: Record<string, string> = {
+const KIND_BY_DECL: Record<string, CodeElementKind> = {
   "class.decl": "class",
   "interface.decl": "interface",
   "type.decl": "type",
@@ -25,7 +30,7 @@ export async function extractTypeScriptCode(
 
   const byDecl = new Map<
     number,
-    { kind: string; declNode: SyntaxNode; nameNode: SyntaxNode }
+    { kind: CodeElementKind; declNode: SyntaxNode; nameNode: SyntaxNode }
   >();
 
   for (const m of matches) {

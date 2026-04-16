@@ -2,7 +2,12 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
 import { runQuery, createQueryLoader } from "../tree-sitter.js";
-import type { RawCodeElement, CodeMember, RawCodeReference } from "../types.js";
+import type {
+  RawCodeElement,
+  CodeMember,
+  RawCodeReference,
+  CodeElementKind,
+} from "../types.js";
 
 type SyntaxNode = TreeSitter.SyntaxNode;
 
@@ -18,7 +23,7 @@ export async function extractJavaCode(
 
   const byDecl = new Map<
     number,
-    { kind: string; captures: (typeof matches)[0]["captures"] }
+    { kind: CodeElementKind; captures: (typeof matches)[0]["captures"] }
   >();
 
   for (const m of matches) {
@@ -29,7 +34,7 @@ export async function extractJavaCode(
         c.name === "enum.decl",
     );
     if (!decl) continue;
-    const kind =
+    const kind: CodeElementKind =
       decl.name === "class.decl"
         ? "class"
         : decl.name === "interface.decl"
