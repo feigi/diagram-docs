@@ -84,6 +84,12 @@ export interface RawCodeElement {
   id: string;
   kind: CodeElementKind;
   name: string;
+  /**
+   * Fully-qualified name (e.g. `com.example.UserService`). Set by analyzers
+   * that can determine package/namespace context. Used by the resolver to
+   * disambiguate simple-name collisions across packages within one component.
+   */
+  qualifiedName?: string;
   visibility?: "public" | "internal" | "private";
   members?: CodeMember[];
   tags?: string[];
@@ -118,6 +124,12 @@ export type CodeMember =
  */
 export interface RawCodeReference {
   targetName: string;
+  /**
+   * Fully-qualified target name when the analyzer can resolve it from the
+   * source file's imports/package. Resolver prefers FQN over simple name to
+   * disambiguate same-named types in different packages.
+   */
+  targetQualifiedName?: string;
   kind: "extends" | "implements" | "uses" | "contains";
 }
 
@@ -169,6 +181,8 @@ export interface CodeElement {
   containerId: string;
   kind: CodeElementKind;
   name: string;
+  /** FQN propagated from RawCodeElement; resolver uses it to disambiguate same-name types across packages. */
+  qualifiedName?: string;
   visibility?: "public" | "internal" | "private";
   members?: CodeMember[];
   tags?: string[];

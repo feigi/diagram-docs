@@ -70,7 +70,7 @@ export async function runQueryScoped<T>(
   lang: SupportedLanguage,
   source: string,
   queryText: string,
-  fn: (matches: QueryMatch[]) => T | Promise<T>,
+  fn: (matches: QueryMatch[], tree: TreeSitter.Tree) => T | Promise<T>,
 ): Promise<T> {
   const grammar = await loadLanguage(lang);
 
@@ -94,7 +94,7 @@ export async function runQueryScoped<T>(
       pattern: m.pattern,
       captures: m.captures.map((c) => ({ name: c.name, node: c.node })),
     }));
-    return await fn(matches);
+    return await fn(matches, tree);
   } finally {
     tree.delete();
   }

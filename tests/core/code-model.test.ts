@@ -394,4 +394,99 @@ describe("buildCodeModel collision handling", () => {
     expect(messages).toContain("cross container boundaries");
     stderrSpy.mockRestore();
   });
+
+  it("disambiguates same-name elements via qualifiedName without warning", () => {
+    // Two interfaces named RouteSearchApi in different packages within the
+    // same component. Controller's reference carries targetQualifiedName so
+    // resolver picks the correct one and does NOT warn.
+    const fixture = {
+      applications: [
+        {
+          id: "app",
+          name: "app",
+          language: "java",
+          path: "/tmp/app",
+          modules: [
+            {
+              id: "m",
+              path: "/tmp/app/m",
+              name: "m",
+              files: [],
+              exports: [],
+              imports: [],
+              metadata: {},
+              codeElements: [
+                {
+                  id: "RouteSearchApi",
+                  name: "RouteSearchApi",
+                  qualifiedName: "com.bmw.api.v6.RouteSearchApi",
+                  kind: "interface" as const,
+                  visibility: "public" as const,
+                  location: { file: "v6/RouteSearchApi.java", line: 1 },
+                },
+                {
+                  id: "RouteSearchApi",
+                  name: "RouteSearchApi",
+                  qualifiedName: "com.bmw.api.v7.RouteSearchApi",
+                  kind: "interface" as const,
+                  visibility: "public" as const,
+                  location: { file: "v7/RouteSearchApi.java", line: 1 },
+                },
+                {
+                  id: "RouteSearchControllerV7",
+                  name: "RouteSearchControllerV7",
+                  qualifiedName: "com.bmw.app.RouteSearchControllerV7",
+                  kind: "class" as const,
+                  visibility: "public" as const,
+                  references: [
+                    {
+                      targetName: "RouteSearchApi",
+                      targetQualifiedName: "com.bmw.api.v7.RouteSearchApi",
+                      kind: "implements" as const,
+                    },
+                  ],
+                  location: { file: "RouteSearchControllerV7.java", line: 1 },
+                },
+              ],
+            },
+          ],
+          externalDependencies: [],
+          internalImports: [],
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const comps = [
+      {
+        id: "m",
+        containerId: "app",
+        name: "m",
+        description: "",
+        technology: "",
+        moduleIds: ["m"],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    ];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const { codeRelationships, codeElements } = buildCodeModel(
+      fixture,
+      comps,
+      baseConfig,
+    );
+    // No collision warning emitted.
+    const collisionWarnings = stderrSpy.mock.calls
+      .map((a) => String(a[0]))
+      .filter((m) => m.includes("name collision"));
+    expect(collisionWarnings).toEqual([]);
+    // Edge points to the v7 element specifically.
+    const v7 = codeElements.find(
+      (e) => e.qualifiedName === "com.bmw.api.v7.RouteSearchApi",
+    )!;
+    expect(codeRelationships).toEqual([
+      expect.objectContaining({ targetId: v7.id, kind: "implements" }),
+    ]);
+    stderrSpy.mockRestore();
+  });
 });
