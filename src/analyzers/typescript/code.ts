@@ -1,23 +1,13 @@
-import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import type TreeSitter from "web-tree-sitter";
-import { runQuery } from "../tree-sitter.js";
+import { runQuery, createQueryLoader } from "../tree-sitter.js";
 import type { RawCodeElement, CodeMember, RawCodeReference } from "../types.js";
 
 type SyntaxNode = TreeSitter.SyntaxNode;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
-let cachedQuery: string | null = null;
-async function getQuery(): Promise<string> {
-  if (cachedQuery) return cachedQuery;
-  cachedQuery = await fs.readFile(
-    path.join(__dirname, "queries", "code.scm"),
-    "utf-8",
-  );
-  return cachedQuery;
-}
+const getQuery = createQueryLoader(path.join(__dirname, "queries", "code.scm"));
 
 const KIND_BY_DECL: Record<string, string> = {
   "class.decl": "class",

@@ -1,6 +1,8 @@
 import TreeSitter from "web-tree-sitter";
+import { readFile } from "node:fs/promises";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import type { RawCodeElement } from "./types.js";
 
 export type SupportedLanguage = "java" | "typescript" | "python" | "c";
 
@@ -56,4 +58,34 @@ export async function runQuery(
     pattern: m.pattern,
     captures: m.captures.map((c) => ({ name: c.name, node: c.node })),
   }));
+}
+
+/**
+ * Returns a lazy-cached loader for a tree-sitter query file.
+ * Call once at module level; the returned function reads and caches on first call.
+ */
+export function createQueryLoader(queryPath: string): () => Promise<string> {
+  let cached: string | null = null;
+  return async () => {
+    if (cached !== null) return cached;
+    cached = await readFile(queryPath, "utf-8");
+    return cached;
+  };
+}
+
+/**
+ * Reads all files in parallel and runs `extractFn` on each.
+ * Callers pass fully-resolved absolute paths.
+ */
+export async function extractCodeElementsForFiles(
+  filePaths: string[],
+  extractFn: (filePath: string, source: string) => Promise<RawCodeElement[]>,
+): Promise<RawCodeElement[]> {
+  const results = await Promise.all(
+    filePaths.map(async (fp) => {
+      const source = await readFile(fp, "utf-8");
+      return extractFn(fp, source);
+    }),
+  );
+  return results.flat();
 }

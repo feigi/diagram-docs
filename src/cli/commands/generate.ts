@@ -227,15 +227,26 @@ export const generateCommand = new Command("generate")
       }
     }
     if (config.levels.code) {
-      for (const container of model.containers) {
-        const components = model.components.filter(
-          (c) => c.containerId === container.id,
+      const compsByContainer = new Map<string, typeof model.components>();
+      for (const c of model.components) {
+        const list = compsByContainer.get(c.containerId) ?? [];
+        list.push(c);
+        compsByContainer.set(c.containerId, list);
+      }
+      const elemCountByComponent = new Map<string, number>();
+      for (const e of model.codeElements ?? []) {
+        elemCountByComponent.set(
+          e.componentId,
+          (elemCountByComponent.get(e.componentId) ?? 0) + 1,
         );
-        for (const component of components) {
-          const elementCount = (model.codeElements ?? []).filter(
-            (e) => e.componentId === component.id,
-          ).length;
-          if (elementCount < config.code.minElements) continue;
+      }
+      for (const container of model.containers) {
+        for (const component of compsByContainer.get(container.id) ?? []) {
+          if (
+            (elemCountByComponent.get(component.id) ?? 0) <
+            config.code.minElements
+          )
+            continue;
           d2Files.push(
             path.join(
               outputDir,
@@ -685,14 +696,24 @@ export function generateCodeLevelDiagrams(opts: {
   let written = 0;
   let unchanged = 0;
 
-  for (const container of model.containers) {
-    const components = model.components.filter(
-      (c) => c.containerId === container.id,
+  const componentsByContainer = new Map<string, typeof model.components>();
+  for (const c of model.components) {
+    const list = componentsByContainer.get(c.containerId) ?? [];
+    list.push(c);
+    componentsByContainer.set(c.containerId, list);
+  }
+  const elementCountByComponent = new Map<string, number>();
+  for (const e of model.codeElements ?? []) {
+    elementCountByComponent.set(
+      e.componentId,
+      (elementCountByComponent.get(e.componentId) ?? 0) + 1,
     );
+  }
+
+  for (const container of model.containers) {
+    const components = componentsByContainer.get(container.id) ?? [];
     for (const component of components) {
-      const elementCount = (model.codeElements ?? []).filter(
-        (e) => e.componentId === component.id,
-      ).length;
+      const elementCount = elementCountByComponent.get(component.id) ?? 0;
       if (elementCount < config.code.minElements) continue;
 
       const compDir = path.join(

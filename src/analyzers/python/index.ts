@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as fsp from "node:fs/promises";
 import * as path from "node:path";
 import type {
   LanguageAnalyzer,
@@ -8,8 +7,8 @@ import type {
   ScannedModule,
   ExternalDep,
   ModuleImport,
-  RawCodeElement,
 } from "../types.js";
+import { extractCodeElementsForFiles } from "../tree-sitter.js";
 import { slugify } from "../../core/slugify.js";
 import { parsePythonImports } from "./imports.js";
 import { extractPythonModules, detectPythonFramework } from "./modules.js";
@@ -125,13 +124,13 @@ export const pythonAnalyzer: LanguageAnalyzer = {
       };
 
       if (config.levels?.code) {
-        const allElements: RawCodeElement[] = [];
-        for (const file of module.files.filter((f) => f.endsWith(".py"))) {
-          const fullPath = path.join(appPath, file);
-          const source = await fsp.readFile(fullPath, "utf-8");
-          const elements = await extractPythonCode(fullPath, source);
-          allElements.push(...elements);
-        }
+        const filePaths = module.files
+          .filter((f) => f.endsWith(".py"))
+          .map((f) => path.join(appPath, f));
+        const allElements = await extractCodeElementsForFiles(
+          filePaths,
+          extractPythonCode,
+        );
         if (allElements.length > 0) module.codeElements = allElements;
       }
 
