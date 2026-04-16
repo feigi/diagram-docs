@@ -10,7 +10,7 @@ import type {
   ModuleImport,
 } from "../types.js";
 import { extractCodeElementsForFiles } from "../tree-sitter.js";
-import { slugify } from "../../core/slugify.js";
+import { slugify, slugifyPath } from "../../core/slugify.js";
 import { parseJavaImports } from "./imports.js";
 import { extractPackages, detectClassAnnotations } from "./packages.js";
 import {
@@ -56,7 +56,7 @@ export const javaAnalyzer: LanguageAnalyzer = {
     appPath: string,
     config: ScanConfig,
   ): Promise<ScannedApplication> {
-    const appId = slugify(appPath);
+    const appId = slugifyPath(appPath);
     const dirName = path.basename(appPath);
 
     // Read settings.gradle to discover subprojects and exclude their dirs from root scan

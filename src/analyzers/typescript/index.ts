@@ -10,7 +10,7 @@ import type {
   ModuleImport,
 } from "../types.js";
 import { extractCodeElementsForFiles } from "../tree-sitter.js";
-import { slugify } from "../../core/slugify.js";
+import { slugify, slugifyPath } from "../../core/slugify.js";
 import { parseTypeScriptImports } from "./imports.js";
 import { extractTypeScriptModules, resolveSourceRoot } from "./modules.js";
 import { collectConfigFiles } from "../config-files.js";
@@ -67,7 +67,7 @@ function parseDependencies(
       const targetPath = path.resolve(appPath, targetRelPath);
 
       internal.push({
-        sourceModuleId: slugify(appPath),
+        sourceModuleId: slugifyPath(appPath),
         targetApplicationId: slugify(targetPath),
         targetPath: targetRelPath,
       });
@@ -102,7 +102,7 @@ export const typescriptAnalyzer: LanguageAnalyzer = {
     appPath: string,
     config: ScanConfig,
   ): Promise<ScannedApplication> {
-    const appId = slugify(appPath);
+    const appId = slugifyPath(appPath);
     const pkg = readPackageJson(appPath);
     const appName = pkg?.name ?? path.basename(appPath);
 
