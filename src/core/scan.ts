@@ -52,12 +52,27 @@ export interface ScanResult {
  * `scan.include` (via `includeScanInclude`); per-project scans operate on
  * already-discovered paths so it's omitted there.
  */
+/**
+ * Bump when the scan output format changes in a way that would make old
+ * cached `scan.json` incompatible with the current analyzers — e.g. a new
+ * field that downstream stages now rely on. The version is mixed into the
+ * cache fingerprint so stale caches from the previous format are rebuilt
+ * instead of silently feeding incomplete data into model building.
+ *
+ * 2: added CodeElement.qualifiedName + RawCodeReference.targetQualifiedName
+ *    (commit 7678554) — without this, resolver falls back to simple-name
+ *    and reports spurious collisions. Bumped alongside this fingerprint
+ *    change so previously-written scan caches get rebuilt on next run.
+ */
+export const SCAN_SCHEMA_VERSION = 2;
+
 export function buildScanFingerprint(
   effectiveExcludes: string[],
   config: Config,
   options?: { includeScanInclude?: boolean },
 ): string {
   const fingerprint: Record<string, unknown> = {
+    schemaVersion: SCAN_SCHEMA_VERSION,
     exclude: effectiveExcludes,
     abstraction: config.abstraction,
     levels: config.levels,
