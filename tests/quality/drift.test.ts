@@ -8,6 +8,7 @@ import { generateContextDiagram } from "../../src/generator/d2/context.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateComponentDiagram } from "../../src/generator/d2/component.js";
 import { checkDrift } from "../../src/generator/d2/drift.js";
+import { configSchema } from "../../src/config/schema.js";
 import type { DriftReport } from "./helpers/types.js";
 import { extractD2ShapeIds, computeLineChurn } from "./helpers/metrics.js";
 import {
@@ -354,5 +355,145 @@ describe("Drift: c4-code scaffold references", () => {
     const warnings = checkDrift(tmp, model);
     expect(warnings.some((w) => w.id.includes("OldClass"))).toBe(true);
     fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});
+
+describe("checkDrift — submodule L4 paths", () => {
+  it("warns on stale code-element id inside per-submodule c4-code.d2", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "drift-submodule-"));
+    const repoRoot = path.join(tmp, "repo");
+    const appPath = "services/foo";
+    const archDir = path.join(repoRoot, appPath, "docs/architecture");
+    const compDir = path.join(archDir, "components", "comp-a");
+    fs.mkdirSync(compDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(compDir, "c4-code.d2"),
+      [
+        "...@_generated/c4-code.d2",
+        "# Add your customizations below this line",
+        "stale_id_42.style.fill: red",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "Sys", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "c",
+          name: "C",
+          technology: "TS",
+          description: "",
+          applicationId: "foo",
+          path: appPath,
+        },
+      ],
+      components: [
+        {
+          id: "comp-a",
+          name: "A",
+          containerId: "c",
+          technology: "TS",
+          description: "",
+          moduleIds: [],
+        },
+      ],
+      relationships: [],
+      codeElements: [
+        {
+          id: "real_id_1",
+          componentId: "comp-a",
+          containerId: "c",
+          kind: "class",
+          name: "Real",
+        },
+      ],
+      codeRelationships: [],
+    };
+
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    const warnings = checkDrift(
+      path.join(repoRoot, "docs/architecture"),
+      model,
+      { repoRoot, config },
+    );
+
+    const matched = warnings.find((w) => w.id === "stale_id_42");
+    expect(matched, JSON.stringify(warnings)).toBeTruthy();
+    expect(matched!.file).toBe(path.join(compDir, "c4-code.d2"));
+  });
+
+  it("does not scan submodule L4 paths when submodules disabled", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "drift-submodule-off-"));
+    const repoRoot = path.join(tmp, "repo");
+    const appPath = "services/foo";
+    const archDir = path.join(repoRoot, appPath, "docs/architecture");
+    const compDir = path.join(archDir, "components", "comp-a");
+    fs.mkdirSync(compDir, { recursive: true });
+
+    fs.writeFileSync(
+      path.join(compDir, "c4-code.d2"),
+      [
+        "...@_generated/c4-code.d2",
+        "# Add your customizations below this line",
+        "stale_id_99.style.fill: red",
+        "",
+      ].join("\n"),
+      "utf-8",
+    );
+
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "Sys", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "c",
+          name: "C",
+          technology: "TS",
+          description: "",
+          applicationId: "foo",
+          path: appPath,
+        },
+      ],
+      components: [
+        {
+          id: "comp-a",
+          name: "A",
+          containerId: "c",
+          technology: "TS",
+          description: "",
+          moduleIds: [],
+        },
+      ],
+      relationships: [],
+      codeElements: [
+        {
+          id: "real_id_1",
+          componentId: "comp-a",
+          containerId: "c",
+          kind: "class",
+          name: "Real",
+        },
+      ],
+      codeRelationships: [],
+    };
+
+    const config = configSchema.parse({ submodules: { enabled: false } });
+
+    const warnings = checkDrift(
+      path.join(repoRoot, "docs/architecture"),
+      model,
+      { repoRoot, config },
+    );
+
+    expect(warnings.find((w) => w.id === "stale_id_99")).toBeUndefined();
   });
 });
