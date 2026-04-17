@@ -96,6 +96,8 @@ export function checkDrift(
       pattern: ID_PATTERNS.code,
     };
     for (const container of model.containers) {
+      if (options.config.submodules.overrides[container.applicationId]?.exclude)
+        continue;
       const { architectureDir } = resolveSubmodulePaths(
         options.repoRoot,
         container,
