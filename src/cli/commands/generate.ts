@@ -148,6 +148,9 @@ export const generateCommand = new Command("generate")
 
     // L3: Component diagrams (one per container)
     if (config.levels.component) {
+      const codeLinks = config.levels.code
+        ? codeLinkableComponentIds(model, config.code.minElements)
+        : undefined;
       for (const container of model.containers) {
         const containerGenDir = path.join(
           outputDir,
@@ -159,7 +162,10 @@ export const generateCommand = new Command("generate")
           fs.mkdirSync(containerGenDir, { recursive: true });
         }
 
-        const d2 = generateComponentDiagram(model, container.id);
+        const d2 = generateComponentDiagram(model, container.id, {
+          codeLinks,
+          format: config.output.format,
+        });
         if (writeIfChanged(path.join(containerGenDir, "c3-component.d2"), d2)) {
           filesWritten++;
         } else {
@@ -753,6 +759,25 @@ export function generateCodeLevelDiagrams(opts: {
   }
 
   return { written, unchanged, skipped };
+}
+
+/**
+ * Component IDs that qualify for a C4 code-level diagram
+ * (i.e. code elements ≥ config.code.minElements).
+ */
+function codeLinkableComponentIds(
+  model: ArchitectureModel,
+  minElements: number,
+): Set<string> {
+  const counts = new Map<string, number>();
+  for (const e of model.codeElements ?? []) {
+    counts.set(e.componentId, (counts.get(e.componentId) ?? 0) + 1);
+  }
+  const ids = new Set<string>();
+  for (const [id, n] of counts) {
+    if (n >= minElements) ids.add(id);
+  }
+  return ids;
 }
 
 function dominantLanguageForComponent(

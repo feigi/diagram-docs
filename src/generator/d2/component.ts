@@ -2,6 +2,13 @@ import type { ArchitectureModel } from "../../analyzers/types.js";
 import { D2Writer, wrapText } from "./writer.js";
 import { toD2Id, sortById, sortRelationships } from "./stability.js";
 
+export interface ComponentDiagramOptions {
+  /** Component IDs that have a C4 code-level diagram to link to. */
+  codeLinks?: Set<string>;
+  /** Rendered output extension (e.g. "svg", "png"). Defaults to "svg". */
+  format?: string;
+}
+
 /**
  * Generate L3 Component diagram for a single container.
  * Shows: components within the container, relationships.
@@ -9,6 +16,7 @@ import { toD2Id, sortById, sortRelationships } from "./stability.js";
 export function generateComponentDiagram(
   model: ArchitectureModel,
   containerId: string,
+  options?: ComponentDiagramOptions,
 ): string {
   const container = model.containers.find((c) => c.id === containerId);
   if (!container) {
@@ -35,12 +43,17 @@ export function generateComponentDiagram(
       w.raw("class: system-boundary");
       w.blank();
 
+      const ext = options?.format ?? "svg";
       for (const comp of sortById(components)) {
         const id = toD2Id(comp.id);
+        const props: Record<string, string> = { class: "component" };
+        if (options?.codeLinks?.has(comp.id)) {
+          props.link = `./components/${comp.id}/c4-code.${ext}`;
+        }
         w.shape(
           id,
           `${comp.name}\\n\\n[Component: ${comp.technology}]\\n${wrapText(comp.description)}`,
-          { class: "component" },
+          props,
         );
       }
     },
