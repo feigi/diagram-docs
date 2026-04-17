@@ -222,6 +222,47 @@ describe("generateCodeDiagram", () => {
     ).toBe("c");
   });
 
+  it("truncates long class member signatures to fit D2's 518-char key limit", () => {
+    // Repro from charging-triad: Spring `@RestController` methods with
+    // annotations like `@Parameter`, `@RequestHeader`, `@Valid` produce
+    // multi-thousand-char signatures. D2 rejects keys > 518 chars.
+    const longSig =
+      "findUsers(" +
+      Array.from({ length: 40 })
+        .map((_, i) => `@Parameter(name = "p${i}") @Valid param${i}: String`)
+        .join(", ") +
+      "): ResponseEntity<List<User>>";
+    expect(longSig.length).toBeGreaterThan(518);
+    const modelWithLongSig: ArchitectureModel = {
+      ...model,
+      codeElements: [
+        {
+          id: "api.users.UserService",
+          componentId: "users",
+          kind: "class",
+          name: "UserService",
+          visibility: "public",
+          members: [{ name: "findUsers", kind: "method", signature: longSig }],
+        },
+      ],
+      codeRelationships: [],
+    } as any;
+    const d2 = generateCodeDiagram(
+      modelWithLongSig,
+      component,
+      getProfileForLanguage("java"),
+    );
+    // Every line's D2 key (inside quotes) must be within 518 chars.
+    for (const line of d2.split("\n")) {
+      const m = line.match(/^\s*"(.*)"\s*$/);
+      if (!m) continue;
+      expect(m[1].length).toBeLessThanOrEqual(518);
+    }
+    // Truncation should preserve the head of the signature + ellipsis marker.
+    expect(d2).toContain("findUsers(");
+    expect(d2).toMatch(/\.\.\."\s*$/m);
+  });
+
   it("C profile groups types, public functions, and internal functions", () => {
     const cComponent: Component = { ...component, id: "ht" } as any;
     const cModel: ArchitectureModel = {

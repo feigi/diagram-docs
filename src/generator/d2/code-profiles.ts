@@ -34,6 +34,20 @@ function escapeLabel(s: string): string {
   return s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\r?\n/g, " ");
 }
 
+// D2 rejects keys longer than 518 chars. Spring @RestController signatures
+// with inline annotations routinely blow past that. Truncate with an ellipsis
+// so long members still render without breaking diagram compilation.
+const D2_KEY_LIMIT = 518;
+function memberLine(m: { name: string; signature?: string }): string {
+  const escaped = escapeLabel(m.signature ?? m.name);
+  if (escaped.length <= D2_KEY_LIMIT) return `"${escaped}"`;
+  let head = escaped.slice(0, D2_KEY_LIMIT - 3);
+  // Avoid ending on a lone backslash that would escape the closing quote.
+  const trailingBackslashes = head.match(/\\+$/)?.[0].length ?? 0;
+  if (trailingBackslashes % 2 === 1) head = head.slice(0, -1);
+  return `"${head}..."`;
+}
+
 const javaTsPyProfile: LanguageRenderingProfile = {
   renderHeader(w, component) {
     w.comment(`Component: ${component.name}`);
@@ -51,7 +65,7 @@ const javaTsPyProfile: LanguageRenderingProfile = {
         w.container(toD2Id(el.id), el.name, () => {
           w.raw("shape: class");
           for (const m of el.members ?? []) {
-            w.raw(`"${escapeLabel(m.signature ?? m.name)}"`);
+            w.raw(memberLine(m));
           }
         });
       } else {
@@ -98,7 +112,7 @@ const cProfile: LanguageRenderingProfile = {
           w.container(toD2Id(el.id), el.name, () => {
             w.raw("shape: class");
             for (const m of el.members ?? []) {
-              w.raw(`"${escapeLabel(m.signature ?? m.name)}"`);
+              w.raw(memberLine(m));
             }
           });
         }
