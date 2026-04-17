@@ -449,6 +449,92 @@ describe("Integration: Submodule per-folder docs", () => {
     expect(content).toMatch(/link:\s*"?\.\/components\/[^/]+\/c4-code\.svg/);
   });
 
+  it("writes L4 diagrams under {appPath}/{docsDir}/architecture/components/<compId>/", () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-l4");
+    trackDir(tmpRoot);
+    fs.mkdirSync(tmpRoot, { recursive: true });
+
+    const model = loadModel(path.join(MONOREPO, "architecture-model.yaml"));
+    const config = configSchema.parse({
+      submodules: { enabled: true },
+      levels: { component: true, code: true },
+      code: { minElements: 1, includePrivate: false, includeMembers: true },
+    });
+
+    const compId = model.components[0].id;
+    const containerId = model.components[0].containerId;
+    model.codeElements = [
+      {
+        id: `${compId}__synth1`,
+        componentId: compId,
+        containerId,
+        kind: "class",
+        name: "Synth1",
+      },
+    ];
+
+    const codeLinks = new Set([compId]);
+    const results = generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config, {
+      codeLinks,
+    });
+
+    const target = results.find((r) => r.containerId === containerId);
+    expect(target).toBeTruthy();
+    const expectedGen = path.join(
+      target!.outputDir,
+      "components",
+      compId,
+      "_generated",
+      "c4-code.d2",
+    );
+    const expectedScaffold = path.join(
+      target!.outputDir,
+      "components",
+      compId,
+      "c4-code.d2",
+    );
+    expect(fs.existsSync(expectedGen)).toBe(true);
+    expect(fs.existsSync(expectedScaffold)).toBe(true);
+
+    const scaffold = fs.readFileSync(expectedScaffold, "utf-8");
+    expect(scaffold).toContain("...@_generated/c4-code.d2");
+  });
+
+  it("skips L4 components below code.minElements", () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-l4-skip");
+    trackDir(tmpRoot);
+    fs.mkdirSync(tmpRoot, { recursive: true });
+
+    const model = loadModel(path.join(MONOREPO, "architecture-model.yaml"));
+    const compId = model.components[0].id;
+    const containerId = model.components[0].containerId;
+    model.codeElements = [
+      {
+        id: `${compId}__only`,
+        componentId: compId,
+        containerId,
+        kind: "class",
+        name: "Only",
+      },
+    ];
+
+    const config = configSchema.parse({
+      submodules: { enabled: true },
+      levels: { component: true, code: true },
+      code: { minElements: 5, includePrivate: false, includeMembers: true },
+    });
+
+    const codeLinks = new Set<string>();
+    const results = generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config, {
+      codeLinks,
+    });
+
+    const target = results.find((r) => r.containerId === containerId);
+    expect(target).toBeTruthy();
+    const componentsDir = path.join(target!.outputDir, "components");
+    expect(fs.existsSync(componentsDir)).toBe(false);
+  });
+
   it("generate-then-remove cleans up all files generate created", async () => {
     const tmpRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "diagram-docs-symmetry-"),

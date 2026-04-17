@@ -4,10 +4,14 @@
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { ArchitectureModel } from "../../analyzers/types.js";
+import type { ArchitectureModel, RawStructure } from "../../analyzers/types.js";
 import type { Config } from "../../config/schema.js";
 import { buildDefaultConfig } from "../../config/loader.js";
 import { generateComponentDiagram } from "./component.js";
+import { generateCodeDiagram } from "./code.js";
+import { scaffoldCodeFile } from "./code-scaffold.js";
+import { dominantLanguageForComponent } from "./code-helpers.js";
+import { getProfileForLanguage } from "./code-profiles.js";
 import { STYLES_D2 } from "./styles.js";
 import { extractFragment } from "../../core/model-fragment.js";
 import { stringify as stringifyYaml } from "yaml";
@@ -22,6 +26,7 @@ export interface SubmoduleOutputInfo {
 export interface GenerateSubmoduleDocsOptions {
   codeLinks?: Set<string>;
   format?: string;
+  rawStructure?: RawStructure;
 }
 
 type Container = ArchitectureModel["containers"][number];
@@ -147,6 +152,53 @@ export function generateSubmoduleDocs(
       )
     )
       changed = true;
+
+    if (config.levels.code) {
+      const elementCountByComponent = new Map<string, number>();
+      for (const e of model.codeElements ?? []) {
+        if (e.containerId !== container.id) continue;
+        elementCountByComponent.set(
+          e.componentId,
+          (elementCountByComponent.get(e.componentId) ?? 0) + 1,
+        );
+      }
+
+      for (const component of model.components.filter(
+        (c) => c.containerId === container.id,
+      )) {
+        const count = elementCountByComponent.get(component.id) ?? 0;
+        if (count < config.code.minElements) continue;
+
+        const compDir = path.join(outputDir, "components", component.id);
+        const compGenDir = path.join(compDir, "_generated");
+        fs.mkdirSync(compGenDir, { recursive: true });
+
+        try {
+          const lang = dominantLanguageForComponent(
+            component,
+            model,
+            options?.rawStructure,
+          );
+          const profile = getProfileForLanguage(lang);
+          const d2 = generateCodeDiagram(model, component, profile);
+          const genPath = path.join(compGenDir, "c4-code.d2");
+          if (writeIfChanged(genPath, d2)) changed = true;
+          d2Files.push(genPath);
+
+          scaffoldCodeFile(path.join(compDir, "c4-code.d2"), {
+            containerName: container.name,
+            componentName: component.name,
+            outputDir,
+          });
+          d2Files.push(path.join(compDir, "c4-code.d2"));
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          console.error(
+            `Warning: failed to generate L4 for "${component.id}" in "${container.id}": ${msg}`,
+          );
+        }
+      }
+    }
 
     results.push({
       containerId: container.id,
