@@ -119,6 +119,12 @@ export const generateCommand = new Command("generate")
     let filesWritten = 0;
     let filesUnchanged = 0;
 
+    // Compute code-linkable component IDs once; reused by L3 root and the
+    // per-submodule C3 emission so both render the same drill-down links.
+    const codeLinks = config.levels.code
+      ? codeLinkableComponentIds(model, config.code.minElements)
+      : undefined;
+
     // L1: Context diagram
     if (config.levels.context) {
       const d2 = generateContextDiagram(model);
@@ -158,9 +164,6 @@ export const generateCommand = new Command("generate")
 
     // L3: Component diagrams (one per container)
     if (config.levels.component) {
-      const codeLinks = config.levels.code
-        ? codeLinkableComponentIds(model, config.code.minElements)
-        : undefined;
       for (const container of model.containers) {
         const containerGenDir = path.join(
           outputDir,
@@ -276,6 +279,10 @@ export const generateCommand = new Command("generate")
         outputDir,
         model,
         config,
+        {
+          codeLinks,
+          format: config.output.format,
+        },
       );
       for (const sub of subResults) {
         d2Files.push(...sub.d2Files);
