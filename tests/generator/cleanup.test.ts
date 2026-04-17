@@ -7,9 +7,10 @@ import {
   isInertSubmoduleStub,
   removeStaleContainerDirs,
   removeStaleSubmoduleDirs,
+  removeStaleSubmoduleComponentDirs,
 } from "../../src/generator/d2/cleanup.js";
-import type { ArchitectureModel } from "../../src/analyzers/types.js";
 import { configSchema } from "../../src/config/schema.js";
+import type { ArchitectureModel } from "../../src/analyzers/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -545,5 +546,124 @@ describe("removeStaleSubmoduleDirs", () => {
     expect(fs.existsSync(path.join(rootDocsArch, "c3-component.d2"))).toBe(
       true,
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeStaleSubmoduleComponentDirs
+// ---------------------------------------------------------------------------
+
+const SUBMODULE_MARKER = "# Add your customizations below this line";
+
+function setupSubmoduleStale(opts: { userModified: boolean }) {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cleanup-submodule-"));
+  const repoRoot = path.join(tmp, "repo");
+  const archDir = path.join(repoRoot, "services/foo/docs/architecture");
+  const compDir = path.join(archDir, "components", "stale-comp");
+  fs.mkdirSync(path.join(compDir, "_generated"), { recursive: true });
+  fs.writeFileSync(
+    path.join(compDir, "_generated/c4-code.d2"),
+    "auto",
+    "utf-8",
+  );
+  fs.writeFileSync(
+    path.join(compDir, "c4-code.d2"),
+    opts.userModified
+      ? `${SUBMODULE_MARKER}\nstale_id.style.fill: red\n`
+      : `${SUBMODULE_MARKER}\n`,
+    "utf-8",
+  );
+  return { tmp, repoRoot, archDir, compDir };
+}
+
+const submoduleBaseModel: ArchitectureModel = {
+  version: 1,
+  system: { name: "Sys", description: "" },
+  actors: [],
+  externalSystems: [],
+  containers: [
+    {
+      id: "c",
+      name: "C",
+      technology: "TS",
+      description: "",
+      applicationId: "foo",
+      path: "services/foo",
+    },
+  ],
+  components: [
+    // Note: NO "stale-comp" — its dir on disk is orphaned.
+    {
+      id: "live-comp",
+      name: "Live",
+      containerId: "c",
+      technology: "TS",
+      description: "",
+      moduleIds: [],
+    },
+  ],
+  relationships: [],
+};
+
+describe("removeStaleSubmoduleComponentDirs", () => {
+  it("removes orphaned component dir when scaffold has no user content", () => {
+    const { tmp, repoRoot, compDir } = setupSubmoduleStale({
+      userModified: false,
+    });
+    try {
+      const config = configSchema.parse({ submodules: { enabled: true } });
+      removeStaleSubmoduleComponentDirs(repoRoot, config, submoduleBaseModel);
+      expect(fs.existsSync(compDir)).toBe(false);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("preserves orphaned component dir when scaffold has user customizations", () => {
+    const { tmp, repoRoot, compDir } = setupSubmoduleStale({
+      userModified: true,
+    });
+    try {
+      const config = configSchema.parse({ submodules: { enabled: true } });
+      const errors: string[] = [];
+      const origErr = console.error;
+      console.error = (msg: string) => errors.push(msg);
+      try {
+        removeStaleSubmoduleComponentDirs(repoRoot, config, submoduleBaseModel);
+      } finally {
+        console.error = origErr;
+      }
+      expect(fs.existsSync(compDir)).toBe(true);
+      expect(errors.some((e) => e.includes("user customizations"))).toBe(true);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("leaves active component dirs untouched", () => {
+    const { tmp, repoRoot, archDir } = setupSubmoduleStale({
+      userModified: false,
+    });
+    try {
+      const liveDir = path.join(archDir, "components", "live-comp");
+      fs.mkdirSync(path.join(liveDir, "_generated"), { recursive: true });
+      fs.writeFileSync(
+        path.join(liveDir, "_generated/c4-code.d2"),
+        "auto",
+        "utf-8",
+      );
+      fs.writeFileSync(
+        path.join(liveDir, "c4-code.d2"),
+        SUBMODULE_MARKER,
+        "utf-8",
+      );
+
+      const config = configSchema.parse({ submodules: { enabled: true } });
+      removeStaleSubmoduleComponentDirs(repoRoot, config, submoduleBaseModel);
+
+      expect(fs.existsSync(liveDir)).toBe(true);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });

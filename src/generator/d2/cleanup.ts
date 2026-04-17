@@ -10,7 +10,10 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import type { Config } from "../../config/schema.js";
-import { collectAggregatorIds } from "./submodule-scaffold.js";
+import {
+  collectAggregatorIds,
+  resolveSubmodulePaths,
+} from "./submodule-scaffold.js";
 
 const CUSTOMIZATION_MARKER = "# Add your customizations below this line";
 
@@ -147,6 +150,69 @@ export function removeStaleSubmoduleDirs(
     if (fs.existsSync(stub) && isInertSubmoduleStub(stub)) {
       fs.rmSync(stub);
       console.error(`Removed: ${path.relative(repoRoot, stub)}`);
+    }
+  }
+}
+
+/**
+ * Remove submodule `components/<compId>/` dirs whose component is no longer
+ * in the model for the owning container. Mirrors removeStaleContainerDirs:
+ * `_generated/` is always removed; scaffold + dir are removed only when the
+ * scaffold has no user content; otherwise warn and leave intact.
+ */
+export function removeStaleSubmoduleComponentDirs(
+  repoRoot: string,
+  config: Config,
+  model: ArchitectureModel,
+): void {
+  if (!config.submodules.enabled) return;
+
+  for (const container of model.containers) {
+    if (config.submodules.overrides[container.applicationId]?.exclude) continue;
+
+    const { architectureDir } = resolveSubmodulePaths(
+      repoRoot,
+      container,
+      config,
+    );
+    const componentsDir = path.join(architectureDir, "components");
+    if (!fs.existsSync(componentsDir)) continue;
+
+    const activeIds = new Set(
+      model.components
+        .filter((c) => c.containerId === container.id)
+        .map((c) => c.id),
+    );
+
+    for (const entry of fs.readdirSync(componentsDir)) {
+      if (activeIds.has(entry)) continue;
+
+      const compDir = path.join(componentsDir, entry);
+      const stat = fs.statSync(compDir, { throwIfNoEntry: false });
+      if (!stat?.isDirectory()) continue;
+
+      const generatedDir = path.join(compDir, "_generated");
+      if (fs.existsSync(generatedDir)) {
+        fs.rmSync(generatedDir, { recursive: true, force: true });
+      }
+
+      const scaffoldFile = path.join(compDir, "c4-code.d2");
+      const relPath = path.relative(repoRoot, scaffoldFile);
+
+      if (isUserModified(scaffoldFile)) {
+        console.error(
+          `Warning: ${relPath} has user customizations — remove manually if no longer needed.`,
+        );
+        continue;
+      }
+
+      if (fs.existsSync(scaffoldFile)) fs.rmSync(scaffoldFile);
+
+      const remaining = fs.readdirSync(compDir);
+      if (remaining.length === 0) {
+        fs.rmdirSync(compDir);
+        console.error(`Removed: ${path.relative(repoRoot, compDir)}/`);
+      }
     }
   }
 }
