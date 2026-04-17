@@ -361,139 +361,226 @@ describe("Drift: c4-code scaffold references", () => {
 describe("checkDrift — submodule L4 paths", () => {
   it("warns on stale code-element id inside per-submodule c4-code.d2", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "drift-submodule-"));
-    const repoRoot = path.join(tmp, "repo");
-    const appPath = "services/foo";
-    const archDir = path.join(repoRoot, appPath, "docs/architecture");
-    const compDir = path.join(archDir, "components", "comp-a");
-    fs.mkdirSync(compDir, { recursive: true });
+    try {
+      const repoRoot = path.join(tmp, "repo");
+      const appPath = "services/foo";
+      const archDir = path.join(repoRoot, appPath, "docs/architecture");
+      const compDir = path.join(archDir, "components", "comp-a");
+      fs.mkdirSync(compDir, { recursive: true });
 
-    fs.writeFileSync(
-      path.join(compDir, "c4-code.d2"),
-      [
-        "...@_generated/c4-code.d2",
-        "# Add your customizations below this line",
-        "stale_id_42.style.fill: red",
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
+      fs.writeFileSync(
+        path.join(compDir, "c4-code.d2"),
+        [
+          "...@_generated/c4-code.d2",
+          "# Add your customizations below this line",
+          "stale_id_42.style.fill: red",
+          "",
+        ].join("\n"),
+        "utf-8",
+      );
 
-    const model: ArchitectureModel = {
-      version: 1,
-      system: { name: "Sys", description: "" },
-      actors: [],
-      externalSystems: [],
-      containers: [
-        {
-          id: "c",
-          name: "C",
-          technology: "TS",
-          description: "",
-          applicationId: "foo",
-          path: appPath,
-        },
-      ],
-      components: [
-        {
-          id: "comp-a",
-          name: "A",
-          containerId: "c",
-          technology: "TS",
-          description: "",
-          moduleIds: [],
-        },
-      ],
-      relationships: [],
-      codeElements: [
-        {
-          id: "real_id_1",
-          componentId: "comp-a",
-          containerId: "c",
-          kind: "class",
-          name: "Real",
-        },
-      ],
-      codeRelationships: [],
-    };
+      const model: ArchitectureModel = {
+        version: 1,
+        system: { name: "Sys", description: "" },
+        actors: [],
+        externalSystems: [],
+        containers: [
+          {
+            id: "c",
+            name: "C",
+            technology: "TS",
+            description: "",
+            applicationId: "foo",
+            path: appPath,
+          },
+        ],
+        components: [
+          {
+            id: "comp-a",
+            name: "A",
+            containerId: "c",
+            technology: "TS",
+            description: "",
+            moduleIds: [],
+          },
+        ],
+        relationships: [],
+        codeElements: [
+          {
+            id: "real_id_1",
+            componentId: "comp-a",
+            containerId: "c",
+            kind: "class",
+            name: "Real",
+          },
+        ],
+        codeRelationships: [],
+      };
 
-    const config = configSchema.parse({ submodules: { enabled: true } });
+      const config = configSchema.parse({ submodules: { enabled: true } });
 
-    const warnings = checkDrift(
-      path.join(repoRoot, "docs/architecture"),
-      model,
-      { repoRoot, config },
-    );
+      const warnings = checkDrift(
+        path.join(repoRoot, "docs/architecture"),
+        model,
+        { repoRoot, config },
+      );
 
-    const matched = warnings.find((w) => w.id === "stale_id_42");
-    expect(matched, JSON.stringify(warnings)).toBeTruthy();
-    expect(matched!.file).toBe(path.join(compDir, "c4-code.d2"));
+      const matched = warnings.find((w) => w.id === "stale_id_42");
+      expect(matched, JSON.stringify(warnings)).toBeTruthy();
+      expect(matched!.file).toBe(path.join(compDir, "c4-code.d2"));
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 
   it("does not scan submodule L4 paths when submodules disabled", () => {
     const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "drift-submodule-off-"));
-    const repoRoot = path.join(tmp, "repo");
-    const appPath = "services/foo";
-    const archDir = path.join(repoRoot, appPath, "docs/architecture");
-    const compDir = path.join(archDir, "components", "comp-a");
-    fs.mkdirSync(compDir, { recursive: true });
+    try {
+      const repoRoot = path.join(tmp, "repo");
+      const appPath = "services/foo";
+      const archDir = path.join(repoRoot, appPath, "docs/architecture");
+      const compDir = path.join(archDir, "components", "comp-a");
+      fs.mkdirSync(compDir, { recursive: true });
 
-    fs.writeFileSync(
-      path.join(compDir, "c4-code.d2"),
-      [
-        "...@_generated/c4-code.d2",
-        "# Add your customizations below this line",
-        "stale_id_99.style.fill: red",
-        "",
-      ].join("\n"),
-      "utf-8",
-    );
+      fs.writeFileSync(
+        path.join(compDir, "c4-code.d2"),
+        [
+          "...@_generated/c4-code.d2",
+          "# Add your customizations below this line",
+          "stale_id_99.style.fill: red",
+          "",
+        ].join("\n"),
+        "utf-8",
+      );
 
-    const model: ArchitectureModel = {
-      version: 1,
-      system: { name: "Sys", description: "" },
-      actors: [],
-      externalSystems: [],
-      containers: [
-        {
-          id: "c",
-          name: "C",
-          technology: "TS",
-          description: "",
-          applicationId: "foo",
-          path: appPath,
+      const model: ArchitectureModel = {
+        version: 1,
+        system: { name: "Sys", description: "" },
+        actors: [],
+        externalSystems: [],
+        containers: [
+          {
+            id: "c",
+            name: "C",
+            technology: "TS",
+            description: "",
+            applicationId: "foo",
+            path: appPath,
+          },
+        ],
+        components: [
+          {
+            id: "comp-a",
+            name: "A",
+            containerId: "c",
+            technology: "TS",
+            description: "",
+            moduleIds: [],
+          },
+        ],
+        relationships: [],
+        codeElements: [
+          {
+            id: "real_id_1",
+            componentId: "comp-a",
+            containerId: "c",
+            kind: "class",
+            name: "Real",
+          },
+        ],
+        codeRelationships: [],
+      };
+
+      const config = configSchema.parse({ submodules: { enabled: false } });
+
+      const warnings = checkDrift(
+        path.join(repoRoot, "docs/architecture"),
+        model,
+        { repoRoot, config },
+      );
+
+      expect(warnings.find((w) => w.id === "stale_id_99")).toBeUndefined();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it("does not scan excluded containers", () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "drift-submodule-excl-"));
+    try {
+      const repoRoot = path.join(tmp, "repo");
+      const appPath = "services/foo";
+      const archDir = path.join(repoRoot, appPath, "docs/architecture");
+      const compDir = path.join(archDir, "components", "comp-a");
+      fs.mkdirSync(compDir, { recursive: true });
+
+      fs.writeFileSync(
+        path.join(compDir, "c4-code.d2"),
+        [
+          "...@_generated/c4-code.d2",
+          "# Add your customizations below this line",
+          "stale_id_excluded.style.fill: red",
+          "",
+        ].join("\n"),
+        "utf-8",
+      );
+
+      const model: ArchitectureModel = {
+        version: 1,
+        system: { name: "Sys", description: "" },
+        actors: [],
+        externalSystems: [],
+        containers: [
+          {
+            id: "c",
+            name: "C",
+            technology: "TS",
+            description: "",
+            applicationId: "foo",
+            path: appPath,
+          },
+        ],
+        components: [
+          {
+            id: "comp-a",
+            name: "A",
+            containerId: "c",
+            technology: "TS",
+            description: "",
+            moduleIds: [],
+          },
+        ],
+        relationships: [],
+        codeElements: [
+          {
+            id: "real_id_1",
+            componentId: "comp-a",
+            containerId: "c",
+            kind: "class",
+            name: "Real",
+          },
+        ],
+        codeRelationships: [],
+      };
+
+      const config = configSchema.parse({
+        submodules: {
+          enabled: true,
+          overrides: { foo: { exclude: true } },
         },
-      ],
-      components: [
-        {
-          id: "comp-a",
-          name: "A",
-          containerId: "c",
-          technology: "TS",
-          description: "",
-          moduleIds: [],
-        },
-      ],
-      relationships: [],
-      codeElements: [
-        {
-          id: "real_id_1",
-          componentId: "comp-a",
-          containerId: "c",
-          kind: "class",
-          name: "Real",
-        },
-      ],
-      codeRelationships: [],
-    };
+      });
 
-    const config = configSchema.parse({ submodules: { enabled: false } });
+      const warnings = checkDrift(
+        path.join(repoRoot, "docs/architecture"),
+        model,
+        { repoRoot, config },
+      );
 
-    const warnings = checkDrift(
-      path.join(repoRoot, "docs/architecture"),
-      model,
-      { repoRoot, config },
-    );
-
-    expect(warnings.find((w) => w.id === "stale_id_99")).toBeUndefined();
+      expect(
+        warnings.find((w) => w.id === "stale_id_excluded"),
+      ).toBeUndefined();
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
