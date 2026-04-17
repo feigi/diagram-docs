@@ -951,4 +951,77 @@ describe("Integration: Submodule per-folder docs", () => {
       ),
     ).toBe(false);
   });
+
+  it("end-to-end: submodule mode + L4 — generate, mutate scaffold, regenerate, preserve edits", async () => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "e2e-submodule-l4-"));
+    try {
+      fs.cpSync(MONOREPO, tmp, {
+        recursive: true,
+        filter: (src) => !src.includes("test-"),
+      });
+
+      // Force levels.code on + minElements low enough to trigger L4
+      const cfgPath = path.join(tmp, "diagram-docs.yaml");
+      const cfg = parseYaml(fs.readFileSync(cfgPath, "utf-8")) ?? {};
+      cfg.levels = { ...(cfg.levels ?? {}), code: true };
+      cfg.code = {
+        minElements: 1,
+        includePrivate: false,
+        includeMembers: true,
+      };
+      cfg.submodules = { ...(cfg.submodules ?? {}), enabled: true };
+      fs.writeFileSync(cfgPath, stringifyYaml(cfg), "utf-8");
+
+      const { spawnSync } = await import("node:child_process");
+      // The CLI's npm run dev script lives in the worktree, not in the tmp fixture
+      // copy. Run from the worktree root and pass the tmp config explicitly.
+      const cliCwd = path.resolve(__dirname, "../..");
+
+      // First generate
+      let result = spawnSync(
+        "npm",
+        ["run", "dev", "--", "generate", "--deterministic", "-c", cfgPath],
+        { cwd: cliCwd, encoding: "utf-8" },
+      );
+      expect(result.status, result.stderr).toBe(0);
+
+      // Find at least one submodule L4 scaffold
+      function findScaffolds(dir: string, out: string[]): string[] {
+        if (!fs.existsSync(dir)) return out;
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name);
+          if (entry.isDirectory()) findScaffolds(full, out);
+          else if (
+            entry.name === "c4-code.d2" &&
+            full.includes("/architecture/components/") &&
+            !full.includes("/_generated/")
+          ) {
+            out.push(full);
+          }
+        }
+        return out;
+      }
+      const scaffolds = findScaffolds(tmp, []);
+      expect(scaffolds.length).toBeGreaterThan(0);
+
+      // Append a user marker line
+      const target = scaffolds[0];
+      const userMark = "user_marker_42.style.fill: hotpink";
+      fs.appendFileSync(target, `\n${userMark}\n`, "utf-8");
+
+      // Second generate
+      result = spawnSync(
+        "npm",
+        ["run", "dev", "--", "generate", "--deterministic", "-c", cfgPath],
+        { cwd: cliCwd, encoding: "utf-8" },
+      );
+      expect(result.status, result.stderr).toBe(0);
+
+      // User content preserved
+      const after = fs.readFileSync(target, "utf-8");
+      expect(after).toContain(userMark);
+    } finally {
+      fs.rmSync(tmp, { recursive: true, force: true });
+    }
+  }, 120000);
 });
