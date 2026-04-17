@@ -984,6 +984,7 @@ relationships:
 
 ### IDs
 - All IDs use kebab-case (lowercase, hyphens).
+- All ids — actors, externalSystems, containers, components — must be globally unique across the entire model. If two containers share a role-like label (e.g. "app-bootstrap", "utils", "api"), prefix the component id with the container id or a short container tag to disambiguate (e.g. "los-cha-app-bootstrap" vs "kafka-sink-app-bootstrap"). Duplicate ids will fail schema validation.
 - Container applicationId must exactly match a ScannedApplication.id from the scan.
 - Component moduleIds must exactly reference ScannedModule.id values. Every module should appear in exactly one component's moduleIds list.
 - Relationship sourceId and targetId must reference valid ids defined in this model.

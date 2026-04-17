@@ -75,11 +75,13 @@ export function buildCodeModel(
   const elements: CodeElement[] = [];
   const qualifiedIdByRaw = new Map<RawCodeElement, string>();
   for (const [base, bucket] of rawElementsByQualifiedBase) {
-    const disambiguate = bucket.length > 1;
-    for (const { raw: re, owner } of bucket) {
-      const qualified = disambiguate
-        ? `${base}-${fileDisambiguator(re.location.file)}`
-        : base;
+    const suffixes =
+      bucket.length > 1
+        ? assignDisambiguators(bucket.map(({ raw }) => raw))
+        : null;
+    for (let i = 0; i < bucket.length; i++) {
+      const { raw: re, owner } = bucket[i];
+      const qualified = suffixes ? `${base}-${suffixes[i]}` : base;
       qualifiedIdByRaw.set(re, qualified);
       const filteredMembers = !includeMembers
         ? undefined
@@ -263,13 +265,29 @@ function byId(a: CodeElement, b: CodeElement): number {
   return a.id.localeCompare(b.id);
 }
 
-function fileDisambiguator(filePath: string): string {
-  // Use basename without extension so collisions in different directories but
-  // same stem still collide deterministically (still a collision, but
-  // model-build resolves by picking the first sorted id). Slugify so the id
-  // is safe for downstream D2 identifier construction via toD2Id.
-  const base = path.basename(filePath, path.extname(filePath));
-  return slugify(base);
+// Assigns a unique suffix per raw element in a collision bucket. Prefers the
+// qualifiedName slug (unambiguous when the analyzer resolved the FQN), else
+// a parent-dir + file-stem slug so same-stem files in different directories
+// stay distinct. Residual ties get a numeric counter so the final ids are
+// always unique even when both qualifiedName and file path are identical.
+function assignDisambiguators(items: RawCodeElement[]): string[] {
+  const primary = items.map((re) =>
+    re.qualifiedName
+      ? slugify(re.qualifiedName)
+      : pathStemSlug(re.location.file),
+  );
+  const seen = new Map<string, number>();
+  return primary.map((s) => {
+    const count = (seen.get(s) ?? 0) + 1;
+    seen.set(s, count);
+    return count === 1 ? s : `${s}-${count}`;
+  });
+}
+
+function pathStemSlug(filePath: string): string {
+  const stem = slugify(path.basename(filePath, path.extname(filePath)));
+  const parent = slugify(path.basename(path.dirname(filePath)));
+  return parent ? `${parent}-${stem}` : stem;
 }
 
 function pushIndexed(
