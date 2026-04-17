@@ -218,7 +218,10 @@ export const generateCommand = new Command("generate")
     }
 
     // Check for stale references in user customizations
-    const driftWarnings = checkDrift(outputDir, model);
+    const driftWarnings = checkDrift(outputDir, model, {
+      repoRoot: configDir,
+      config,
+    });
     for (const w of driftWarnings) {
       console.error(`Warning: ${w.file}:${w.line}: ${w.message}`);
     }
