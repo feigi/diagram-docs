@@ -108,6 +108,8 @@ export const generateCommand = new Command("generate")
     const outputDir = path.resolve(configDir, config.output.dir);
     const generatedDir = path.join(outputDir, "_generated");
 
+    const submodulesOn = options.submodules || config.submodules.enabled;
+
     // Remove scaffold/generated dirs for containers deleted since last scan.
     removeStaleContainerDirs(outputDir, model);
 
@@ -187,7 +189,7 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    if (config.levels.code) {
+    if (config.levels.code && !submodulesOn) {
       const codeResult = generateCodeLevelDiagrams({
         model,
         config,
@@ -236,7 +238,7 @@ export const generateCommand = new Command("generate")
         );
       }
     }
-    if (config.levels.code) {
+    if (config.levels.code && !submodulesOn) {
       const compsByContainer = new Map<string, typeof model.components>();
       for (const c of model.components) {
         const list = compsByContainer.get(c.containerId) ?? [];
@@ -272,7 +274,7 @@ export const generateCommand = new Command("generate")
     }
 
     // Per-folder submodule docs
-    if (options.submodules || config.submodules.enabled) {
+    if (submodulesOn) {
       removeStaleSubmoduleDirs(configDir, model, config);
       const subResults = generateSubmoduleDocs(
         configDir,
@@ -282,6 +284,7 @@ export const generateCommand = new Command("generate")
         {
           codeLinks,
           format: config.output.format,
+          rawStructure,
         },
       );
       for (const sub of subResults) {
