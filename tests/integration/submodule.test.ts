@@ -535,6 +535,119 @@ describe("Integration: Submodule per-folder docs", () => {
     expect(fs.existsSync(componentsDir)).toBe(false);
   });
 
+  it("does not write root containers/<cid>/components/ tree when submodules enabled", async () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-no-root-l4");
+    const tmpOutput = path.join(MONOREPO, "test-submodule-no-root-l4-output");
+    trackDir(tmpRoot);
+    trackDir(tmpOutput);
+    fs.mkdirSync(tmpRoot, { recursive: true });
+    fs.mkdirSync(tmpOutput, { recursive: true });
+
+    const model = loadModel(path.join(MONOREPO, "architecture-model.yaml"));
+    const compId = model.components[0].id;
+    const containerId = model.components[0].containerId;
+    model.codeElements = [
+      {
+        id: `${compId}__a`,
+        componentId: compId,
+        containerId,
+        kind: "class",
+        name: "A",
+      },
+      {
+        id: `${compId}__b`,
+        componentId: compId,
+        containerId,
+        kind: "class",
+        name: "B",
+      },
+    ];
+
+    generateSubmoduleDocs(
+      tmpRoot,
+      tmpOutput,
+      model,
+      configSchema.parse({
+        submodules: { enabled: true },
+        levels: { component: true, code: true },
+        code: { minElements: 1, includePrivate: false, includeMembers: true },
+      }),
+      { codeLinks: new Set([compId]) },
+    );
+
+    const rootComponentsDir = path.join(
+      tmpOutput,
+      "containers",
+      containerId,
+      "components",
+    );
+    expect(fs.existsSync(rootComponentsDir)).toBe(false);
+  });
+
+  it(
+    "`generate --submodules --deterministic` does not create root L4 dirs",
+    { timeout: 60000 },
+    async () => {
+      const tmpRoot = fs.mkdtempSync(
+        path.join(os.tmpdir(), "diagram-docs-cli-submodule-"),
+      );
+      try {
+        fs.cpSync(MONOREPO, tmpRoot, {
+          recursive: true,
+          filter: (src) => !src.includes("test-"),
+        });
+        const cfgPath = path.join(tmpRoot, "diagram-docs.yaml");
+        const raw = fs.readFileSync(cfgPath, "utf-8");
+        const cfg = parseYaml(raw) ?? {};
+        cfg.levels = { ...(cfg.levels ?? {}), code: true };
+        cfg.code = {
+          minElements: 1,
+          includePrivate: false,
+          includeMembers: true,
+        };
+        fs.writeFileSync(cfgPath, stringifyYaml(cfg), "utf-8");
+
+        const { spawnSync } = await import("node:child_process");
+        const cliCwd = path.resolve(__dirname, "../..");
+        const result = spawnSync(
+          "npm",
+          [
+            "run",
+            "dev",
+            "--",
+            "generate",
+            "--submodules",
+            "--deterministic",
+            "-c",
+            cfgPath,
+          ],
+          { cwd: cliCwd, encoding: "utf-8" },
+        );
+        expect(result.status, result.stderr).toBe(0);
+
+        const rootContainers = path.join(
+          tmpRoot,
+          "docs/architecture/containers",
+        );
+        if (fs.existsSync(rootContainers)) {
+          for (const entry of fs.readdirSync(rootContainers)) {
+            const componentsDir = path.join(
+              rootContainers,
+              entry,
+              "components",
+            );
+            expect(
+              fs.existsSync(componentsDir),
+              `unexpected: ${componentsDir}`,
+            ).toBe(false);
+          }
+        }
+      } finally {
+        fs.rmSync(tmpRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
   it("generate-then-remove cleans up all files generate created", async () => {
     const tmpRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "diagram-docs-symmetry-"),
