@@ -66,7 +66,7 @@ const javaTsPyProfile: LanguageRenderingProfile = {
       if (seen.has(r.targetId)) continue;
       seen.add(r.targetId);
       const label = r.targetName ?? r.targetId.split(".").pop() ?? r.targetId;
-      w.shape(toD2Id(r.targetId), label, { style: "dashed" });
+      w.shape(toD2Id(r.targetId), label, { "style.stroke-dash": "3" });
     }
   },
   renderRelationships(w, rels) {
@@ -121,7 +121,7 @@ const cProfile: LanguageRenderingProfile = {
       if (seen.has(r.targetId)) continue;
       seen.add(r.targetId);
       const label = r.targetName ?? r.targetId.split(".").pop() ?? r.targetId;
-      w.shape(toD2Id(r.targetId), label, { style: "dashed" });
+      w.shape(toD2Id(r.targetId), label, { "style.stroke-dash": "3" });
     }
   },
   renderRelationships(w, rels) {
