@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { stringify as stringifyYaml } from "yaml";
 import {
   splitRawStructure,
@@ -313,6 +313,267 @@ describe("mergePartialModels", () => {
 
     expect(merged.system.name).toBe("");
     expect(merged.system.description).toBe("");
+  });
+
+  it("renames a colliding component id with the container-id prefix (first wins original id)", () => {
+    const a = makePartialModel({
+      containers: [
+        {
+          id: "app-a",
+          applicationId: "app-a",
+          name: "A",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "domain-services",
+          containerId: "app-a",
+          name: "Domain Services A",
+          description: "",
+          technology: "Java",
+          moduleIds: ["mod-a"],
+        },
+      ],
+    });
+    const b = makePartialModel({
+      containers: [
+        {
+          id: "app-b",
+          applicationId: "app-b",
+          name: "B",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "domain-services",
+          containerId: "app-b",
+          name: "Domain Services B",
+          description: "",
+          technology: "Java",
+          moduleIds: ["mod-b"],
+        },
+      ],
+    });
+
+    const merged = mergePartialModels([a, b]);
+
+    expect(merged.components.map((c) => c.id)).toEqual([
+      "domain-services",
+      "app-b-domain-services",
+    ]);
+    expect(merged.components[0].containerId).toBe("app-a");
+    expect(merged.components[1].containerId).toBe("app-b");
+    expect(merged.components[1].name).toBe("Domain Services B");
+  });
+
+  it("emits a stderr warning per renamed component", () => {
+    const a = makePartialModel({
+      containers: [
+        {
+          id: "app-a",
+          applicationId: "app-a",
+          name: "A",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "domain-services",
+          containerId: "app-a",
+          name: "Domain Services A",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+      ],
+    });
+    const b = makePartialModel({
+      containers: [
+        {
+          id: "app-b",
+          applicationId: "app-b",
+          name: "B",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "domain-services",
+          containerId: "app-b",
+          name: "Domain Services B",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+      ],
+    });
+
+    const writeSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+
+    mergePartialModels([a, b]);
+
+    expect(writeSpy).toHaveBeenCalledTimes(1);
+    const [message] = writeSpy.mock.calls[0];
+    expect(message).toContain('component id "domain-services"');
+    expect(message).toContain('renamed to "app-b-domain-services"');
+    expect(message).toContain('for container "app-b"');
+
+    writeSpy.mockRestore();
+  });
+
+  it("remaps relationships in the renamed component's partial (both as source and as target)", () => {
+    const a = makePartialModel({
+      containers: [
+        {
+          id: "app-a",
+          applicationId: "app-a",
+          name: "A",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "svc",
+          containerId: "app-a",
+          name: "Svc A",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+        {
+          id: "client",
+          containerId: "app-a",
+          name: "Client A",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+      ],
+      relationships: [{ sourceId: "client", targetId: "svc", label: "Calls" }],
+    });
+    const b = makePartialModel({
+      containers: [
+        {
+          id: "app-b",
+          applicationId: "app-b",
+          name: "B",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "svc",
+          containerId: "app-b",
+          name: "Svc B",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+        {
+          id: "worker",
+          containerId: "app-b",
+          name: "Worker B",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+      ],
+      relationships: [
+        { sourceId: "worker", targetId: "svc", label: "Dispatches to" },
+        { sourceId: "svc", targetId: "worker", label: "Notifies" },
+      ],
+    });
+
+    const merged = mergePartialModels([a, b]);
+
+    const dispatches = merged.relationships.find(
+      (r) => r.label === "Dispatches to",
+    );
+    const notifies = merged.relationships.find((r) => r.label === "Notifies");
+    const calls = merged.relationships.find((r) => r.label === "Calls");
+
+    expect(dispatches).toMatchObject({
+      sourceId: "worker",
+      targetId: "app-b-svc",
+    });
+    expect(notifies).toMatchObject({
+      sourceId: "app-b-svc",
+      targetId: "worker",
+    });
+
+    expect(calls).toMatchObject({ sourceId: "client", targetId: "svc" });
+  });
+
+  it("appends a numeric suffix when the container-prefixed rename also collides", () => {
+    const a = makePartialModel({
+      containers: [
+        {
+          id: "app-a",
+          applicationId: "app-a",
+          name: "A",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "x",
+          containerId: "app-a",
+          name: "X",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+        {
+          id: "app-b-x",
+          containerId: "app-a",
+          name: "App-B-X lookalike",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+      ],
+    });
+    const b = makePartialModel({
+      containers: [
+        {
+          id: "app-b",
+          applicationId: "app-b",
+          name: "B",
+          description: "",
+          technology: "Java",
+        },
+      ],
+      components: [
+        {
+          id: "x",
+          containerId: "app-b",
+          name: "X in B",
+          description: "",
+          technology: "Java",
+          moduleIds: [],
+        },
+      ],
+    });
+
+    const merged = mergePartialModels([a, b]);
+
+    expect(merged.components.map((c) => c.id)).toEqual([
+      "x",
+      "app-b-x",
+      "app-b-x-2",
+    ]);
+    expect(merged.components[2].containerId).toBe("app-b");
   });
 
   it("handles empty input", () => {
