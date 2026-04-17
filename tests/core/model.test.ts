@@ -109,6 +109,41 @@ describe("architectureModelSchema round-trip", () => {
     });
   });
 
+  it("rejects duplicate component ids with a clear message", () => {
+    const model = sampleModel();
+    model.components.push({
+      id: "user-controller",
+      containerId: "user-api",
+      name: "Another Controller",
+      description: "dup",
+      technology: "java",
+      moduleIds: [],
+    });
+    const result = architectureModelSchema.safeParse(model);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      const msgs = result.error.issues.map((i) => i.message);
+      expect(
+        msgs.some((m) => m.includes('components[].id "user-controller"')),
+      ).toBe(true);
+      expect(msgs.some((m) => m.includes("globally unique"))).toBe(true);
+    }
+  });
+
+  it("rejects duplicate container ids", () => {
+    const model = sampleModel();
+    model.containers.push({ ...model.containers[0] });
+    const result = architectureModelSchema.safeParse(model);
+    expect(result.success).toBe(false);
+  });
+
+  it("rejects duplicate codeElement ids", () => {
+    const model = sampleModel();
+    model.codeElements!.push({ ...model.codeElements![0] });
+    const result = architectureModelSchema.safeParse(model);
+    expect(result.success).toBe(false);
+  });
+
   it("preserves codeElements and codeRelationships through loadModel disk round-trip", () => {
     const original = sampleModel();
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "diagram-docs-model-"));

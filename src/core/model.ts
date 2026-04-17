@@ -110,6 +110,31 @@ export const architectureModelSchema = z
     codeRelationships: z.array(codeRelationshipSchema).optional(),
   })
   .superRefine((data, ctx) => {
+    const checkUniqueIds = (
+      items: { id: string }[] | undefined,
+      collection: string,
+    ) => {
+      if (!items?.length) return;
+      const firstIndex = new Map<string, number>();
+      for (const [idx, item] of items.entries()) {
+        const prior = firstIndex.get(item.id);
+        if (prior !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            path: [collection, idx, "id"],
+            message: `${collection}[].id "${item.id}" is duplicated (first occurrence at index ${prior}). Ids must be globally unique across the model.`,
+          });
+        } else {
+          firstIndex.set(item.id, idx);
+        }
+      }
+    };
+    checkUniqueIds(data.actors, "actors");
+    checkUniqueIds(data.externalSystems, "externalSystems");
+    checkUniqueIds(data.containers, "containers");
+    checkUniqueIds(data.components, "components");
+    checkUniqueIds(data.codeElements, "codeElements");
+
     if (!data.codeElements?.length && !data.codeRelationships?.length) return;
     const componentById = new Map(data.components.map((c) => [c.id, c]));
     const codeElementIds = new Set((data.codeElements ?? []).map((e) => e.id));
