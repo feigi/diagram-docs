@@ -33,7 +33,10 @@ import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
 import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
-import { removeStaleContainerDirs } from "../../generator/d2/cleanup.js";
+import {
+  removeStaleContainerDirs,
+  removeStaleSubmoduleComponentDirs,
+} from "../../generator/d2/cleanup.js";
 import {
   codeLinkableComponentIds,
   dominantLanguageForComponent,
@@ -106,6 +109,7 @@ export const generateCommand = new Command("generate")
 
     // Remove scaffold/generated dirs for containers deleted since last scan.
     removeStaleContainerDirs(outputDir, model);
+    removeStaleSubmoduleComponentDirs(configDir, config, model);
 
     // Ensure output directories exist
     if (!fs.existsSync(generatedDir)) {
