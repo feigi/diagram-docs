@@ -179,4 +179,34 @@ describe("D2 Component Diagram", () => {
     expect(d2).toContain("class: component");
     expect(d2).toContain("in User API");
   });
+
+  it("adds code-level link only for components in codeLinks set", () => {
+    const model = loadModel(MODEL_PATH);
+    const d2 = generateComponentDiagram(model, "user-api", {
+      codeLinks: new Set(["user-controller"]),
+      format: "svg",
+    });
+
+    expect(d2).toContain("link: ./components/user-controller/c4-code.svg");
+    expect(d2).not.toContain("./components/user-repository/c4-code");
+  });
+
+  it("omits code-level links when codeLinks is not provided", () => {
+    const model = loadModel(MODEL_PATH);
+    const d2 = generateComponentDiagram(model, "user-api");
+
+    expect(d2).not.toContain("c4-code");
+    expect(d2).not.toContain("link:");
+  });
+
+  it("honors format for code-level link extension", () => {
+    const model = loadModel(MODEL_PATH);
+    const d2 = generateComponentDiagram(model, "user-api", {
+      codeLinks: new Set(["user-controller"]),
+      format: "png",
+    });
+
+    expect(d2).toContain("./components/user-controller/c4-code.png");
+    expect(d2).not.toContain("c4-code.svg");
+  });
 });
