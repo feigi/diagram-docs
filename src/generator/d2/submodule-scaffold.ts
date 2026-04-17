@@ -19,6 +19,11 @@ export interface SubmoduleOutputInfo {
   d2Files: string[];
 }
 
+export interface GenerateSubmoduleDocsOptions {
+  codeLinks?: Set<string>;
+  format?: string;
+}
+
 type Container = ArchitectureModel["containers"][number];
 
 export interface SubmodulePaths {
@@ -51,6 +56,7 @@ export function generateSubmoduleDocs(
   rootOutputDir: string,
   model: ArchitectureModel,
   config: Config,
+  options?: GenerateSubmoduleDocsOptions,
 ): SubmoduleOutputInfo[] {
   const results: SubmoduleOutputInfo[] = [];
   const subCfg = config.submodules;
@@ -91,7 +97,10 @@ export function generateSubmoduleDocs(
       }
 
       // Generate component diagram
-      const d2 = generateComponentDiagram(model, container.id);
+      const d2 = generateComponentDiagram(model, container.id, {
+        codeLinks: options?.codeLinks,
+        format: options?.format ?? config.output.format,
+      });
       if (writeIfChanged(path.join(generatedDir, "c3-component.d2"), d2))
         changed = true;
 

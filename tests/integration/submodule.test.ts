@@ -403,6 +403,52 @@ describe("Integration: Submodule per-folder docs", () => {
     }
   });
 
+  it("emits drill-down links to L4 in per-submodule C3 when codeLinks supplied", () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-codelinks");
+    trackDir(tmpRoot);
+    fs.mkdirSync(tmpRoot, { recursive: true });
+
+    const model = loadModel(path.join(MONOREPO, "architecture-model.yaml"));
+    const config = configSchema.parse({
+      submodules: { enabled: true },
+      levels: { component: true, code: true },
+    });
+    const codeLinks = new Set(model.components.map((c) => c.id));
+
+    generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config, { codeLinks });
+
+    // Find any per-app c3-component generated file and assert it has links.
+    const subDirs = fs
+      .readdirSync(tmpRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => path.join(tmpRoot, e.name));
+
+    const sampleGenerated = subDirs
+      .map((d) => {
+        function find(dir: string): string | null {
+          for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, entry.name);
+            if (entry.isDirectory()) {
+              const inner = find(full);
+              if (inner) return inner;
+            } else if (
+              entry.name === "c3-component.d2" &&
+              full.includes("_generated")
+            ) {
+              return full;
+            }
+          }
+          return null;
+        }
+        return find(d);
+      })
+      .find((p): p is string => p !== null);
+
+    expect(sampleGenerated).toBeTruthy();
+    const content = fs.readFileSync(sampleGenerated!, "utf-8");
+    expect(content).toMatch(/link:\s*"?\.\/components\/[^/]+\/c4-code\.svg/);
+  });
+
   it("generate-then-remove cleans up all files generate created", async () => {
     const tmpRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "diagram-docs-symmetry-"),
