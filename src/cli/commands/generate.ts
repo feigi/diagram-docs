@@ -27,24 +27,19 @@ import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { generateCodeDiagram } from "../../generator/d2/code.js";
-import {
-  getProfileForLanguage,
-  selectProfileForComponent,
-  type ProfileLanguage,
-} from "../../generator/d2/code-profiles.js";
+import { getProfileForLanguage } from "../../generator/d2/code-profiles.js";
 import { scaffoldCodeFile } from "../../generator/d2/code-scaffold.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
 import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
 import { removeStaleContainerDirs } from "../../generator/d2/cleanup.js";
+import {
+  codeLinkableComponentIds,
+  dominantLanguageForComponent,
+} from "../../generator/d2/code-helpers.js";
 import type { Config } from "../../config/schema.js";
-import type {
-  ArchitectureModel,
-  CodeElement,
-  Component,
-  RawStructure,
-} from "../../analyzers/types.js";
+import type { ArchitectureModel, RawStructure } from "../../analyzers/types.js";
 import {
   readManifest,
   writeManifest,
@@ -759,93 +754,6 @@ export function generateCodeLevelDiagrams(opts: {
   }
 
   return { written, unchanged, skipped };
-}
-
-/**
- * Component IDs that qualify for a C4 code-level diagram
- * (i.e. code elements ≥ config.code.minElements).
- */
-function codeLinkableComponentIds(
-  model: ArchitectureModel,
-  minElements: number,
-): Set<string> {
-  const counts = new Map<string, number>();
-  for (const e of model.codeElements ?? []) {
-    counts.set(e.componentId, (counts.get(e.componentId) ?? 0) + 1);
-  }
-  const ids = new Set<string>();
-  for (const [id, n] of counts) {
-    if (n >= minElements) ids.add(id);
-  }
-  return ids;
-}
-
-function dominantLanguageForComponent(
-  component: Component,
-  model: ArchitectureModel,
-  rawStructure?: RawStructure,
-): ProfileLanguage {
-  const counts: Record<ProfileLanguage, number> = {
-    java: 0,
-    typescript: 0,
-    python: 0,
-    c: 0,
-  };
-  if (rawStructure) {
-    for (const app of rawStructure.applications) {
-      for (const mod of app.modules) {
-        if (!component.moduleIds.includes(mod.id)) continue;
-        const lang = normalizeLanguage(app.language);
-        if (lang) counts[lang] += mod.files.length;
-      }
-    }
-  }
-  const totalFromRaw =
-    counts.java + counts.typescript + counts.python + counts.c;
-  if (totalFromRaw === 0) {
-    // Fall back to inferring from already-resolved CodeElements when raw
-    // structure is unavailable (e.g. user passed --model directly). Without
-    // this, every component would silently render with the Java profile —
-    // wrong shapes for C-only components.
-    for (const el of model.codeElements ?? []) {
-      if (el.componentId !== component.id) continue;
-      const lang = languageFromKind(el.kind);
-      if (lang) counts[lang] += 1;
-    }
-  }
-  const picked = selectProfileForComponent(counts);
-  if (!picked) {
-    console.error(
-      `Warning: cannot infer language for component "${component.id}"; defaulting to java profile. ` +
-        `Pass --model with a rawStructure or ensure components contain at least one kind-distinct element.`,
-    );
-    return "java";
-  }
-  return picked;
-}
-
-function languageFromKind(kind: CodeElement["kind"]): ProfileLanguage | null {
-  switch (kind) {
-    case "struct":
-    case "typedef":
-      return "c";
-    case "type":
-      return "typescript";
-    case "enum":
-      return "java";
-    case "class":
-    case "interface":
-    case "function":
-      return null; // ambiguous across languages
-  }
-}
-
-function normalizeLanguage(raw: string): ProfileLanguage | null {
-  if (raw === "java") return "java";
-  if (raw === "typescript") return "typescript";
-  if (raw === "python") return "python";
-  if (raw === "c") return "c";
-  return null;
 }
 
 function postProcessSVGs(d2Files: string[]): void {
