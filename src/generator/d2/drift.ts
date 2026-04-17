@@ -2,6 +2,8 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import { toD2Id } from "./stability.js";
+import { resolveSubmodulePaths } from "./submodule-scaffold.js";
+import type { Config } from "../../config/schema.js";
 
 export interface DriftWarning {
   file: string;
@@ -10,9 +12,15 @@ export interface DriftWarning {
   message: string;
 }
 
+export interface CheckDriftOptions {
+  repoRoot: string;
+  config: Config;
+}
+
 export function checkDrift(
   outputDir: string,
   model: ArchitectureModel,
+  options?: CheckDriftOptions,
 ): DriftWarning[] {
   const validIds = buildValidIdSet(model);
   const warnings: DriftWarning[] = [];
@@ -70,6 +78,39 @@ export function checkDrift(
           );
           if (!fs.existsSync(codeFile)) continue;
           warnings.push(...checkFile(codeFile, codeIds, codeOpts));
+        }
+      }
+    }
+  }
+
+  // Submodule L4 paths
+  if (
+    options?.config.submodules.enabled &&
+    model.codeElements &&
+    model.codeElements.length > 0
+  ) {
+    const codeIds = new Set<string>();
+    for (const el of model.codeElements) codeIds.add(toD2Id(el.id));
+    const codeOpts: DriftCheckOptions = {
+      caseInsensitive: true,
+      pattern: ID_PATTERNS.code,
+    };
+    for (const container of model.containers) {
+      const { architectureDir } = resolveSubmodulePaths(
+        options.repoRoot,
+        container,
+        options.config,
+      );
+      const componentsDir = path.join(architectureDir, "components");
+      if (!fs.existsSync(componentsDir)) continue;
+      for (const entry of fs.readdirSync(componentsDir)) {
+        const codeFile = path.join(componentsDir, entry, "c4-code.d2");
+        if (!fs.existsSync(codeFile)) continue;
+        // Submodule c4-code.d2 files all share the same basename, so the
+        // default basename-only `file` field is ambiguous across containers.
+        // Replace it with the absolute path so warnings can be located.
+        for (const w of checkFile(codeFile, codeIds, codeOpts)) {
+          warnings.push({ ...w, file: codeFile });
         }
       }
     }
