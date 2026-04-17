@@ -125,6 +125,67 @@ describe("generateCodeDiagram", () => {
     expect(d2).toContain("users: List<User>");
   });
 
+  it("renders external refs with valid D2 style syntax (not scalar 'style: dashed')", () => {
+    const modelWithExternal: ArchitectureModel = {
+      ...model,
+      codeElements: [
+        {
+          id: "api.users.UserService",
+          componentId: "users",
+          kind: "class",
+          name: "UserService",
+          visibility: "public",
+        },
+      ],
+      codeRelationships: [
+        {
+          sourceId: "api.users.UserService",
+          targetId: "api.other.ExternalDep",
+          kind: "uses",
+        },
+      ],
+    } as any;
+    const d2 = generateCodeDiagram(
+      modelWithExternal,
+      component,
+      getProfileForLanguage("java"),
+    );
+    // Bug: `{ style: "dashed" }` emits `id.style: dashed` — invalid D2.
+    // Fix: use a nested style property like `style.stroke-dash`.
+    expect(d2).not.toMatch(/\.style:\s*dashed/);
+    expect(d2).toMatch(/\.style\.stroke-dash:/);
+  });
+
+  it("C profile renders external refs with valid D2 style syntax", () => {
+    const cComponent: Component = { ...component, id: "ht" } as any;
+    const cModel: ArchitectureModel = {
+      ...model,
+      codeElements: [
+        {
+          id: "lib.ht.hash_insert",
+          componentId: "ht",
+          kind: "function",
+          name: "hash_insert",
+          visibility: "public",
+        },
+      ],
+      codeRelationships: [
+        {
+          sourceId: "lib.ht.hash_insert",
+          targetId: "lib.other.external_helper",
+          kind: "uses",
+        },
+      ],
+    } as any;
+    const d2 = generateCodeDiagram(
+      cModel,
+      cComponent,
+      getProfileForLanguage("c"),
+    );
+    expect(d2).not.toMatch(/\.style:\s*dashed/);
+    expect(d2).toMatch(/\.style\.stroke-dash:/);
+  });
+
   it("selectProfileForComponent picks C when most files are .c/.h", () => {
     const result = selectProfileForComponent({
       java: 1,
