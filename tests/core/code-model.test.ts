@@ -487,6 +487,66 @@ describe("buildCodeModel collision handling", () => {
     expect(codeRelationships).toEqual([
       expect.objectContaining({ targetId: v7.id, kind: "implements" }),
     ]);
+    // Disambiguated suffixes come from the qualifiedName slug — unique per
+    // element.
+    expect(v7.id).toBe("app.m.RouteSearchApi-com-bmw-api-v7-routesearchapi");
     stderrSpy.mockRestore();
+  });
+
+  it("falls back to a counter when file path and qualifiedName both collide", () => {
+    const fixture = {
+      applications: [
+        {
+          id: "app",
+          name: "app",
+          language: "java",
+          path: "/tmp/app",
+          modules: [
+            {
+              id: "m",
+              path: "/tmp/app/m",
+              name: "m",
+              files: [],
+              exports: [],
+              imports: [],
+              metadata: {},
+              codeElements: [
+                {
+                  id: "Foo",
+                  name: "Foo",
+                  kind: "class" as const,
+                  visibility: "public" as const,
+                  location: { file: "Foo.java", line: 1 },
+                },
+                {
+                  id: "Foo",
+                  name: "Foo",
+                  kind: "class" as const,
+                  visibility: "public" as const,
+                  location: { file: "Foo.java", line: 100 },
+                },
+              ],
+            },
+          ],
+          externalDependencies: [],
+          internalImports: [],
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const comps = [
+      {
+        id: "m",
+        containerId: "app",
+        name: "m",
+        description: "",
+        technology: "",
+        moduleIds: ["m"],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    ];
+    const { codeElements } = buildCodeModel(fixture, comps, baseConfig);
+    const ids = codeElements.map((e) => e.id).sort();
+    expect(ids).toEqual(["app.m.Foo-foo", "app.m.Foo-foo-2"]);
   });
 });
