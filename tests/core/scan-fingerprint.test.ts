@@ -54,6 +54,15 @@ describe("buildScanFingerprint", () => {
     expect(a).not.toBe(b);
   });
 
+  it("encodes a schemaVersion so analyzer format changes invalidate caches", () => {
+    // Tripwire: when the scan output format changes (e.g. adding
+    // `targetQualifiedName` to references), bump SCAN_SCHEMA_VERSION so
+    // stale caches from the previous format are rebuilt instead of silently
+    // feeding incomplete data into the model. See issue #8 for the bite.
+    const fp = buildScanFingerprint(excludes, baseConfig);
+    expect(fp).toMatch(/"schemaVersion":\d+/);
+  });
+
   it("includes scan.include only when requested", () => {
     const without = buildScanFingerprint(excludes, baseConfig);
     const withInclude = buildScanFingerprint(excludes, baseConfig, {
