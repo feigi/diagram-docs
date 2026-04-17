@@ -43,6 +43,29 @@ export interface SubmoduleOutputInfo {
   d2Files: string[];
 }
 
+type Container = ArchitectureModel["containers"][number];
+
+export interface SubmodulePaths {
+  /** Repo-relative path from the repo root to the app directory (no leading slash). */
+  appPath: string;
+  /** Per-container docs dir name, after override resolution. */
+  docsDir: string;
+  /** Absolute path to `{repoRoot}/{appPath}/{docsDir}/architecture`. */
+  architectureDir: string;
+}
+
+export function resolveSubmodulePaths(
+  repoRoot: string,
+  container: Container,
+  config: Config,
+): SubmodulePaths {
+  const override = config.submodules.overrides[container.applicationId];
+  const appPath = container.path ?? container.applicationId.replace(/-/g, "/");
+  const docsDir = override?.docsDir ?? config.submodules.docsDir;
+  const architectureDir = path.join(repoRoot, appPath, docsDir, "architecture");
+  return { appPath, docsDir, architectureDir };
+}
+
 /**
  * Generate per-folder docs for each application when submodules are enabled.
  * Returns info about each generated folder for use in rendering.
@@ -71,11 +94,11 @@ export function generateSubmoduleDocs(
     // collide with the root site. Skip defensively.
     if (container.path === ".") continue;
 
-    // Use the container's path if available, otherwise fall back to applicationId
-    const appPath =
-      container.path ?? container.applicationId.replace(/-/g, "/");
-    const docsDir = override?.docsDir ?? subCfg.docsDir;
-    const outputDir = path.join(repoRoot, appPath, docsDir, "architecture");
+    const { appPath, architectureDir: outputDir } = resolveSubmodulePaths(
+      repoRoot,
+      container,
+      config,
+    );
     const generatedDir = path.join(outputDir, "_generated");
 
     if (!fs.existsSync(generatedDir)) {
