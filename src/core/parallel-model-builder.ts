@@ -74,6 +74,7 @@ export function mergePartialModels(
 ): ArchitectureModel {
   const containers: ArchitectureModel["containers"] = [];
   const components: ArchitectureModel["components"] = [];
+  const componentIds = new Set<string>();
   const relationships: ArchitectureModel["relationships"] = [];
   const relKeys = new Set<string>();
   const actorMap = new Map<string, ArchitectureModel["actors"][0]>();
@@ -83,14 +84,50 @@ export function mergePartialModels(
   >();
 
   for (const partial of partials) {
-    containers.push(...partial.containers);
-    components.push(...partial.components);
-    for (const rel of partial.relationships) {
-      const key = relKey(rel.sourceId, rel.targetId);
-      if (!relKeys.has(key)) {
-        relKeys.add(key);
-        relationships.push(rel);
+    // Parallel per-app LLM calls can't see each other's ids, so collisions
+    // across apps are expected.  First occurrence keeps its id; later ones
+    // are renamed with a container-id prefix (plus numeric suffix on
+    // residual ties).  Relationships inside the same partial are remapped
+    // to follow the rename.
+    const componentRemap = new Map<string, string>();
+
+    for (const comp of partial.components) {
+      let id = comp.id;
+      if (componentIds.has(id)) {
+        const prefix = `${comp.containerId}-${comp.id}`;
+        let candidate = prefix;
+        let n = 2;
+        while (componentIds.has(candidate)) {
+          candidate = `${prefix}-${n}`;
+          n++;
+        }
+        id = candidate;
+        componentRemap.set(comp.id, id);
+        // Safe because architectureModelSchema.checkUniqueIds (src/core/model.ts)
+        // rejects duplicate ids within a single partial before merge — so each
+        // raw id maps to at most one rename inside a partial.
+        process.stderr.write(
+          `Warning: component id "${comp.id}" collided across apps; ` +
+            `renamed to "${id}" for container "${comp.containerId}".\n`,
+        );
       }
+      componentIds.add(id);
+      components.push(id === comp.id ? comp : { ...comp, id });
+    }
+
+    containers.push(...partial.containers);
+
+    for (const rel of partial.relationships) {
+      const sourceId = componentRemap.get(rel.sourceId) ?? rel.sourceId;
+      const targetId = componentRemap.get(rel.targetId) ?? rel.targetId;
+      const key = relKey(sourceId, targetId);
+      if (relKeys.has(key)) continue;
+      relKeys.add(key);
+      relationships.push(
+        sourceId === rel.sourceId && targetId === rel.targetId
+          ? rel
+          : { ...rel, sourceId, targetId },
+      );
     }
 
     for (const actor of partial.actors) {
