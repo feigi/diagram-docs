@@ -148,8 +148,13 @@ async function promptChoice(
   }
 
   while (true) {
-    const answer = await question(rl, `${chalk.cyan(">")} `);
-    const num = parseInt(answer.trim(), 10);
+    const answer = await question(
+      rl,
+      `${chalk.cyan(">")} ${chalk.dim("[1] ")}`,
+    );
+    const trimmed = answer.trim();
+    if (trimmed === "") return 0;
+    const num = parseInt(trimmed, 10);
     if (num >= 1 && num <= choices.length) {
       return num - 1;
     }
