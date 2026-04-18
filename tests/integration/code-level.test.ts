@@ -102,6 +102,7 @@ async function runPipeline(workDir: string): Promise<{
 describe("c4-code integration", () => {
   let workDir: string;
   let outputDir: string;
+  let initialModel: ArchitectureModel;
 
   beforeAll(async () => {
     workDir = fs.mkdtempSync(path.join(os.tmpdir(), "diagram-docs-l4-"));
@@ -116,6 +117,7 @@ describe("c4-code integration", () => {
 
     const result = await runPipeline(workDir);
     outputDir = result.outputDir;
+    initialModel = result.model;
   });
 
   afterAll(() => {
@@ -128,6 +130,20 @@ describe("c4-code integration", () => {
       p.includes(`${path.sep}_generated${path.sep}`),
     );
     expect(generated.length).toBeGreaterThan(0);
+  });
+
+  it("emits `uses` code relationships from field and method-signature types", () => {
+    // UserController has `private final UserRepository repo;` and
+    // `UserController(UserRepository repo)` — both should resolve to a
+    // `uses` edge targeting UserRepository, regardless of whether they sit
+    // in the same component (intra-component edge in overview granularity).
+    const rels = initialModel.codeRelationships ?? [];
+    const uses = rels.filter((r) => r.kind === "uses");
+    expect(uses.length).toBeGreaterThan(0);
+    const userRepoUse = uses.find((r) =>
+      r.targetId.toLowerCase().includes("userrepository"),
+    );
+    expect(userRepoUse).toBeDefined();
   });
 
   it("creates a user-facing scaffold at containers/.../components/.../c4-code.d2", () => {

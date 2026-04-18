@@ -84,3 +84,57 @@ describe("typescript code extraction", () => {
     expect(Array.isArray(elements)).toBe(true);
   });
 });
+
+describe("typescript code extraction: uses references", () => {
+  it("captures uses edges from field types and method signatures", async () => {
+    const els = await extractTypeScriptCode(
+      FIXTURE,
+      fs.readFileSync(FIXTURE, "utf-8"),
+    );
+    const svc = els.find((e) => e.name === "UserService")!;
+    expect(svc.references).toEqual(
+      expect.arrayContaining([{ targetName: "User", kind: "uses" }]),
+    );
+  });
+
+  it("drops TS builtin/primitive names from uses", async () => {
+    const els = await extractTypeScriptCode(
+      FIXTURE,
+      fs.readFileSync(FIXTURE, "utf-8"),
+    );
+    const svc = els.find((e) => e.name === "UserService")!;
+    const usesNames = (svc.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName);
+    expect(usesNames).not.toContain("string");
+    expect(usesNames).not.toContain("undefined");
+  });
+
+  it("does not duplicate an implements target as uses", async () => {
+    const src = `interface Foo {} class C implements Foo { f: Foo; }`;
+    const els = await extractTypeScriptCode("c.ts", src);
+    const c = els.find((e) => e.name === "C")!;
+    const fooRefs = (c.references ?? []).filter((r) => r.targetName === "Foo");
+    expect(fooRefs.map((r) => r.kind)).toEqual(["implements"]);
+  });
+
+  it("unwraps array, union, and generic types in field signatures", async () => {
+    const src = `
+      class A {}
+      class B {}
+      class C {}
+      class Holder {
+        a: A[];
+        b: B | null;
+        c: Array<C>;
+      }
+    `;
+    const els = await extractTypeScriptCode("holder.ts", src);
+    const holder = els.find((e) => e.name === "Holder")!;
+    const usesNames = (holder.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName)
+      .sort();
+    expect(usesNames).toEqual(["A", "B", "C"]);
+  });
+});

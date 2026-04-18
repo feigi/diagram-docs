@@ -205,3 +205,64 @@ public class Foo {}`;
     expect(els[0].qualifiedName).toBe("com.bmw.app.Foo");
   });
 });
+
+describe("java code extraction: uses references", () => {
+  it("captures uses edges from fields and method signatures", async () => {
+    const source = fs.readFileSync(FIXTURE, "utf-8");
+    const els = await extractJavaCode(FIXTURE, source);
+    const svc = els.find((e) => e.name === "UserService")!;
+    const usesTargets = (svc.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName);
+    expect(usesTargets).toContain("User");
+  });
+
+  it("filters java.lang builtins from uses (String, Object, ...)", async () => {
+    const source = fs.readFileSync(FIXTURE, "utf-8");
+    const els = await extractJavaCode(FIXTURE, source);
+    const svc = els.find((e) => e.name === "UserService")!;
+    const usesTargets = (svc.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName);
+    expect(usesTargets).not.toContain("String");
+    expect(usesTargets).not.toContain("Object");
+  });
+
+  it("populates targetQualifiedName for resolved uses via imports", async () => {
+    const source = fs.readFileSync(FIXTURE, "utf-8");
+    const els = await extractJavaCode(FIXTURE, source);
+    const svc = els.find((e) => e.name === "UserService")!;
+    const userUse = (svc.references ?? []).find(
+      (r) => r.kind === "uses" && r.targetName === "User",
+    );
+    expect(userUse?.targetQualifiedName).toBe("com.example.users.User");
+  });
+
+  it("does not emit the same target as both implements/extends and uses", async () => {
+    const source = `package p;
+interface Foo {}
+class C implements Foo {
+  Foo inner;
+  Foo make() { return inner; }
+}`;
+    const els = await extractJavaCode("C.java", source);
+    const c = els.find((e) => e.name === "C")!;
+    const fooRefs = (c.references ?? []).filter((r) => r.targetName === "Foo");
+    expect(fooRefs.map((r) => r.kind)).toEqual(["implements"]);
+  });
+
+  it("unwraps generic type params for uses targets", async () => {
+    const source = `package p;
+import java.util.List;
+class Outer {
+  List<Inner> items;
+}
+class Inner {}`;
+    const els = await extractJavaCode("Outer.java", source);
+    const outer = els.find((e) => e.name === "Outer")!;
+    const usesTargets = (outer.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName);
+    expect(usesTargets).toContain("Inner");
+  });
+});

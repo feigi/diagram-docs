@@ -21,6 +21,45 @@ const KIND_BY_DECL: Record<string, CodeElementKind> = {
   "fn.decl": "function",
 };
 
+const TS_BUILTINS = new Set([
+  "string",
+  "number",
+  "boolean",
+  "void",
+  "any",
+  "unknown",
+  "never",
+  "object",
+  "symbol",
+  "bigint",
+  "null",
+  "undefined",
+  "this",
+  "Promise",
+  "Array",
+  "ReadonlyArray",
+  "Map",
+  "Set",
+  "WeakMap",
+  "WeakSet",
+  "Date",
+  "Error",
+  "RegExp",
+  "Record",
+  "Partial",
+  "Readonly",
+  "Required",
+  "Pick",
+  "Omit",
+  "Exclude",
+  "Extract",
+  "NonNullable",
+  "ReturnType",
+  "Parameters",
+  "Awaited",
+  "Function",
+]);
+
 export async function extractTypeScriptCode(
   filePath: string,
   source: string,
@@ -114,6 +153,12 @@ function collectReferences(
 ): RawCodeReference[] {
   const references: RawCodeReference[] = [];
   const children = declNode.namedChildren ?? [];
+  const seen = new Set<string>();
+
+  const pushHeritage = (name: string, kind: "extends" | "implements") => {
+    references.push({ targetName: name, kind });
+    seen.add(name);
+  };
 
   if (elementKind === "class") {
     const heritage = children.find((c) => c.type === "class_heritage");
@@ -122,12 +167,12 @@ function collectReferences(
         if (clause.type === "extends_clause") {
           for (const t of clause.namedChildren ?? []) {
             const name = typeName(t);
-            if (name) references.push({ targetName: name, kind: "extends" });
+            if (name) pushHeritage(name, "extends");
           }
         } else if (clause.type === "implements_clause") {
           for (const t of clause.namedChildren ?? []) {
             const name = typeName(t);
-            if (name) references.push({ targetName: name, kind: "implements" });
+            if (name) pushHeritage(name, "implements");
           }
         }
       }
@@ -139,12 +184,128 @@ function collectReferences(
     if (extendsClause) {
       for (const t of extendsClause.namedChildren ?? []) {
         const name = typeName(t);
-        if (name) references.push({ targetName: name, kind: "extends" });
+        if (name) pushHeritage(name, "extends");
       }
     }
   }
 
+  if (elementKind === "class" || elementKind === "interface") {
+    for (const name of collectBodyTypeNames(declNode)) {
+      if (TS_BUILTINS.has(name) || seen.has(name)) continue;
+      seen.add(name);
+      references.push({ targetName: name, kind: "uses" });
+    }
+  }
+
   return references;
+}
+
+// Collects type names referenced in field, method-parameter, and method-return
+// positions within a class/interface body. Skips call-site and local-variable
+// references — those would require walking every statement and would dilute
+// the L4 diagram with noise.
+function collectBodyTypeNames(declNode: SyntaxNode): string[] {
+  const body = (declNode.namedChildren ?? []).find(
+    (c) =>
+      c.type === "class_body" ||
+      c.type === "interface_body" ||
+      c.type === "object_type",
+  );
+  if (!body) return [];
+  const out: string[] = [];
+  for (const member of body.namedChildren ?? []) {
+    if (
+      member.type === "public_field_definition" ||
+      member.type === "property_signature"
+    ) {
+      out.push(...typeNamesFromAnnotation(member.childForFieldName("type")));
+    } else if (
+      member.type === "method_definition" ||
+      member.type === "method_signature"
+    ) {
+      const params = member.childForFieldName("parameters");
+      if (params) {
+        for (const p of params.namedChildren ?? []) {
+          out.push(
+            ...typeNamesFromAnnotation(
+              (p.namedChildren ?? []).find(
+                (c) => c.type === "type_annotation",
+              ) ?? null,
+            ),
+          );
+        }
+      }
+      out.push(
+        ...typeNamesFromAnnotation(member.childForFieldName("return_type")),
+      );
+    }
+  }
+  return out;
+}
+
+function typeNamesFromAnnotation(node: SyntaxNode | null): string[] {
+  if (!node) return [];
+  if (node.type === "type_annotation") {
+    const inner = (node.namedChildren ?? [])[0] ?? null;
+    return typeNamesFromAnnotation(inner);
+  }
+  return collectTypeExpression(node);
+}
+
+function collectTypeExpression(node: SyntaxNode | null): string[] {
+  if (!node) return [];
+  if (node.type === "type_identifier" || node.type === "identifier") {
+    return [node.text];
+  }
+  if (node.type === "predefined_type") {
+    return [node.text];
+  }
+  if (node.type === "generic_type") {
+    const out: string[] = [];
+    const name =
+      node.childForFieldName("name") ??
+      (node.namedChildren ?? []).find(
+        (c) =>
+          c.type === "type_identifier" ||
+          c.type === "identifier" ||
+          c.type === "nested_type_identifier",
+      );
+    if (name) out.push(...collectTypeExpression(name));
+    const args = node.childForFieldName("type_arguments");
+    if (args) {
+      for (const arg of args.namedChildren ?? []) {
+        out.push(...collectTypeExpression(arg));
+      }
+    }
+    return out;
+  }
+  if (node.type === "array_type") {
+    const out: string[] = [];
+    for (const c of node.namedChildren ?? []) {
+      out.push(...collectTypeExpression(c));
+    }
+    return out;
+  }
+  if (
+    node.type === "union_type" ||
+    node.type === "intersection_type" ||
+    node.type === "tuple_type" ||
+    node.type === "parenthesized_type" ||
+    node.type === "readonly_type"
+  ) {
+    const out: string[] = [];
+    for (const c of node.namedChildren ?? []) {
+      out.push(...collectTypeExpression(c));
+    }
+    return out;
+  }
+  if (node.type === "nested_type_identifier") {
+    const idents = (node.namedChildren ?? []).filter(
+      (c) => c.type === "type_identifier",
+    );
+    return idents.length > 0 ? [idents[idents.length - 1].text] : [];
+  }
+  return [];
 }
 
 function collectMembers(declNode: SyntaxNode): CodeMember[] {
