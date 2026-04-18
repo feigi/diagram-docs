@@ -10,9 +10,17 @@ import type {
 } from "../analyzers/types.js";
 import type { Config } from "../config/schema.js";
 
+export interface DroppedReference {
+  sourceId: string;
+  targetRaw: string;
+  reason: "stdlib" | "cross-container" | "collision";
+  componentId: string;
+}
+
 export interface BuildCodeModelResult {
   codeElements: CodeElement[];
   codeRelationships: CodeRelationship[];
+  droppedReferences: DroppedReference[];
 }
 
 interface ResolveContext {
@@ -31,7 +39,7 @@ export function buildCodeModel(
   config: Pick<Config, "levels" | "code">,
 ): BuildCodeModelResult {
   if (!config.levels?.code) {
-    return { codeElements: [], codeRelationships: [] };
+    return { codeElements: [], codeRelationships: [], droppedReferences: [] };
   }
 
   const includePrivate = config.code?.includePrivate ?? false;
@@ -144,9 +152,10 @@ export function buildCodeModel(
   for (const list of ctx.byComponentName.values()) list.sort(byId);
   for (const list of ctx.byContainerName.values()) list.sort(byId);
 
-  const unresolvedByComponent = new Map<string, number>();
-  const crossContainerByComponent = new Map<string, number>();
-  const collisionsByComponent = new Map<string, number>();
+  // Single machine-readable sink for all reference drops. The stderr aggregate
+  // messages below are derived from this array — keep all drop bookkeeping in
+  // one place so callers can introspect reasons without parsing log lines.
+  const droppedReferences: DroppedReference[] = [];
   // Pre-compute cross-container name index so we can classify drops.
   const byGlobalName = new Map<string, CodeElement[]>();
   for (const el of filteredElements) {
@@ -168,10 +177,12 @@ export function buildCodeModel(
             owner,
             ctx,
             (count, where, picked) => {
-              collisionsByComponent.set(
-                owner.componentId,
-                (collisionsByComponent.get(owner.componentId) ?? 0) + 1,
-              );
+              droppedReferences.push({
+                sourceId: sourceQualified,
+                targetRaw: ref.targetName,
+                reason: "collision",
+                componentId: owner.componentId,
+              });
               process.stderr.write(
                 `Warning: name collision resolving ${ref.kind} ${ref.targetName} ` +
                   `from ${sourceQualified}: ${count} candidates in ${where}, ` +
@@ -183,20 +194,17 @@ export function buildCodeModel(
             // Classify the drop: cross-container (architecture edge lost) vs
             // external (stdlib / third-party — expected noise).
             const global = byGlobalName.get(ref.targetName);
-            if (
+            const reason: DroppedReference["reason"] =
               global &&
               global.some((el) => el.containerId !== owner.containerId)
-            ) {
-              crossContainerByComponent.set(
-                owner.componentId,
-                (crossContainerByComponent.get(owner.componentId) ?? 0) + 1,
-              );
-            } else {
-              unresolvedByComponent.set(
-                owner.componentId,
-                (unresolvedByComponent.get(owner.componentId) ?? 0) + 1,
-              );
-            }
+                ? "cross-container"
+                : "stdlib";
+            droppedReferences.push({
+              sourceId: sourceQualified,
+              targetRaw: ref.targetName,
+              reason,
+              componentId: owner.componentId,
+            });
             continue;
           }
           relationships.push({
@@ -210,17 +218,32 @@ export function buildCodeModel(
     }
   }
 
-  let totalUnresolved = 0;
-  for (const count of unresolvedByComponent.values()) totalUnresolved += count;
-  let totalCrossContainer = 0;
-  for (const count of crossContainerByComponent.values())
-    totalCrossContainer += count;
-  let totalCollisions = 0;
-  for (const count of collisionsByComponent.values()) totalCollisions += count;
+  // Derive stderr aggregates from the single source of truth.
+  const stdlibByComponent = new Map<string, number>();
+  const crossContainerByComponent = new Map<string, number>();
+  const collisionsByComponent = new Map<string, number>();
+  for (const drop of droppedReferences) {
+    const bucket =
+      drop.reason === "stdlib"
+        ? stdlibByComponent
+        : drop.reason === "cross-container"
+          ? crossContainerByComponent
+          : collisionsByComponent;
+    bucket.set(drop.componentId, (bucket.get(drop.componentId) ?? 0) + 1);
+  }
+  const totalStdlib = droppedReferences.filter(
+    (d) => d.reason === "stdlib",
+  ).length;
+  const totalCrossContainer = droppedReferences.filter(
+    (d) => d.reason === "cross-container",
+  ).length;
+  const totalCollisions = droppedReferences.filter(
+    (d) => d.reason === "collision",
+  ).length;
 
-  if (totalUnresolved > 0) {
+  if (totalStdlib > 0) {
     process.stderr.write(
-      `L4: ${totalUnresolved} code reference(s) dropped as stdlib/external. ` +
+      `Warning: L4: ${totalStdlib} code reference(s) dropped as stdlib/external. ` +
         `Set DIAGRAM_DOCS_DEBUG=1 for per-component breakdown.\n`,
     );
   }
@@ -232,13 +255,13 @@ export function buildCodeModel(
   }
   if (totalCollisions > 0) {
     process.stderr.write(
-      `L4: ${totalCollisions} name-collision pick(s) during resolution. ` +
+      `Warning: L4: ${totalCollisions} name-collision pick(s) during resolution. ` +
         `Picks are deterministic (by qualified id).\n`,
     );
   }
 
   if (process.env.DIAGRAM_DOCS_DEBUG) {
-    for (const [compId, count] of unresolvedByComponent) {
+    for (const [compId, count] of stdlibByComponent) {
       process.stderr.write(
         `[L4 debug] component ${compId}: ${count} stdlib/external reference(s) dropped\n`,
       );
@@ -258,6 +281,7 @@ export function buildCodeModel(
   return {
     codeElements: filteredElements,
     codeRelationships: relationships,
+    droppedReferences,
   };
 }
 
