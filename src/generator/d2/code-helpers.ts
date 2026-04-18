@@ -91,7 +91,7 @@ export function dominantLanguageForComponent(
   const picked = selectProfileForComponent(counts);
   if (!picked) {
     console.error(
-      `Warning: cannot infer language for component "${component.id}"; defaulting to java profile. ` +
+      `Warning: L4: cannot infer language for component "${component.id}"; defaulting to java profile. ` +
         `Pass --model with a rawStructure or ensure components contain at least one kind-distinct element.`,
     );
     return "java";

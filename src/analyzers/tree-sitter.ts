@@ -127,7 +127,7 @@ export async function extractCodeElementsForFiles(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(
-          `Warning: code-level extraction failed for ${fp} (read error): ${msg}\n`,
+          `Warning: L4: code-level extraction failed for ${fp} (read error): ${msg}\n`,
         );
         return [] as RawCodeElement[];
       }
@@ -138,7 +138,7 @@ export async function extractCodeElementsForFiles(
         if (!firstFailingFile) firstFailingFile = fp;
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(
-          `Warning: code-level extraction failed for ${fp}: ${msg}\n`,
+          `Warning: L4: code-level extraction failed for ${fp}: ${msg}\n`,
         );
         return [] as RawCodeElement[];
       }
@@ -147,11 +147,11 @@ export async function extractCodeElementsForFiles(
   if (extractionFailures > 0) {
     if (extractionFailures === filePaths.length) {
       process.stderr.write(
-        `Warning: code-level extraction failed on all ${filePaths.length} file(s) — likely a grammar, query, or walker bug rather than per-file source issues. First failing file: ${firstFailingFile ?? "(unknown)"}.\n`,
+        `Warning: L4: code-level extraction failed on all ${filePaths.length} file(s) — likely a grammar, query, or walker bug rather than per-file source issues. First failing file: ${firstFailingFile ?? "(unknown)"}.\n`,
       );
     } else {
       process.stderr.write(
-        `Warning: code-level extraction failed for ${extractionFailures}/${filePaths.length} file(s); diagrams will be incomplete. First failing file: ${firstFailingFile ?? "(unknown)"}.\n`,
+        `Warning: L4: code-level extraction failed for ${extractionFailures}/${filePaths.length} file(s); diagrams will be incomplete. First failing file: ${firstFailingFile ?? "(unknown)"}.\n`,
       );
     }
   }

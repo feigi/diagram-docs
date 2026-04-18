@@ -36,7 +36,6 @@ export interface BuildCodeModelResult {
 interface ResolveContext {
   byComponentName: Map<string, CodeElement[]>; // key: `${componentId}:${name}`
   byContainerName: Map<string, CodeElement[]>; // key: `${containerId}:${name}`
-  byContainerNameExcludingOwn: Map<string, CodeElement[]>; // key: `${ownContainerId}:${name}` — same-container candidates outside owner's component
   /** Index of elements that carry a qualifiedName, keyed by `${componentId}:${qualifiedName}`. Collisions are broken lexicographically by id. */
   byComponentQualifiedName: Map<string, CodeElement>;
   /** Container-scope FQN index, keyed by `${containerId}:${qualifiedName}`. Collisions broken lexicographically by id. */
@@ -195,7 +194,6 @@ export function buildCodeModel(
   const ctx: ResolveContext = {
     byComponentName: new Map(),
     byContainerName: new Map(),
-    byContainerNameExcludingOwn: new Map(),
     byComponentQualifiedName: new Map(),
     byContainerQualifiedName: new Map(),
   };
@@ -260,7 +258,7 @@ export function buildCodeModel(
                 scope,
               });
               process.stderr.write(
-                `Warning: name collision resolving ${ref.kind} ${ref.targetName} ` +
+                `Warning: L4: name collision resolving ${ref.kind} ${ref.targetName} ` +
                   `from ${sourceQualified}: ${count} candidates in ${where}, ` +
                   `picking ${picked}.\n`,
               );

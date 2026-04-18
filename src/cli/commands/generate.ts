@@ -286,8 +286,14 @@ export const generateCommand = new Command("generate")
           rawStructure,
         },
       );
-      for (const sub of subResults) {
+      for (const sub of subResults.outputs) {
         d2Files.push(...sub.d2Files);
+      }
+      if (subResults.scaffoldFailed > 0) {
+        console.error(
+          `Error: ${subResults.scaffoldFailed} L4 scaffold file(s) failed to write. Process will exit with a non-zero status.`,
+        );
+        process.exitCode = 1;
       }
     }
 
@@ -779,7 +785,7 @@ export function generateCodeLevelDiagrams(opts: {
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(
-          `Warning: failed to scaffold c4-code.d2 for component "${component.id}" in container "${container.id}": ${msg}`,
+          `Warning: L4: failed to scaffold c4-code.d2 for component "${component.id}" in container "${container.id}": ${msg}`,
         );
         scaffoldFailed++;
       }

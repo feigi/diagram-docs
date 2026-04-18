@@ -23,6 +23,12 @@ export interface SubmoduleOutputInfo {
   d2Files: string[];
 }
 
+export interface SubmoduleDocsResult {
+  outputs: SubmoduleOutputInfo[];
+  /** Number of L4 scaffold/generation failures caught across all submodules. */
+  scaffoldFailed: number;
+}
+
 export interface GenerateSubmoduleDocsOptions {
   codeLinks?: Set<string>;
   format?: string;
@@ -62,10 +68,11 @@ export function generateSubmoduleDocs(
   model: ArchitectureModel,
   config: Config,
   options?: GenerateSubmoduleDocsOptions,
-): SubmoduleOutputInfo[] {
+): SubmoduleDocsResult {
   const results: SubmoduleOutputInfo[] = [];
   const subCfg = config.submodules;
   let unchangedCount = 0;
+  let scaffoldFailed = 0;
 
   for (const container of model.containers) {
     // Check for explicit exclude
@@ -193,8 +200,9 @@ export function generateSubmoduleDocs(
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           console.error(
-            `Warning: failed to generate L4 for "${component.id}" in "${container.id}": ${msg}`,
+            `Warning: L4: failed to generate L4 for "${component.id}" in "${container.id}": ${msg}`,
           );
+          scaffoldFailed++;
         }
       }
     }
@@ -217,7 +225,7 @@ export function generateSubmoduleDocs(
     console.error(`${unchangedCount} submodule doc(s) unchanged.`);
   }
 
-  return results;
+  return { outputs: results, scaffoldFailed };
 }
 
 function fragment(model: ArchitectureModel, containerId: string) {
