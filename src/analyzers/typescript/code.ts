@@ -49,23 +49,38 @@ export async function extractTypeScriptCode(
     for (const [, entry] of byDecl) {
       const id = entry.nameNode.text;
       const references = collectReferences(entry.declNode, entry.kind);
-      const members =
-        entry.kind === "class" || entry.kind === "interface"
-          ? collectMembers(entry.declNode)
-          : [];
+      const location = {
+        file: filePath,
+        line: entry.declNode.startPosition.row + 1,
+      };
+      const refs = references.length > 0 ? references : undefined;
 
-      elements.push({
-        id,
-        name: id,
-        kind: entry.kind,
-        visibility: "public",
-        members: members.length > 0 ? members : undefined,
-        references: references.length > 0 ? references : undefined,
-        location: {
-          file: filePath,
-          line: entry.declNode.startPosition.row + 1,
-        },
-      });
+      // Discriminated emission: class/interface are container kinds (they
+      // carry a body of members); type/function are symbol kinds (no members
+      // in the model — a type alias has no fields, a top-level function has
+      // no inner body we render). `members: []` on symbol kinds was always
+      // dead weight — the discriminated union now rules the shape out.
+      if (entry.kind === "class" || entry.kind === "interface") {
+        const members = collectMembers(entry.declNode);
+        elements.push({
+          id,
+          name: id,
+          kind: entry.kind,
+          visibility: "public",
+          members: members.length > 0 ? members : undefined,
+          references: refs,
+          location,
+        });
+      } else {
+        elements.push({
+          id,
+          name: id,
+          kind: entry.kind,
+          visibility: "public",
+          references: refs,
+          location,
+        });
+      }
     }
     return elements;
   });

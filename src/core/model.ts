@@ -18,26 +18,32 @@ const codeMemberSchema = z.discriminatedUnion("kind", [
   }),
 ]);
 
-const codeElementSchema = z.object({
+const codeElementCommon = {
   id: z.string(),
   componentId: z.string(),
   containerId: z.string(),
-  kind: z.enum([
-    "class",
-    "interface",
-    "enum",
-    "type",
-    "function",
-    "struct",
-    "typedef",
-  ]),
   name: z.string(),
   qualifiedName: z.string().optional(),
   language: z.enum(["java", "typescript", "python", "c"]).optional(),
   visibility: z.enum(["public", "internal", "private"]).optional(),
-  members: z.array(codeMemberSchema).optional(),
   tags: z.array(z.string()).optional(),
-});
+};
+
+// Discriminated on `kind`: container kinds (class/interface/enum/struct) carry
+// `members`; symbol kinds (type/typedef/function) carry `signature`. Rejects
+// cross-shape shapes at ingress (e.g. `{ kind: "function", members: [...] }`).
+const codeElementSchema = z.discriminatedUnion("kind", [
+  z.object({
+    ...codeElementCommon,
+    kind: z.enum(["class", "interface", "enum", "struct"]),
+    members: z.array(codeMemberSchema).optional(),
+  }),
+  z.object({
+    ...codeElementCommon,
+    kind: z.enum(["type", "typedef", "function"]),
+    signature: z.string().optional(),
+  }),
+]);
 
 const codeRelationshipSchema = z.object({
   sourceId: z.string(),

@@ -100,72 +100,96 @@
       "type": "array",
       "default": [],
       "items": {
-        "type": "object",
-        "required": ["id", "componentId", "containerId", "kind", "name"],
-        "properties": {
-          "id": { "type": "string" },
-          "componentId": { "type": "string" },
-          "containerId": { "type": "string" },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "class",
-              "interface",
-              "enum",
-              "type",
-              "function",
-              "struct",
-              "typedef"
-            ]
-          },
-          "name": { "type": "string" },
-          "qualifiedName": { "type": "string" },
-          "language": {
-            "type": "string",
-            "enum": ["java", "typescript", "python", "c"]
-          },
-          "visibility": {
-            "type": "string",
-            "enum": ["public", "internal", "private"]
-          },
-          "members": {
-            "type": "array",
-            "items": {
-              "oneOf": [
-                {
-                  "type": "object",
-                  "required": ["name", "kind"],
-                  "properties": {
-                    "name": { "type": "string" },
-                    "kind": { "type": "string", "const": "field" },
-                    "signature": { "type": "string" },
-                    "visibility": {
-                      "type": "string",
-                      "enum": ["public", "internal", "private"]
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["id", "componentId", "containerId", "kind", "name"],
+            "properties": {
+              "id": { "type": "string" },
+              "componentId": { "type": "string" },
+              "containerId": { "type": "string" },
+              "kind": {
+                "type": "string",
+                "enum": ["class", "interface", "enum", "struct"]
+              },
+              "name": { "type": "string" },
+              "qualifiedName": { "type": "string" },
+              "language": {
+                "type": "string",
+                "enum": ["java", "typescript", "python", "c"]
+              },
+              "visibility": {
+                "type": "string",
+                "enum": ["public", "internal", "private"]
+              },
+              "members": {
+                "type": "array",
+                "items": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": ["name", "kind"],
+                      "properties": {
+                        "name": { "type": "string" },
+                        "kind": { "type": "string", "const": "field" },
+                        "signature": { "type": "string" },
+                        "visibility": {
+                          "type": "string",
+                          "enum": ["public", "internal", "private"]
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": ["name", "kind", "signature"],
+                      "properties": {
+                        "name": { "type": "string" },
+                        "kind": { "type": "string", "const": "method" },
+                        "signature": { "type": "string" },
+                        "visibility": {
+                          "type": "string",
+                          "enum": ["public", "internal", "private"]
+                        }
+                      }
                     }
-                  }
-                },
-                {
-                  "type": "object",
-                  "required": ["name", "kind", "signature"],
-                  "properties": {
-                    "name": { "type": "string" },
-                    "kind": { "type": "string", "const": "method" },
-                    "signature": { "type": "string" },
-                    "visibility": {
-                      "type": "string",
-                      "enum": ["public", "internal", "private"]
-                    }
-                  }
+                  ]
                 }
-              ]
+              },
+              "tags": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
             }
           },
-          "tags": {
-            "type": "array",
-            "items": { "type": "string" }
+          {
+            "type": "object",
+            "required": ["id", "componentId", "containerId", "kind", "name"],
+            "properties": {
+              "id": { "type": "string" },
+              "componentId": { "type": "string" },
+              "containerId": { "type": "string" },
+              "kind": {
+                "type": "string",
+                "enum": ["type", "typedef", "function"]
+              },
+              "name": { "type": "string" },
+              "qualifiedName": { "type": "string" },
+              "language": {
+                "type": "string",
+                "enum": ["java", "typescript", "python", "c"]
+              },
+              "visibility": {
+                "type": "string",
+                "enum": ["public", "internal", "private"]
+              },
+              "signature": { "type": "string" },
+              "tags": {
+                "type": "array",
+                "items": { "type": "string" }
+              }
+            }
           }
-        }
+        ]
       }
     },
     "codeRelationships": {

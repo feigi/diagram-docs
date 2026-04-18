@@ -130,23 +130,47 @@ export function buildCodeModel(
       const { raw: re, owner } = bucket[i];
       const qualified = suffixes ? `${base}-${suffixes[i]}` : base;
       qualifiedIdByRaw.set(re, qualified);
-      const filteredMembers = !includeMembers
-        ? undefined
-        : includePrivate
-          ? re.members
-          : re.members?.filter((m) => m.visibility !== "private");
-      elements.push({
+      // Discriminated push: container kinds copy filtered `members`; symbol
+      // kinds copy `signature`. Keeps the CodeElement variant tight — no
+      // `members: undefined` leaking onto function/type/typedef.
+      const common = {
         id: qualified,
         componentId: owner.componentId,
         containerId: owner.containerId,
-        kind: re.kind,
         name: re.name,
         qualifiedName: re.qualifiedName,
         language: owner.language,
         visibility: re.visibility,
-        members: filteredMembers,
         tags: re.tags,
-      });
+      };
+      switch (re.kind) {
+        case "class":
+        case "interface":
+        case "enum":
+        case "struct": {
+          const filteredMembers = !includeMembers
+            ? undefined
+            : includePrivate
+              ? re.members
+              : re.members?.filter((m) => m.visibility !== "private");
+          elements.push({
+            ...common,
+            kind: re.kind,
+            members: filteredMembers,
+          });
+          break;
+        }
+        case "type":
+        case "typedef":
+        case "function": {
+          elements.push({
+            ...common,
+            kind: re.kind,
+            signature: re.signature,
+          });
+          break;
+        }
+      }
     }
   }
 

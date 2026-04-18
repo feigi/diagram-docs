@@ -70,19 +70,31 @@ export interface ModuleImport {
  * `function`; Python emits `class | function`; C emits `struct | typedef |
  * function`. Keeping this as a closed union catches analyzer typos at compile
  * time and tells generators the full domain to render against.
+ *
+ * Discriminated union split (see CodeElement / RawCodeElement): container
+ * kinds carry `members`; alias/signature kinds carry an optional `signature`.
  */
 export type CodeElementKind =
   | "class"
   | "interface"
   | "enum"
-  | "type"
-  | "function"
   | "struct"
-  | "typedef";
+  | "type"
+  | "typedef"
+  | "function";
 
-export interface RawCodeElement {
+/** Kinds whose source representation has a body of fields/methods. */
+export type ContainerCodeElementKind =
+  | "class"
+  | "interface"
+  | "enum"
+  | "struct";
+
+/** Kinds whose source representation is a bare name/alias or callable. */
+export type SymbolCodeElementKind = "type" | "typedef" | "function";
+
+interface RawCodeElementCommon {
   id: string;
-  kind: CodeElementKind;
   name: string;
   /**
    * Fully-qualified name (e.g. `com.example.UserService`). Set by analyzers
@@ -91,11 +103,20 @@ export interface RawCodeElement {
    */
   qualifiedName?: string;
   visibility?: "public" | "internal" | "private";
-  members?: CodeMember[];
   tags?: string[];
   references?: RawCodeReference[];
   location: { file: string; line: number };
 }
+
+export type RawCodeElement =
+  | (RawCodeElementCommon & {
+      kind: ContainerCodeElementKind;
+      members?: CodeMember[];
+    })
+  | (RawCodeElementCommon & {
+      kind: SymbolCodeElementKind;
+      signature?: string;
+    });
 
 /**
  * Discriminated on `kind`: methods always carry a signature (the callable
@@ -175,20 +196,34 @@ export interface ArchitectureModel {
 /** Single component entry from ArchitectureModel.components */
 export type Component = ArchitectureModel["components"][number];
 
-export interface CodeElement {
+interface CodeElementCommon {
   id: string;
   componentId: string;
   containerId: string;
-  kind: CodeElementKind;
   name: string;
   /** FQN propagated from RawCodeElement; resolver uses it to disambiguate same-name types across packages. */
   qualifiedName?: string;
   /** Source language (from the owning app), persisted so --model mode can pick a profile. */
   language?: "java" | "typescript" | "python" | "c";
   visibility?: "public" | "internal" | "private";
-  members?: CodeMember[];
   tags?: string[];
 }
+
+/**
+ * Discriminated on `kind`. Container kinds carry `members` (a class body,
+ * struct fields, enum variants); alias/signature kinds carry an optional
+ * `signature` string. Splitting them rules out malformed shapes like a
+ * `function` element with populated `members` at compile time.
+ */
+export type CodeElement =
+  | (CodeElementCommon & {
+      kind: ContainerCodeElementKind;
+      members?: CodeMember[];
+    })
+  | (CodeElementCommon & {
+      kind: SymbolCodeElementKind;
+      signature?: string;
+    });
 
 export interface CodeRelationship {
   sourceId: string;
