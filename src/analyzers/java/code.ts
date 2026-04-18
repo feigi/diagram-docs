@@ -14,6 +14,49 @@ type SyntaxNode = TreeSitter.SyntaxNode;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const getQuery = createQueryLoader(path.join(__dirname, "queries", "code.scm"));
 
+// java.lang is implicitly imported and those types are out-of-project anyway.
+// Primitives should never appear as type_identifier (tree-sitter tags them as
+// integral_type/floating_point_type/etc.) but we list them defensively in case
+// a grammar edge case leaks a bare identifier through.
+const JAVA_LANG_BUILTINS = new Set([
+  "String",
+  "Object",
+  "Integer",
+  "Long",
+  "Short",
+  "Byte",
+  "Boolean",
+  "Character",
+  "Float",
+  "Double",
+  "Number",
+  "Void",
+  "Class",
+  "Enum",
+  "Throwable",
+  "Exception",
+  "RuntimeException",
+  "Error",
+  "Thread",
+  "Runnable",
+  "System",
+  "Math",
+  "Iterable",
+  "Comparable",
+  "CharSequence",
+  "StringBuilder",
+  "StringBuffer",
+  "int",
+  "long",
+  "short",
+  "byte",
+  "boolean",
+  "char",
+  "float",
+  "double",
+  "void",
+]);
+
 export async function extractJavaCode(
   filePath: string,
   source: string,
@@ -194,7 +237,98 @@ function collectReferences(
     }
   }
 
+  if (elementKind === "class" || elementKind === "interface") {
+    const seen = new Set(references.map((r) => r.targetName));
+    for (const name of collectBodyTypeNames(declNode)) {
+      if (JAVA_LANG_BUILTINS.has(name) || seen.has(name)) continue;
+      seen.add(name);
+      push(name, "uses");
+    }
+  }
+
   return references;
+}
+
+// Collects type names referenced in field, method-parameter, method-return,
+// and constructor-parameter positions within a class/interface body. Call-site
+// and local-variable references are skipped to keep L4 diagrams focused on
+// structural dependencies.
+function collectBodyTypeNames(declNode: SyntaxNode): string[] {
+  const out: string[] = [];
+  for (const child of declNode.namedChildren ?? []) {
+    if (child.type !== "class_body" && child.type !== "interface_body") {
+      continue;
+    }
+    for (const bodyChild of child.namedChildren ?? []) {
+      if (
+        bodyChild.type === "field_declaration" ||
+        bodyChild.type === "constant_declaration"
+      ) {
+        out.push(...collectJavaTypeNames(bodyChild.childForFieldName("type")));
+      } else if (
+        bodyChild.type === "method_declaration" ||
+        bodyChild.type === "constructor_declaration"
+      ) {
+        if (bodyChild.type === "method_declaration") {
+          out.push(
+            ...collectJavaTypeNames(bodyChild.childForFieldName("type")),
+          );
+        }
+        const params = bodyChild.childForFieldName("parameters");
+        if (params) {
+          for (const p of params.namedChildren ?? []) {
+            if (p.type !== "formal_parameter" && p.type !== "spread_parameter")
+              continue;
+            out.push(...collectJavaTypeNames(p.childForFieldName("type")));
+          }
+        }
+      }
+    }
+  }
+  return out;
+}
+
+function collectJavaTypeNames(node: SyntaxNode | null): string[] {
+  if (!node) return [];
+  if (node.type === "type_identifier") return [node.text];
+  if (node.type === "generic_type") {
+    const out: string[] = [];
+    const base =
+      node.childForFieldName("name") ??
+      (node.namedChildren ?? []).find(
+        (c) =>
+          c.type === "type_identifier" || c.type === "scoped_type_identifier",
+      );
+    if (base) out.push(...collectJavaTypeNames(base));
+    const args = (node.namedChildren ?? []).find(
+      (c) => c.type === "type_arguments",
+    );
+    if (args) {
+      for (const arg of args.namedChildren ?? []) {
+        out.push(...collectJavaTypeNames(arg));
+      }
+    }
+    return out;
+  }
+  if (node.type === "array_type") {
+    const el =
+      node.childForFieldName("element") ?? (node.namedChildren ?? [])[0];
+    return el ? collectJavaTypeNames(el) : [];
+  }
+  if (node.type === "scoped_type_identifier") {
+    const idents = (node.namedChildren ?? []).filter(
+      (c) => c.type === "type_identifier",
+    );
+    return idents.length > 0 ? [idents[idents.length - 1].text] : [];
+  }
+  if (node.type === "wildcard") {
+    const out: string[] = [];
+    for (const c of node.namedChildren ?? []) {
+      out.push(...collectJavaTypeNames(c));
+    }
+    return out;
+  }
+  return [];
 }
 
 function collectMembers(declNode: SyntaxNode): CodeMember[] {

@@ -73,3 +73,62 @@ describe("python code extraction", () => {
     expect(Array.isArray(elements)).toBe(true);
   });
 });
+
+describe("python code extraction: uses references", () => {
+  it("captures uses edges from typed method signatures", async () => {
+    const src = `class User: ...
+class UserRepo:
+    def find(self, name: str) -> User:
+        return User()
+`;
+    const els = await extractPythonCode("repo.py", src);
+    const repo = els.find((e) => e.name === "UserRepo")!;
+    const usesNames = (repo.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName);
+    expect(usesNames).toContain("User");
+  });
+
+  it("filters Python builtins and typing generics from uses", async () => {
+    const els = await extractPythonCode(
+      FIXTURE,
+      fs.readFileSync(FIXTURE, "utf-8"),
+    );
+    const svc = els.find((e) => e.name === "UserService")!;
+    const usesNames = (svc.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName);
+    expect(usesNames).not.toContain("str");
+    expect(usesNames).not.toContain("List");
+  });
+
+  it("does not emit a base class as uses when it appears only in signatures too", async () => {
+    const src = `class Base: ...
+class Derived(Base):
+    def make(self, b: Base) -> Base:
+        return b
+`;
+    const els = await extractPythonCode("x.py", src);
+    const derived = els.find((e) => e.name === "Derived")!;
+    const baseRefs = (derived.references ?? []).filter(
+      (r) => r.targetName === "Base",
+    );
+    expect(baseRefs.map((r) => r.kind)).toEqual(["extends"]);
+  });
+
+  it("unwraps List[X] subscripts to the element type", async () => {
+    const src = `from typing import List
+class Item: ...
+class Bag:
+    def all(self) -> List[Item]:
+        return []
+`;
+    const els = await extractPythonCode("bag.py", src);
+    const bag = els.find((e) => e.name === "Bag")!;
+    const usesNames = (bag.references ?? [])
+      .filter((r) => r.kind === "uses")
+      .map((r) => r.targetName);
+    expect(usesNames).toContain("Item");
+    expect(usesNames).not.toContain("List");
+  });
+});
