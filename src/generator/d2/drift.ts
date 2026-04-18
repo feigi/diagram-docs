@@ -77,7 +77,12 @@ export function checkDrift(
             "c4-code.d2",
           );
           if (!fs.existsSync(codeFile)) continue;
-          warnings.push(...checkFile(codeFile, codeIds, codeOpts));
+          // Root-mode c4-code.d2 files all share the same basename, so the
+          // default basename-only `file` field is ambiguous across components.
+          // Replace it with the absolute path so warnings can be located.
+          for (const w of checkFile(codeFile, codeIds, codeOpts)) {
+            warnings.push({ ...w, file: codeFile });
+          }
         }
       }
     }
