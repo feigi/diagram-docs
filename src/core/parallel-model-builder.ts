@@ -296,11 +296,23 @@ export async function buildModelParallel(
     progress.setApps(appIds);
   }
 
+  // Suppress L4 in internal buildModel calls so buildCodeModel's stderr
+  // warnings don't interleave with the live progress frame (each write shifts
+  // cursor math and leaves a stale header row behind). The final
+  // attachCodeModel on the merged result recomputes L4 once from the full
+  // rawStructure, so anchors and fullDeterministic don't need it.
+  const configNoCode: Config = {
+    ...config,
+    levels: { ...config.levels, code: false },
+  };
+
   // -- Step 2: Build per-app deterministic anchors --
   const anchors: ArchitectureModel[] = [];
   for (let i = 0; i < slices.length; i++) {
     try {
-      anchors.push(buildModel({ config, rawStructure: slices[i] }));
+      anchors.push(
+        buildModel({ config: configNoCode, rawStructure: slices[i] }),
+      );
     } catch (err) {
       const appId = slices[i].applications[0].id;
       progress?.stop(`Anchor generation failed for ${appId}`, true);
@@ -651,7 +663,7 @@ export async function buildModelParallel(
   onStatus?.("Adding cross-app relationships...");
   let fullDeterministic: ArchitectureModel;
   try {
-    fullDeterministic = buildModel({ config, rawStructure });
+    fullDeterministic = buildModel({ config: configNoCode, rawStructure });
   } catch (err) {
     rethrowIfFatal(err);
     throw new LLMCallError(
