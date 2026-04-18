@@ -197,3 +197,94 @@ describe("per-project cache", () => {
     expect(isModelStale(projectDir, "sha256:legacy")).toBe(true);
   });
 });
+
+import { configSchema } from "../../src/config/schema.js";
+import { runProjectScan } from "../../src/core/scan.js";
+import { buildEffectiveConfig } from "../../src/config/loader.js";
+
+describe("runProjectScan (two-fingerprint cache)", () => {
+  const tmpRoot = path.join(os.tmpdir(), `dd-runscan-${Date.now()}`);
+  const project = {
+    path: "services/api-gateway",
+    language: "java",
+    type: "container" as const,
+    analyzerId: "java",
+    buildFile: "build.gradle",
+  };
+
+  beforeEach(() => {
+    fs.mkdirSync(tmpRoot, { recursive: true });
+    fs.cpSync(MONOREPO_ROOT, tmpRoot, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("populates scanChecksum and modelChecksum on first run", async () => {
+    const config = buildEffectiveConfig(configSchema.parse({}));
+    const result = await runProjectScan({
+      rootDir: tmpRoot,
+      project,
+      config,
+    });
+    expect(result.fromCache).toBe(false);
+    expect(result.modelStale).toBe(true);
+
+    const cache = readProjectCache(path.join(tmpRoot, project.path));
+    expect(cache).not.toBeNull();
+    expect(cache!.scanChecksum).toMatch(/^sha256:/);
+    expect(cache!.modelChecksum).toMatch(/^sha256:/);
+    expect(cache!.scanChecksum).not.toBe(cache!.modelChecksum);
+  });
+
+  it("toggling levels.code re-scans but leaves modelStale = false", async () => {
+    const off = buildEffectiveConfig(
+      configSchema.parse({ levels: { code: false } }),
+    );
+    const on = buildEffectiveConfig(
+      configSchema.parse({ levels: { code: true } }),
+    );
+
+    const first = await runProjectScan({
+      rootDir: tmpRoot,
+      project,
+      config: off,
+    });
+    expect(first.fromCache).toBe(false);
+
+    const second = await runProjectScan({
+      rootDir: tmpRoot,
+      project,
+      config: on,
+    });
+    expect(second.fromCache).toBe(false);
+    expect(second.modelStale).toBe(false);
+  });
+
+  it("changing abstraction.granularity marks the model stale", async () => {
+    const balanced = buildEffectiveConfig(
+      configSchema.parse({ abstraction: { granularity: "balanced" } }),
+    );
+    const detailed = buildEffectiveConfig(
+      configSchema.parse({ abstraction: { granularity: "detailed" } }),
+    );
+
+    await runProjectScan({ rootDir: tmpRoot, project, config: balanced });
+    const second = await runProjectScan({
+      rootDir: tmpRoot,
+      project,
+      config: detailed,
+    });
+    expect(second.fromCache).toBe(false);
+    expect(second.modelStale).toBe(true);
+  });
+
+  it("hits the cache when nothing changes", async () => {
+    const config = buildEffectiveConfig(configSchema.parse({}));
+    await runProjectScan({ rootDir: tmpRoot, project, config });
+    const second = await runProjectScan({ rootDir: tmpRoot, project, config });
+    expect(second.fromCache).toBe(true);
+    expect(second.modelStale).toBe(false);
+  });
+});

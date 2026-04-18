@@ -5,7 +5,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { discoverApplications } from "./discovery.js";
-import { computeChecksum, computeProjectChecksum } from "./checksum.js";
+import {
+  computeChecksum,
+  computeProjectSourceHash,
+  mixFingerprint,
+} from "./checksum.js";
 import {
   readManifest,
   writeManifest,
@@ -14,7 +18,7 @@ import {
 import {
   readProjectCache,
   writeProjectScan,
-  isProjectStale,
+  isScanStale,
 } from "./per-project-cache.js";
 import { getAnalyzer } from "../analyzers/registry.js";
 import { slugify } from "./slugify.js";
@@ -482,7 +486,15 @@ export async function runScan({
 export interface ProjectScanResult {
   project: DiscoveredProject;
   scan: RawStructure;
+  /** True when the project's scan output came from cache (no re-analyze). */
   fromCache: boolean;
+  /**
+   * True when the L1–L3 model derived from this scan needs to be rebuilt —
+   * source files changed or a structural config key (excludes, abstraction,
+   * schemaVersion, optional scan.include) changed. L4-only config toggles
+   * do NOT set this.
+   */
+  modelStale: boolean;
 }
 
 /**
@@ -501,29 +513,37 @@ export async function runProjectScan(options: {
 }): Promise<ProjectScanResult> {
   const { rootDir, project, config: effectiveConfig, force, verbose } = options;
   const projectAbsPath = path.resolve(rootDir, project.path);
-
   const effectiveExcludes = effectiveConfig.scan.exclude;
 
-  const configFingerprint = buildScanFingerprint(
+  const scanFingerprint = buildScanFingerprint(
+    effectiveExcludes,
+    effectiveConfig,
+  );
+  const modelFingerprint = buildModelFingerprint(
     effectiveExcludes,
     effectiveConfig,
   );
 
-  const checksum = await computeProjectChecksum(
+  const sourceHash = await computeProjectSourceHash(
     projectAbsPath,
     effectiveExcludes,
-    configFingerprint,
   );
+  const scanChecksum = mixFingerprint(sourceHash, scanFingerprint);
+  const modelChecksum = mixFingerprint(sourceHash, modelFingerprint);
 
-  // Check per-project cache
-  if (!force && !isProjectStale(projectAbsPath, checksum)) {
+  if (!force && !isScanStale(projectAbsPath, scanChecksum)) {
     const cache = readProjectCache(projectAbsPath);
     if (cache) {
-      return { project, scan: cache.scan, fromCache: true };
+      return {
+        project,
+        scan: cache.scan,
+        fromCache: true,
+        modelStale: cache.modelChecksum !== modelChecksum,
+      };
     }
   }
 
-  // Run analyzer
+  // Scan was stale (or missing) — re-run the analyzer.
   const analyzer = getAnalyzer(project.analyzerId);
   if (!analyzer) {
     throw new ScanError(`No analyzer found for ${project.analyzerId}`);
@@ -538,10 +558,8 @@ export async function runProjectScan(options: {
 
   const result = await analyzer.analyze(projectAbsPath, scanConfig);
 
-  // Normalize IDs to relative paths
   const relativeId = slugify(project.path);
   const absolutePrefix = slugify(projectAbsPath);
-
   result.path = project.path;
   result.id = relativeId;
 
@@ -558,7 +576,6 @@ export async function runProjectScan(options: {
     }
   }
 
-  // Filter config files by architecture signals (Phase 2)
   const filterResults = applyConfigFiltering([result]);
   if (verbose) {
     for (const [, filterResult] of filterResults) {
@@ -574,7 +591,6 @@ export async function runProjectScan(options: {
     }
   }
 
-  // Extract only signal-bearing lines from config files (Phase 3)
   const extractionResults = applyConfigExtraction([result]);
   if (verbose) {
     for (const [, appResults] of extractionResults) {
@@ -589,14 +605,18 @@ export async function runProjectScan(options: {
   const scan: RawStructure = {
     version: 1,
     scannedAt: new Date().toISOString(),
-    checksum,
+    checksum: scanChecksum,
     applications: [result],
   };
 
-  // Write per-project cache
-  writeProjectScan(projectAbsPath, scan, checksum);
+  // Must read the previous cache BEFORE writing the new one, otherwise
+  // modelStale would always be false on every re-scan.
+  const prevCache = readProjectCache(projectAbsPath);
+  const modelStale = !prevCache || prevCache.modelChecksum !== modelChecksum;
 
-  return { project, scan, fromCache: false };
+  writeProjectScan(projectAbsPath, scan, scanChecksum, modelChecksum);
+
+  return { project, scan, fromCache: false, modelStale };
 }
 
 /**
