@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { buildCodeModel } from "../../src/core/code-model.js";
+import type { RawStructure, Component } from "../../src/analyzers/types.js";
 import {
   codeFixture as raw,
   codeFixtureComponents as components,
@@ -16,7 +17,11 @@ const baseConfig = makeConfig(true);
 describe("buildCodeModel", () => {
   it("short-circuits to empty when levels.code is false", () => {
     const result = buildCodeModel(raw, components, makeConfig(false));
-    expect(result).toEqual({ codeElements: [], codeRelationships: [] });
+    expect(result).toEqual({
+      codeElements: [],
+      codeRelationships: [],
+      droppedReferences: [],
+    });
   });
 
   it("assigns qualified IDs rooted in containerId.componentId", () => {
@@ -548,5 +553,174 @@ describe("buildCodeModel collision handling", () => {
     const { codeElements } = buildCodeModel(fixture, comps, baseConfig);
     const ids = codeElements.map((e) => e.id).sort();
     expect(ids).toEqual(["app.m.Foo-foo", "app.m.Foo-foo-2"]);
+  });
+});
+
+describe("buildCodeModel droppedReferences", () => {
+  it("populates the array with both stdlib and cross-container drops", () => {
+    // Two containers. `user-api.users.UserService` references:
+    //   - `Logger` (exists only in a different container → cross-container)
+    //   - `java.io.Serializable` (no such element anywhere → stdlib)
+    const fixture: RawStructure = {
+      applications: [
+        {
+          id: "user-api",
+          name: "user-api",
+          language: "java",
+          path: "/tmp/user-api",
+          modules: [
+            {
+              id: "users",
+              path: "/tmp/user-api/users",
+              name: "users",
+              files: ["UserService.java"],
+              exports: [],
+              imports: [],
+              metadata: {},
+              codeElements: [
+                {
+                  id: "UserService",
+                  name: "UserService",
+                  kind: "class",
+                  visibility: "public",
+                  references: [
+                    { targetName: "Logger", kind: "uses" },
+                    {
+                      targetName: "java.io.Serializable",
+                      kind: "implements",
+                    },
+                  ],
+                  location: { file: "UserService.java", line: 1 },
+                },
+                {
+                  id: "UserRepo",
+                  name: "UserRepo",
+                  kind: "interface",
+                  visibility: "public",
+                  location: { file: "UserService.java", line: 20 },
+                },
+              ],
+            },
+          ],
+          externalDependencies: [],
+          internalImports: [],
+        },
+        {
+          id: "order-api",
+          name: "order-api",
+          language: "java",
+          path: "/tmp/order-api",
+          modules: [
+            {
+              id: "logging",
+              path: "/tmp/order-api/logging",
+              name: "logging",
+              files: ["Logger.java"],
+              exports: [],
+              imports: [],
+              metadata: {},
+              codeElements: [
+                {
+                  id: "Logger",
+                  name: "Logger",
+                  kind: "class",
+                  visibility: "public",
+                  location: { file: "Logger.java", line: 1 },
+                },
+                {
+                  id: "LogConfig",
+                  name: "LogConfig",
+                  kind: "class",
+                  visibility: "public",
+                  location: { file: "Logger.java", line: 10 },
+                },
+              ],
+            },
+          ],
+          externalDependencies: [],
+          internalImports: [],
+        },
+      ],
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const comps: Component[] = [
+      {
+        id: "users",
+        containerId: "user-api",
+        name: "users",
+        description: "",
+        technology: "",
+        moduleIds: ["users"],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+      {
+        id: "logging",
+        containerId: "order-api",
+        name: "logging",
+        description: "",
+        technology: "",
+        moduleIds: ["logging"],
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      } as any,
+    ];
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const res = buildCodeModel(fixture, comps, baseConfig);
+    stderrSpy.mockRestore();
+
+    const reasons = new Set(res.droppedReferences.map((d) => d.reason));
+    expect(reasons.has("stdlib")).toBe(true);
+    expect(reasons.has("cross-container")).toBe(true);
+
+    for (const drop of res.droppedReferences) {
+      expect(drop.sourceId).toBeTruthy();
+      expect(drop.targetRaw).toBeTruthy();
+      expect(drop.componentId).toBeTruthy();
+    }
+
+    // Spot-check the specific drop entries match the fixture.
+    const stdlib = res.droppedReferences.find((d) => d.reason === "stdlib")!;
+    expect(stdlib).toMatchObject({
+      sourceId: "user-api.users.UserService",
+      targetRaw: "java.io.Serializable",
+      componentId: "users",
+    });
+    const crossContainer = res.droppedReferences.find(
+      (d) => d.reason === "cross-container",
+    )!;
+    expect(crossContainer).toMatchObject({
+      sourceId: "user-api.users.UserService",
+      targetRaw: "Logger",
+      componentId: "users",
+    });
+  });
+
+  it("records a collision drop when resolver picks ambiguously", () => {
+    // Two Auditable interfaces in the same module create a same-component
+    // collision when UserService references `Auditable`.
+    const collidingFixture = JSON.parse(JSON.stringify(raw));
+    collidingFixture.applications[0].modules[0].codeElements.push({
+      id: "Auditable",
+      name: "Auditable",
+      kind: "interface",
+      visibility: "public",
+      location: { file: "Other.java", line: 1 },
+    });
+    const stderrSpy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const res = buildCodeModel(collidingFixture, components, baseConfig);
+    stderrSpy.mockRestore();
+
+    const collisions = res.droppedReferences.filter(
+      (d) => d.reason === "collision",
+    );
+    expect(collisions.length).toBeGreaterThan(0);
+    for (const c of collisions) {
+      expect(c.sourceId).toBeTruthy();
+      expect(c.targetRaw).toBe("Auditable");
+      expect(c.componentId).toBe("users");
+    }
   });
 });
