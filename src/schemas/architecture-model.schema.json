@@ -119,6 +119,7 @@
             ]
           },
           "name": { "type": "string" },
+          "qualifiedName": { "type": "string" },
           "visibility": {
             "type": "string",
             "enum": ["public", "internal", "private"]
