@@ -1,5 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { buildScanFingerprint } from "../../src/core/scan.js";
+import {
+  buildScanFingerprint,
+  buildModelFingerprint,
+} from "../../src/core/scan.js";
 import { configSchema } from "../../src/config/schema.js";
 
 describe("buildScanFingerprint", () => {
@@ -76,5 +79,71 @@ describe("buildScanFingerprint", () => {
       { includeScanInclude: true },
     );
     expect(withInclude).not.toBe(sameConfigDifferentInclude);
+  });
+});
+
+describe("buildModelFingerprint", () => {
+  const baseConfig = configSchema.parse({});
+  const excludes = ["**/build/**"];
+
+  it("is deterministic for the same inputs", () => {
+    const a = buildModelFingerprint(excludes, baseConfig);
+    const b = buildModelFingerprint(excludes, baseConfig);
+    expect(a).toBe(b);
+  });
+
+  it("changes when excludes change", () => {
+    const a = buildModelFingerprint(excludes, baseConfig);
+    const b = buildModelFingerprint([...excludes, "**/tmp/**"], baseConfig);
+    expect(a).not.toBe(b);
+  });
+
+  it("changes when abstraction changes", () => {
+    const a = buildModelFingerprint(
+      excludes,
+      configSchema.parse({ abstraction: { granularity: "balanced" } }),
+    );
+    const b = buildModelFingerprint(
+      excludes,
+      configSchema.parse({ abstraction: { granularity: "detailed" } }),
+    );
+    expect(a).not.toBe(b);
+  });
+
+  it("is stable when levels.code toggles (the whole point of splitting)", () => {
+    const off = buildModelFingerprint(
+      excludes,
+      configSchema.parse({ levels: { code: false } }),
+    );
+    const on = buildModelFingerprint(
+      excludes,
+      configSchema.parse({ levels: { code: true } }),
+    );
+    expect(off).toBe(on);
+  });
+
+  it("is stable when code.* changes", () => {
+    const a = buildModelFingerprint(
+      excludes,
+      configSchema.parse({ code: { minElements: 2 } }),
+    );
+    const b = buildModelFingerprint(
+      excludes,
+      configSchema.parse({ code: { minElements: 5 } }),
+    );
+    expect(a).toBe(b);
+  });
+
+  it("includes scan.include only when requested", () => {
+    const without = buildModelFingerprint(excludes, baseConfig);
+    const withInclude = buildModelFingerprint(excludes, baseConfig, {
+      includeScanInclude: true,
+    });
+    expect(without).not.toBe(withInclude);
+  });
+
+  it("encodes a schemaVersion so model-logic changes invalidate caches", () => {
+    const fp = buildModelFingerprint(excludes, baseConfig);
+    expect(fp).toMatch(/"modelSchemaVersion":\d+/);
   });
 });
