@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { z } from "zod";
 import { configSchema } from "../../src/config/schema.js";
 import {
   SCAN_FINGERPRINT_KEYS,
@@ -7,20 +8,12 @@ import {
 } from "../../src/core/scan.js";
 
 function topLevelConfigKeys(): string[] {
-  // zod's ZodObject exposes `.shape` in v3+. For ZodDefault/ZodEffects
-  // wrappers, unwrap first.
-  // configSchema is `z.object({...}).strict()` in our schema; `.shape`
-  // is the keyof object type.
-  const schema: unknown = configSchema;
-  // @ts-expect-error - reach into zod internals for the test
-  const shape = schema.shape ?? schema._def?.schema?.shape;
-  if (!shape || typeof shape !== "object") {
+  if (!(configSchema instanceof z.ZodObject)) {
     throw new Error(
-      "Could not extract top-level keys from configSchema. " +
-        "If zod's internal shape has moved, update this helper.",
+      "configSchema is no longer a bare ZodObject — update this helper to unwrap the current type.",
     );
   }
-  return Object.keys(shape);
+  return Object.keys(configSchema.shape);
 }
 
 describe("fingerprint coverage tripwire", () => {
