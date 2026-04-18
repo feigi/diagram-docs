@@ -33,6 +33,7 @@ const codeElementSchema = z.object({
   ]),
   name: z.string(),
   qualifiedName: z.string().optional(),
+  language: z.enum(["java", "typescript", "python", "c"]).optional(),
   visibility: z.enum(["public", "internal", "private"]).optional(),
   members: z.array(codeMemberSchema).optional(),
   tags: z.array(z.string()).optional(),

@@ -33,6 +33,33 @@ export function dominantLanguageForComponent(
   model: ArchitectureModel,
   rawStructure?: RawStructure,
 ): ProfileLanguage {
+  // Resolution order:
+  //   1. Persisted `language` on CodeElement (set by buildCodeModel, survives
+  //      `--model` round-trips — this is the common path when generating from
+  //      a saved architecture-model.yaml).
+  //   2. rawStructure file counts (precise weighting when raw is available).
+  //   3. Kind-based inference from element kinds (ambiguous for class/function;
+  //      falls through to a java-default warning).
+  const persistedCounts: Record<ProfileLanguage, number> = {
+    java: 0,
+    typescript: 0,
+    python: 0,
+    c: 0,
+  };
+  for (const el of model.codeElements ?? []) {
+    if (el.componentId !== component.id) continue;
+    if (el.language) persistedCounts[el.language] += 1;
+  }
+  const totalPersisted =
+    persistedCounts.java +
+    persistedCounts.typescript +
+    persistedCounts.python +
+    persistedCounts.c;
+  if (totalPersisted > 0) {
+    const picked = selectProfileForComponent(persistedCounts);
+    if (picked) return picked;
+  }
+
   const counts: Record<ProfileLanguage, number> = {
     java: 0,
     typescript: 0,
