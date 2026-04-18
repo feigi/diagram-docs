@@ -1,4 +1,4 @@
-import { describe, it, expect, afterAll } from "vitest";
+import { describe, it, expect, afterAll, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -355,6 +355,64 @@ describe("Drift: c4-code scaffold references", () => {
     const warnings = checkDrift(tmp, model);
     expect(warnings.some((w) => w.id.includes("OldClass"))).toBe(true);
     fs.rmSync(tmp, { recursive: true, force: true });
+  });
+});
+
+describe("checkDrift — root-mode L4 uses absolute path", () => {
+  let tmp: string;
+  beforeEach(() => {
+    tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pr5-drift-"));
+  });
+  afterEach(() => {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
+
+  it("emits the absolute codeFile path in warnings instead of the shared basename", () => {
+    const compDir = path.join(tmp, "containers", "c1", "components", "comp1");
+    fs.mkdirSync(compDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(compDir, "c4-code.d2"),
+      "...@_generated/c4-code.d2\ndangling-id\n",
+    );
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "c1",
+          applicationId: "a1",
+          name: "C1",
+          description: "",
+          technology: "",
+        },
+      ],
+      components: [
+        {
+          id: "comp1",
+          containerId: "c1",
+          name: "Comp1",
+          description: "",
+          technology: "",
+          moduleIds: [],
+        },
+      ],
+      relationships: [],
+      codeElements: [
+        {
+          id: "other1",
+          componentId: "comp1",
+          containerId: "c1",
+          kind: "class",
+          name: "O1",
+        },
+      ],
+    };
+    const warnings = checkDrift(tmp, model);
+    const w = warnings.find((ww) => ww.id === "dangling-id");
+    expect(w).toBeDefined();
+    expect(w?.file).toBe(path.join(compDir, "c4-code.d2"));
   });
 });
 
