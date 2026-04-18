@@ -85,6 +85,7 @@
                           "typedef"
                         ]
                       },
+                      "qualifiedName": { "type": "string" },
                       "name": { "type": "string" },
                       "visibility": {
                         "type": "string",
@@ -120,6 +121,7 @@
                           "required": ["targetName", "kind"],
                           "properties": {
                             "targetName": { "type": "string" },
+                            "targetQualifiedName": { "type": "string" },
                             "kind": {
                               "type": "string",
                               "enum": [

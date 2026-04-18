@@ -32,6 +32,7 @@ const codeElementSchema = z.object({
     "typedef",
   ]),
   name: z.string(),
+  qualifiedName: z.string().optional(),
   visibility: z.enum(["public", "internal", "private"]).optional(),
   members: z.array(codeMemberSchema).optional(),
   tags: z.array(z.string()).optional(),
