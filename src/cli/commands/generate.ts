@@ -373,14 +373,18 @@ async function resolveModel(
     ? undefined
     : (absPath: string) =>
         buildEffectiveConfig(resolveConfig(absPath, configDir));
-  const { rawStructure, projectResults, staleProjects } = await runScanAll({
-    rootDir: configDir,
-    config: effectiveConfig,
-    projects: discovered,
-    getProjectConfig,
-  });
+  const { rawStructure, projectResults, modelStaleProjects } = await runScanAll(
+    {
+      rootDir: configDir,
+      config: effectiveConfig,
+      projects: discovered,
+      getProjectConfig,
+    },
+  );
 
-  const staleContainers = staleProjects.filter((p) => p.type === "container");
+  const staleContainers = modelStaleProjects.filter(
+    (p) => p.type === "container",
+  );
 
   // 4. If nothing changed, reuse existing model — but first check for deletions.
   const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
@@ -421,7 +425,7 @@ async function resolveModel(
   >();
   for (const result of projectResults) {
     if (result.project.type !== "container") continue;
-    if (result.fromCache) {
+    if (!result.modelStale) {
       const cache = readProjectCache(
         path.resolve(configDir, result.project.path),
       );
