@@ -39,6 +39,7 @@ import { validateD2Files } from "../../generator/d2/validate.js";
 import {
   removeStaleContainerDirs,
   removeStaleSubmoduleDirs,
+  removeStaleComponentDirs,
   removeStaleSubmoduleComponentDirs,
 } from "../../generator/d2/cleanup.js";
 import {
@@ -113,6 +114,7 @@ export const generateCommand = new Command("generate")
 
     // Remove scaffold/generated dirs for containers deleted since last scan.
     removeStaleContainerDirs(outputDir, model);
+    removeStaleComponentDirs(outputDir, model);
     removeStaleSubmoduleComponentDirs(configDir, config, model);
 
     // Ensure output directories exist
