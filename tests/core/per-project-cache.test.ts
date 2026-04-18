@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
-import { computeProjectChecksum } from "../../src/core/checksum.js";
+import {
+  computeProjectChecksum,
+  computeProjectSourceHash,
+  mixFingerprint,
+} from "../../src/core/checksum.js";
 import {
   readProjectCache,
   writeProjectScan,
@@ -45,6 +49,50 @@ describe("computeProjectChecksum", () => {
     const a = await computeProjectChecksum(dir, []);
     const b = await computeProjectChecksum(dir, []);
     expect(a).toBe(b);
+  });
+});
+
+describe("computeProjectSourceHash", () => {
+  it("hashes only source files (no fingerprint mixed in)", async () => {
+    const dir = path.join(MONOREPO_ROOT, "services/api-gateway");
+    const srcA = await computeProjectSourceHash(dir, []);
+    const srcB = await computeProjectSourceHash(dir, []);
+    expect(srcA).toBe(srcB);
+    expect(srcA).toMatch(/^sha256:[a-f0-9]{64}$/);
+  });
+
+  it("is independent of any fingerprint", async () => {
+    const dir = path.join(MONOREPO_ROOT, "services/api-gateway");
+    const src = await computeProjectSourceHash(dir, []);
+    const ck = await computeProjectChecksum(dir, [], "fingerprint-a");
+    expect(src).not.toBe(ck);
+  });
+});
+
+describe("mixFingerprint", () => {
+  it("is deterministic", () => {
+    expect(mixFingerprint("sha256:abc", "fp")).toBe(
+      mixFingerprint("sha256:abc", "fp"),
+    );
+  });
+
+  it("produces different checksums for different fingerprints", () => {
+    const a = mixFingerprint("sha256:abc", "fp-a");
+    const b = mixFingerprint("sha256:abc", "fp-b");
+    expect(a).not.toBe(b);
+  });
+
+  it("produces different checksums for different source hashes", () => {
+    const a = mixFingerprint("sha256:aaa", "fp");
+    const b = mixFingerprint("sha256:bbb", "fp");
+    expect(a).not.toBe(b);
+  });
+
+  it("matches computeProjectChecksum when composed", async () => {
+    const dir = path.join(MONOREPO_ROOT, "services/api-gateway");
+    const src = await computeProjectSourceHash(dir, []);
+    const combined = await computeProjectChecksum(dir, [], "fp-x");
+    expect(mixFingerprint(src, "fp-x")).toBe(combined);
   });
 });
 

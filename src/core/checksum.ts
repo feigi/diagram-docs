@@ -55,28 +55,21 @@ export async function computeChecksum(
 }
 
 /**
- * Compute a checksum for a single project directory.
- * Hashes all source files within the directory, in sorted order.
+ * Hash the source files of a project without mixing in any config
+ * fingerprint. Callers combine the result with a fingerprint via
+ * `mixFingerprint` to produce the scan or model cache checksums.
  */
-export async function computeProjectChecksum(
+export async function computeProjectSourceHash(
   projectDir: string,
   exclude: string[],
-  configFingerprint?: string,
 ): Promise<string> {
   const hash = crypto.createHash("sha256");
-
-  if (configFingerprint) {
-    hash.update(configFingerprint);
-  }
-
   const extPattern = `**/*.{${SOURCE_EXTENSIONS.join(",")}}`;
-
   const files = await glob(extPattern, {
     cwd: projectDir,
     ignore: exclude,
     nodir: true,
   });
-
   const sortedFiles = files.sort();
   for (let i = 0; i < sortedFiles.length; i++) {
     const file = sortedFiles[i];
@@ -87,6 +80,31 @@ export async function computeProjectChecksum(
       await new Promise((resolve) => setImmediate(resolve));
     }
   }
-
   return `sha256:${hash.digest("hex")}`;
+}
+
+/**
+ * Derive a per-project checksum by mixing a source hash with a config
+ * fingerprint. Deterministic and collision-resistant: different
+ * fingerprints yield different checksums for the same source.
+ */
+export function mixFingerprint(
+  sourceHash: string,
+  fingerprint: string,
+): string {
+  const hash = crypto.createHash("sha256");
+  hash.update(fingerprint);
+  hash.update("\n");
+  hash.update(sourceHash);
+  return `sha256:${hash.digest("hex")}`;
+}
+
+export async function computeProjectChecksum(
+  projectDir: string,
+  exclude: string[],
+  configFingerprint?: string,
+): Promise<string> {
+  const source = await computeProjectSourceHash(projectDir, exclude);
+  if (!configFingerprint) return source;
+  return mixFingerprint(source, configFingerprint);
 }
