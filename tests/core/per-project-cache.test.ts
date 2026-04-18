@@ -8,7 +8,8 @@ import {
   readProjectCache,
   writeProjectScan,
   writeProjectModel,
-  isProjectStale,
+  isScanStale,
+  isModelStale,
 } from "../../src/core/per-project-cache.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -109,22 +110,22 @@ describe("per-project cache", () => {
   });
 
   it("returns null when no cache exists", () => {
-    const cache = readProjectCache(projectDir);
-    expect(cache).toBeNull();
+    expect(readProjectCache(projectDir)).toBeNull();
   });
 
-  it("writes and reads scan cache", () => {
+  it("writes and reads both checksums", () => {
     const scan = {
       version: 1 as const,
       scannedAt: "2026-01-01T00:00:00Z",
-      checksum: "sha256:abc",
+      checksum: "sha256:scan",
       applications: [],
     };
-    writeProjectScan(projectDir, scan, "sha256:abc");
+    writeProjectScan(projectDir, scan, "sha256:scan", "sha256:model");
 
     const cache = readProjectCache(projectDir);
     expect(cache).not.toBeNull();
-    expect(cache!.checksum).toBe("sha256:abc");
+    expect(cache!.scanChecksum).toBe("sha256:scan");
+    expect(cache!.modelChecksum).toBe("sha256:model");
     expect(cache!.scan).toEqual(scan);
     expect(cache!.model).toBeNull();
   });
@@ -133,10 +134,10 @@ describe("per-project cache", () => {
     const scan = {
       version: 1 as const,
       scannedAt: "2026-01-01T00:00:00Z",
-      checksum: "sha256:abc",
+      checksum: "sha256:scan",
       applications: [],
     };
-    writeProjectScan(projectDir, scan, "sha256:abc");
+    writeProjectScan(projectDir, scan, "sha256:scan", "sha256:model");
 
     const model = {
       version: 1 as const,
@@ -153,23 +154,46 @@ describe("per-project cache", () => {
     expect(cache!.model).toEqual(model);
   });
 
-  it("detects stale project when checksum changes", () => {
+  it("detects scan-stale and model-stale independently", () => {
     writeProjectScan(
       projectDir,
       {
         version: 1 as const,
         scannedAt: "2026-01-01T00:00:00Z",
-        checksum: "sha256:old",
+        checksum: "sha256:scan",
         applications: [],
       },
-      "sha256:old",
+      "sha256:scan",
+      "sha256:model",
     );
 
-    expect(isProjectStale(projectDir, "sha256:old")).toBe(false);
-    expect(isProjectStale(projectDir, "sha256:new")).toBe(true);
+    expect(isScanStale(projectDir, "sha256:scan")).toBe(false);
+    expect(isScanStale(projectDir, "sha256:other")).toBe(true);
+    expect(isModelStale(projectDir, "sha256:model")).toBe(false);
+    expect(isModelStale(projectDir, "sha256:other")).toBe(true);
   });
 
-  it("detects stale when no cache exists", () => {
-    expect(isProjectStale(projectDir, "sha256:any")).toBe(true);
+  it("reports stale when no cache exists", () => {
+    expect(isScanStale(projectDir, "sha256:any")).toBe(true);
+    expect(isModelStale(projectDir, "sha256:any")).toBe(true);
+  });
+
+  it("treats pre-migration caches (legacy single `checksum` file) as stale", () => {
+    const cacheDir = path.join(projectDir, ".diagram-docs");
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.writeFileSync(path.join(cacheDir, "checksum"), "sha256:legacy");
+    fs.writeFileSync(
+      path.join(cacheDir, "scan.json"),
+      JSON.stringify({
+        version: 1,
+        scannedAt: "2026-01-01T00:00:00Z",
+        checksum: "sha256:legacy",
+        applications: [],
+      }),
+    );
+
+    expect(readProjectCache(projectDir)).toBeNull();
+    expect(isScanStale(projectDir, "sha256:legacy")).toBe(true);
+    expect(isModelStale(projectDir, "sha256:legacy")).toBe(true);
   });
 });
