@@ -183,7 +183,6 @@ export function generateSubmoduleDocs(
           const d2 = generateCodeDiagram(model, component, profile);
           const genPath = path.join(compGenDir, "c4-code.d2");
           if (writeIfChanged(genPath, d2)) changed = true;
-          d2Files.push(genPath);
 
           scaffoldCodeFile(path.join(compDir, "c4-code.d2"), {
             containerName: container.name,

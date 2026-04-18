@@ -535,6 +535,45 @@ describe("Integration: Submodule per-folder docs", () => {
     expect(fs.existsSync(componentsDir)).toBe(false);
   });
 
+  it("skips L4 generation for containers with override.exclude: true", () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-l4-exclude");
+    trackDir(tmpRoot);
+    fs.mkdirSync(tmpRoot, { recursive: true });
+
+    const model = loadModel(path.join(MONOREPO, "architecture-model.yaml"));
+    const compId = model.components[0].id;
+    const containerId = model.components[0].containerId;
+    const applicationId = model.containers.find(
+      (c) => c.id === containerId,
+    )!.applicationId;
+    model.codeElements = [
+      {
+        id: `${compId}__only`,
+        componentId: compId,
+        containerId,
+        kind: "class",
+        name: "Only",
+      },
+    ];
+
+    const config = configSchema.parse({
+      submodules: {
+        enabled: true,
+        overrides: { [applicationId]: { exclude: true } },
+      },
+      levels: { component: true, code: true },
+      code: { minElements: 1, includePrivate: false, includeMembers: true },
+    });
+
+    const codeLinks = new Set([compId]);
+    const results = generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config, {
+      codeLinks,
+    });
+
+    // Excluded container should produce no result
+    expect(results.find((r) => r.containerId === containerId)).toBeUndefined();
+  });
+
   it("does not write root containers/<cid>/components/ tree when submodules enabled", async () => {
     const tmpRoot = path.join(MONOREPO, "test-submodule-no-root-l4");
     const tmpOutput = path.join(MONOREPO, "test-submodule-no-root-l4-output");
