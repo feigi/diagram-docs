@@ -117,7 +117,7 @@ describe("Integration: Submodule per-folder docs", () => {
       OUTPUT_DIR,
       model,
       config,
-    );
+    ).outputs;
 
     expect(subResults.length).toBeGreaterThan(0);
 
@@ -183,7 +183,7 @@ describe("Integration: Submodule per-folder docs", () => {
       OUTPUT_DIR,
       model,
       config,
-    );
+    ).outputs;
 
     // Track for cleanup
     for (const sub of subResults) {
@@ -215,7 +215,7 @@ describe("Integration: Submodule per-folder docs", () => {
       OUTPUT_DIR,
       model,
       config,
-    );
+    ).outputs;
     expect(subResults.length).toBeGreaterThan(0);
 
     for (const sub of subResults) {
@@ -683,7 +683,7 @@ describe("Integration: Submodule per-folder docs", () => {
     const codeLinks = new Set([compId]);
     const results = generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config, {
       codeLinks,
-    });
+    }).outputs;
 
     const target = results.find((r) => r.containerId === containerId);
     expect(target).toBeTruthy();
@@ -734,7 +734,7 @@ describe("Integration: Submodule per-folder docs", () => {
     const codeLinks = new Set<string>();
     const results = generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config, {
       codeLinks,
-    });
+    }).outputs;
 
     const target = results.find((r) => r.containerId === containerId);
     expect(target).toBeTruthy();
@@ -775,7 +775,7 @@ describe("Integration: Submodule per-folder docs", () => {
     const codeLinks = new Set([compId]);
     const results = generateSubmoduleDocs(tmpRoot, OUTPUT_DIR, model, config, {
       codeLinks,
-    });
+    }).outputs;
 
     // Excluded container should produce no result
     expect(results.find((r) => r.containerId === containerId)).toBeUndefined();

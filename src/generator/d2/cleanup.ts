@@ -200,7 +200,7 @@ export function removeStaleComponentDirs(
       const scaffoldFile = path.join(compDir, "c4-code.d2");
       if (isUserModified(scaffoldFile)) {
         console.error(
-          `Warning: containers/${containerEntry}/components/${compEntry}/c4-code.d2 has user customizations — remove manually if no longer needed.`,
+          `Warning: L4: containers/${containerEntry}/components/${compEntry}/c4-code.d2 has user customizations — remove manually if no longer needed.`,
         );
         continue;
       }
@@ -265,7 +265,7 @@ export function removeStaleSubmoduleComponentDirs(
 
       if (isUserModified(scaffoldFile)) {
         console.error(
-          `Warning: ${relPath} has user customizations — remove manually if no longer needed.`,
+          `Warning: L4: ${relPath} has user customizations — remove manually if no longer needed.`,
         );
         continue;
       }
