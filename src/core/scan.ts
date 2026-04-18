@@ -49,6 +49,40 @@ export interface ScanResult {
 }
 
 /**
+ * Every top-level config key MUST appear in exactly one of these lists. New
+ * keys that aren't classified cause the tripwire in
+ * `tests/config/fingerprint-coverage.test.ts` to fail. This prevents
+ * silent cache-bypass bugs like the one that motivated the scan/model
+ * fingerprint split (see plan 2026-04-18-split-scan-model-fingerprints.md).
+ *
+ * - `SCAN_FINGERPRINT_KEYS`: keys mixed into the per-project scan
+ *   checksum via `buildScanFingerprint`. Changing any of these forces a
+ *   re-scan.
+ * - `MODEL_FINGERPRINT_KEYS`: keys mixed into the per-project model
+ *   checksum via `buildModelFingerprint`. Changing any of these marks the
+ *   L1–L3 model stale. Must be a subset of `SCAN_FINGERPRINT_KEYS` — a
+ *   model-affecting key is by definition scan-affecting.
+ * - `IGNORED_FINGERPRINT_KEYS`: keys that don't affect either (rendering,
+ *   LLM provider selection, output paths, etc.). Adding a key here is a
+ *   conscious decision that toggling it shouldn't invalidate any cache.
+ */
+export const SCAN_FINGERPRINT_KEYS = [
+  "scan",
+  "abstraction",
+  "levels",
+  "code",
+] as const;
+export const MODEL_FINGERPRINT_KEYS = ["scan", "abstraction"] as const;
+export const IGNORED_FINGERPRINT_KEYS = [
+  "system",
+  "type",
+  "output",
+  "externalSystems",
+  "llm",
+  "submodules",
+] as const;
+
+/**
  * Build the config fingerprint fed into the scan cache checksum. Any config
  * key that an analyzer or scan-phase code path branches on MUST be included
  * here — otherwise toggling that key silently hits stale cache and the
