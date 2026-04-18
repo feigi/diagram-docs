@@ -183,6 +183,8 @@ export interface CodeElement {
   name: string;
   /** FQN propagated from RawCodeElement; resolver uses it to disambiguate same-name types across packages. */
   qualifiedName?: string;
+  /** Source language (from the owning app), persisted so --model mode can pick a profile. */
+  language?: "java" | "typescript" | "python" | "c";
   visibility?: "public" | "internal" | "private";
   members?: CodeMember[];
   tags?: string[];
