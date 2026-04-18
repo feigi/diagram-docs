@@ -637,11 +637,13 @@ export async function runScanAll(options: {
   rawStructure: RawStructure;
   projectResults: ProjectScanResult[];
   staleProjects: DiscoveredProject[];
+  modelStaleProjects: DiscoveredProject[];
 }> {
   const { rootDir, config, projects, getProjectConfig, force, verbose } =
     options;
   const projectResults: ProjectScanResult[] = [];
   const staleProjects: DiscoveredProject[] = [];
+  const modelStaleProjects: DiscoveredProject[] = [];
 
   for (const project of projects) {
     console.error(`Scanning: ${project.path} (${project.type})`);
@@ -659,9 +661,16 @@ export async function runScanAll(options: {
 
     if (result.fromCache) {
       console.error(`  Cached (unchanged)`);
-    } else {
+    } else if (result.modelStale) {
       console.error(`  Scanned`);
       staleProjects.push(project);
+    } else {
+      console.error(`  Re-scanned (L4 only, model cache reused)`);
+      staleProjects.push(project);
+    }
+
+    if (result.modelStale) {
+      modelStaleProjects.push(project);
     }
 
     projectResults.push(result);
@@ -713,5 +722,5 @@ export async function runScanAll(options: {
     applications: allApplications,
   };
 
-  return { rawStructure, projectResults, staleProjects };
+  return { rawStructure, projectResults, staleProjects, modelStaleProjects };
 }
