@@ -118,6 +118,7 @@ export async function extractCodeElementsForFiles(
   extractFn: (filePath: string, source: string) => Promise<RawCodeElement[]>,
 ): Promise<RawCodeElement[]> {
   let extractionFailures = 0;
+  let firstFailingFile: string | undefined;
   const results = await Promise.all(
     filePaths.map(async (fp) => {
       let source: string;
@@ -134,6 +135,7 @@ export async function extractCodeElementsForFiles(
         return await extractFn(fp, source);
       } catch (err) {
         extractionFailures++;
+        if (!firstFailingFile) firstFailingFile = fp;
         const msg = err instanceof Error ? err.message : String(err);
         process.stderr.write(
           `Warning: code-level extraction failed for ${fp}: ${msg}\n`,
@@ -145,11 +147,11 @@ export async function extractCodeElementsForFiles(
   if (extractionFailures > 0) {
     if (extractionFailures === filePaths.length) {
       process.stderr.write(
-        `Warning: code-level extraction failed on all ${filePaths.length} file(s) — likely a grammar, query, or walker bug rather than per-file source issues.\n`,
+        `Warning: code-level extraction failed on all ${filePaths.length} file(s) — likely a grammar, query, or walker bug rather than per-file source issues. First failing file: ${firstFailingFile ?? "(unknown)"}.\n`,
       );
     } else {
       process.stderr.write(
-        `Warning: code-level extraction failed for ${extractionFailures}/${filePaths.length} file(s); diagrams will be incomplete.\n`,
+        `Warning: code-level extraction failed for ${extractionFailures}/${filePaths.length} file(s); diagrams will be incomplete. First failing file: ${firstFailingFile ?? "(unknown)"}.\n`,
       );
     }
   }

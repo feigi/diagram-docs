@@ -185,4 +185,27 @@ describe("extractCodeElementsForFiles isolation", () => {
     stderrSpy.mockRestore();
     fs.rmSync(tmp, { recursive: true, force: true });
   });
+
+  it("includes the first failing filename in the aggregate warning", async () => {
+    // Deterministic: only the first file throws, so firstFailingFile is
+    // unambiguously files[0] regardless of Promise.all resolution order.
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "pr5-ts-fail-"));
+    const files = ["a.java", "b.java"].map((n) => {
+      const p = path.join(tmp, n);
+      fs.writeFileSync(p, "class Foo {}");
+      return p;
+    });
+    const spy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    await extractCodeElementsForFiles(files, async (fp) => {
+      if (fp === files[0]) throw new Error("simulated parser crash");
+      return [];
+    });
+    const all = spy.mock.calls.map((c) => String(c[0])).join("");
+    expect(all).toContain("First failing file:");
+    expect(all).toContain(files[0]);
+    spy.mockRestore();
+    fs.rmSync(tmp, { recursive: true, force: true });
+  });
 });
