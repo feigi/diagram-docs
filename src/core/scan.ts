@@ -55,6 +55,12 @@ export interface ScanResult {
  * silent cache-bypass bugs like the one that motivated the scan/model
  * fingerprint split (see plan 2026-04-18-split-scan-model-fingerprints.md).
  *
+ * Granularity is top-level only: every nested field under a top-level key
+ * must share that key's fingerprint semantics. If you add a sub-field with
+ * different semantics (e.g. a rendering-only field under `scan`), split
+ * the top-level key in the schema first — don't silently relax the
+ * classification.
+ *
  * - `SCAN_FINGERPRINT_KEYS`: keys mixed into the per-project scan
  *   checksum via `buildScanFingerprint`. Changing any of these forces a
  *   re-scan.
