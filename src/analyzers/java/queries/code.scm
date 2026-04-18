@@ -1,12 +1,9 @@
-;; Classes
 (class_declaration
   name: (identifier) @class.name) @class.decl
 
-;; Interfaces
 (interface_declaration
   name: (identifier) @interface.name) @interface.decl
 
-;; Enums
 (enum_declaration
   name: (identifier) @enum.name) @enum.decl
 
@@ -17,7 +14,6 @@
   name: (identifier) @method.name
   parameters: (formal_parameters) @method.params) @method.decl
 
-;; Fields
 (field_declaration
   (modifiers)? @field.modifiers
   type: (_) @field.type

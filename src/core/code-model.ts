@@ -37,9 +37,9 @@ interface ResolveContext {
   byComponentName: Map<string, CodeElement[]>; // key: `${componentId}:${name}`
   byContainerName: Map<string, CodeElement[]>; // key: `${containerId}:${name}`
   byContainerNameExcludingOwn: Map<string, CodeElement[]>; // key: `${ownContainerId}:${name}` — same-container candidates outside owner's component
-  /** Index of elements that carry a qualifiedName, keyed by `${componentId}:${qualifiedName}`. Always exactly one element per key when populated by analyzer. */
+  /** Index of elements that carry a qualifiedName, keyed by `${componentId}:${qualifiedName}`. Collisions are broken lexicographically by id. */
   byComponentQualifiedName: Map<string, CodeElement>;
-  /** Container-scope FQN index, keyed by `${containerId}:${qualifiedName}`. */
+  /** Container-scope FQN index, keyed by `${containerId}:${qualifiedName}`. Collisions broken lexicographically by id. */
   byContainerQualifiedName: Map<string, CodeElement>;
 }
 
@@ -410,16 +410,11 @@ function pushIndexed(
 }
 
 /**
- * Resolution order:
- *   1. Same component first (most specific scope; matches normal in-file usage).
- *   2. Same container, any component (cross-component refs within an app).
- *   3. Drop silently — refs to stdlib / third-party types legitimately won't
- *      resolve, and per-ref logging would drown the signal. Aggregate counts
- *      are surfaced via DIAGRAM_DOCS_DEBUG instead.
- *
- * Cross-container resolution is intentionally excluded: components in different
- * containers represent separately-deployable units, so a code-level edge across
- * that boundary would misrepresent the architecture.
+ * Resolve a reference against same-component, then same-container scope.
+ * FQN-keyed lookups win when available. Cross-container refs are intentionally
+ * unresolved — components in different containers represent separately-deployable
+ * units. Drops are not logged per-ref; aggregate counts are surfaced by
+ * buildCodeModel.
  */
 function resolveReference(
   ref: RawCodeReference,
