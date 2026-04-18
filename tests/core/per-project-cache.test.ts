@@ -199,8 +199,9 @@ describe("per-project cache", () => {
 });
 
 import { configSchema } from "../../src/config/schema.js";
-import { runProjectScan } from "../../src/core/scan.js";
+import { runProjectScan, runScanAll } from "../../src/core/scan.js";
 import { buildEffectiveConfig } from "../../src/config/loader.js";
+import { discoverApplications } from "../../src/core/discovery.js";
 
 describe("runProjectScan (two-fingerprint cache)", () => {
   const tmpRoot = path.join(os.tmpdir(), `dd-runscan-${Date.now()}`);
@@ -286,5 +287,47 @@ describe("runProjectScan (two-fingerprint cache)", () => {
     const second = await runProjectScan({ rootDir: tmpRoot, project, config });
     expect(second.fromCache).toBe(true);
     expect(second.modelStale).toBe(false);
+  });
+});
+
+describe("runScanAll (model-stale aggregation)", () => {
+  const tmpRoot = path.join(os.tmpdir(), `dd-runscanall-${Date.now()}`);
+
+  beforeEach(() => {
+    fs.mkdirSync(tmpRoot, { recursive: true });
+    fs.cpSync(MONOREPO_ROOT, tmpRoot, { recursive: true });
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpRoot, { recursive: true, force: true });
+  });
+
+  it("flipping levels.code re-scans but modelStaleProjects stays empty", async () => {
+    const off = buildEffectiveConfig(
+      configSchema.parse({ levels: { code: false } }),
+    );
+    const on = buildEffectiveConfig(
+      configSchema.parse({ levels: { code: true } }),
+    );
+
+    const projects = await discoverApplications(tmpRoot, off);
+
+    const first = await runScanAll({
+      rootDir: tmpRoot,
+      config: off,
+      projects,
+    });
+    expect(first.staleProjects.length).toBeGreaterThan(0);
+    expect(first.modelStaleProjects.length).toBe(first.staleProjects.length);
+
+    const second = await runScanAll({
+      rootDir: tmpRoot,
+      config: on,
+      projects,
+    });
+    // Every project was re-scanned (L4 now extracted)...
+    expect(second.staleProjects.length).toBe(projects.length);
+    // ...but the L1–L3 model is still valid for every project.
+    expect(second.modelStaleProjects).toEqual([]);
   });
 });
