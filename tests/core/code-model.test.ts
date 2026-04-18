@@ -21,6 +21,7 @@ describe("buildCodeModel", () => {
       codeElements: [],
       codeRelationships: [],
       droppedReferences: [],
+      ambiguousResolutions: [],
     });
   });
 
@@ -696,9 +697,12 @@ describe("buildCodeModel droppedReferences", () => {
     });
   });
 
-  it("records a collision drop when resolver picks ambiguously", () => {
+  it("records an ambiguous resolution when resolver picks among multiple candidates", () => {
     // Two Auditable interfaces in the same module create a same-component
-    // collision when UserService references `Auditable`.
+    // collision when UserService references `Auditable`. The resolver still
+    // picks one (so a CodeRelationship IS created), but the pick is
+    // surfaced via ambiguousResolutions — NOT droppedReferences, because
+    // no reference was actually dropped.
     const collidingFixture = JSON.parse(JSON.stringify(raw));
     collidingFixture.applications[0].modules[0].codeElements.push({
       id: "Auditable",
@@ -713,14 +717,18 @@ describe("buildCodeModel droppedReferences", () => {
     const res = buildCodeModel(collidingFixture, components, baseConfig);
     stderrSpy.mockRestore();
 
-    const collisions = res.droppedReferences.filter(
-      (d) => d.reason === "collision",
-    );
-    expect(collisions.length).toBeGreaterThan(0);
-    for (const c of collisions) {
-      expect(c.sourceId).toBeTruthy();
-      expect(c.targetRaw).toBe("Auditable");
-      expect(c.componentId).toBe("users");
+    // Collisions don't appear in droppedReferences — a relationship was created.
+    expect(res.droppedReferences).toEqual([]);
+    expect(res.codeRelationships.length).toBeGreaterThan(0);
+
+    expect(res.ambiguousResolutions.length).toBeGreaterThan(0);
+    for (const a of res.ambiguousResolutions) {
+      expect(a.sourceId).toBeTruthy();
+      expect(a.targetRaw).toBe("Auditable");
+      expect(a.componentId).toBe("users");
+      expect(a.candidateCount).toBeGreaterThan(1);
+      expect(a.pickedId).toMatch(/^api\.users\.Auditable-/);
+      expect(a.scope).toBe("component");
     }
   });
 });
