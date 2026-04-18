@@ -151,6 +151,68 @@ describe("buildCodeModel minElements threshold", () => {
   });
 });
 
+describe("buildCodeModel — minElements drop is logged", () => {
+  it("emits an aggregate stderr warning when elements are filtered", () => {
+    const spy = vi
+      .spyOn(process.stderr, "write")
+      .mockImplementation(() => true);
+    const raw = {
+      version: 1 as const,
+      scannedAt: "2026-04-18T00:00:00Z",
+      checksum: "x",
+      applications: [
+        {
+          id: "a1",
+          path: "a1",
+          name: "a1",
+          language: "java" as const,
+          buildFile: "b",
+          modules: [
+            {
+              id: "m1",
+              path: "m1",
+              name: "m1",
+              files: [],
+              exports: [],
+              imports: [],
+              metadata: {},
+              codeElements: [
+                {
+                  id: "OnlyOne",
+                  kind: "class" as const,
+                  name: "OnlyOne",
+                  visibility: "public" as const,
+                  location: { file: "f.java", line: 1 },
+                },
+              ],
+            },
+          ],
+          externalDependencies: [],
+          internalImports: [],
+        },
+      ],
+    };
+    const components = [
+      {
+        id: "comp1",
+        containerId: "a1",
+        name: "Comp1",
+        description: "",
+        technology: "",
+        moduleIds: ["m1"],
+      },
+    ];
+    buildCodeModel(raw, components, {
+      levels: { context: true, container: true, component: true, code: true },
+      code: { includePrivate: false, includeMembers: true, minElements: 2 },
+    });
+    const out = spy.mock.calls.map((c) => String(c[0])).join("");
+    expect(out).toContain("minElements=2");
+    expect(out).toMatch(/Warning: L4: 1 element\(s\) dropped/);
+    spy.mockRestore();
+  });
+});
+
 describe("buildCodeModel reference-kind mapping", () => {
   it("maps raw extends→inherits, implements→implements, uses→uses, contains→contains", () => {
     const fixture = {
