@@ -632,6 +632,7 @@ function renderD2Files(d2Files: string[], config: Config): void {
         console.error(
           "Warning: d2 CLI not found. Install it to render diagram files: https://d2lang.com/releases/install",
         );
+        process.exitCode = 1;
         return;
       }
       if (errObj.signal === "SIGTERM" || errObj.code === "ETIMEDOUT") {
@@ -785,6 +786,9 @@ export function generateCodeLevelDiagrams(opts: {
 
   return { written, unchanged, skipped, scaffoldFailed };
 }
+
+/** @internal test-only alias */
+export const renderD2FilesForTest = renderD2Files;
 
 function postProcessSVGs(d2Files: string[]): void {
   for (const d2Path of d2Files) {
