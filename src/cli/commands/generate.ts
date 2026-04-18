@@ -205,6 +205,12 @@ export const generateCommand = new Command("generate")
         `L4: ${total} component diagram(s) generated, ` +
           `${codeResult.skipped} skipped (below code.minElements=${config.code.minElements}).`,
       );
+      if (codeResult.scaffoldFailed > 0) {
+        console.error(
+          `Error: ${codeResult.scaffoldFailed} L4 scaffold file(s) failed to write. Process will exit with a non-zero status.`,
+        );
+        process.exitCode = 1;
+      }
     }
 
     // Scaffold user-facing files (only creates, never overwrites)
@@ -726,11 +732,17 @@ export function generateCodeLevelDiagrams(opts: {
   config: Config;
   outputDir: string;
   rawStructure?: RawStructure;
-}): { written: number; unchanged: number; skipped: number } {
+}): {
+  written: number;
+  unchanged: number;
+  skipped: number;
+  scaffoldFailed: number;
+} {
   const { model, config, outputDir, rawStructure } = opts;
   let written = 0;
   let unchanged = 0;
   let skipped = 0;
+  let scaffoldFailed = 0;
 
   const componentsByContainer = new Map<string, typeof model.components>();
   for (const c of model.components) {
@@ -785,11 +797,12 @@ export function generateCodeLevelDiagrams(opts: {
         console.error(
           `Warning: failed to scaffold c4-code.d2 for component "${component.id}" in container "${container.id}": ${msg}`,
         );
+        scaffoldFailed++;
       }
     }
   }
 
-  return { written, unchanged, skipped };
+  return { written, unchanged, skipped, scaffoldFailed };
 }
 
 function postProcessSVGs(d2Files: string[]): void {
