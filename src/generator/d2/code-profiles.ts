@@ -55,13 +55,12 @@ const javaTsPyProfile: LanguageRenderingProfile = {
   },
   renderElements(w, elements) {
     for (const el of elements) {
-      if (
-        (el.kind === "class" ||
-          el.kind === "interface" ||
-          el.kind === "enum" ||
-          el.kind === "type") &&
-        (el.members?.length ?? 0) > 0
-      ) {
+      // `type` is a symbol kind now — it carries `signature`, never `members`.
+      // So only container kinds (class/interface/enum) can render the member
+      // block; everything else falls through to the plain-shape branch.
+      const isContainer =
+        el.kind === "class" || el.kind === "interface" || el.kind === "enum";
+      if (isContainer && (el.members?.length ?? 0) > 0) {
         w.container(toD2Id(el.id), el.name, () => {
           w.raw("shape: class");
           for (const m of el.members ?? []) {
@@ -109,10 +108,15 @@ const cProfile: LanguageRenderingProfile = {
     if (types.length > 0) {
       w.container("types", "Types", () => {
         for (const el of types) {
+          // `struct` carries members; `typedef` does not (symbol kind).
+          // Narrow here so TS knows `.members` is valid only on the struct
+          // branch — typedef renders as a bare class shape with its name.
           w.container(toD2Id(el.id), el.name, () => {
             w.raw("shape: class");
-            for (const m of el.members ?? []) {
-              w.raw(memberLine(m));
+            if (el.kind === "struct") {
+              for (const m of el.members ?? []) {
+                w.raw(memberLine(m));
+              }
             }
           });
         }

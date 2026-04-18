@@ -27,18 +27,37 @@ export async function extractPythonCode(
       const name = nameCap.node.text;
       const kind = decl.name === "class.decl" ? "class" : "function";
 
-      const references = kind === "class" ? collectBaseClasses(decl.node) : [];
-      const members = kind === "class" ? collectPythonMembers(decl.node) : [];
+      const visibility: "public" | "private" = name.startsWith("_")
+        ? "private"
+        : "public";
+      const location = {
+        file: filePath,
+        line: decl.node.startPosition.row + 1,
+      };
 
-      elements.push({
-        id: name,
-        name,
-        kind,
-        visibility: name.startsWith("_") ? "private" : "public",
-        members: members.length > 0 ? members : undefined,
-        references: references.length > 0 ? references : undefined,
-        location: { file: filePath, line: decl.node.startPosition.row + 1 },
-      });
+      if (kind === "class") {
+        const references = collectBaseClasses(decl.node);
+        const members = collectPythonMembers(decl.node);
+        elements.push({
+          id: name,
+          name,
+          kind,
+          visibility,
+          members: members.length > 0 ? members : undefined,
+          references: references.length > 0 ? references : undefined,
+          location,
+        });
+      } else {
+        // `function` is a symbol kind — no members in the model. The
+        // discriminated union rejects a `members` field here at compile time.
+        elements.push({
+          id: name,
+          name,
+          kind,
+          visibility,
+          location,
+        });
+      }
     }
     return elements;
   });
