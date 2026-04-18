@@ -24,6 +24,19 @@ const MONOREPO = path.resolve(__dirname, "../fixtures/monorepo");
 const CONFIG_PATH = path.join(MONOREPO, "diagram-docs.yaml");
 const OUTPUT_DIR = path.join(MONOREPO, "test-submodule-output");
 
+// CI runners don't install the `d2` CLI, so a missing-d2 exit=1 is expected
+// and acceptable for generate-pipeline integration tests — the assertion
+// intent is "model + scaffolds were written", not "SVGs rendered".
+function expectGenerateOk(result: {
+  status: number | null;
+  stderr: string | null;
+}): void {
+  const stderr = result.stderr ?? "";
+  if (result.status === 0) return;
+  if (result.status === 1 && stderr.includes("d2 CLI not found")) return;
+  expect(result.status, stderr).toBe(0);
+}
+
 // Track created dirs for cleanup
 const createdDirs: string[] = [];
 
@@ -869,7 +882,7 @@ describe("Integration: Submodule per-folder docs", () => {
           ],
           { cwd: cliCwd, encoding: "utf-8" },
         );
-        expect(result.status, result.stderr).toBe(0);
+        expectGenerateOk(result);
 
         const rootContainers = path.join(
           tmpRoot,
@@ -1022,7 +1035,7 @@ describe("Integration: Submodule per-folder docs", () => {
         ["run", "dev", "--", "generate", "--deterministic", "-c", cfgPath],
         { cwd: cliCwd, encoding: "utf-8" },
       );
-      expect(result.status, result.stderr).toBe(0);
+      expectGenerateOk(result);
 
       // Find at least one submodule L4 scaffold
       function findScaffolds(dir: string, out: string[]): string[] {
@@ -1054,7 +1067,7 @@ describe("Integration: Submodule per-folder docs", () => {
         ["run", "dev", "--", "generate", "--deterministic", "-c", cfgPath],
         { cwd: cliCwd, encoding: "utf-8" },
       );
-      expect(result.status, result.stderr).toBe(0);
+      expectGenerateOk(result);
 
       // User content preserved
       const after = fs.readFileSync(target, "utf-8");
