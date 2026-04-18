@@ -165,6 +165,13 @@ export const architectureModelSchema = z
           message: `codeRelationship.sourceId "${rel.sourceId}" not found in codeElements (relationship sources must be internal)`,
         });
       }
+      if (!codeElementIds.has(rel.targetId)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["codeRelationships", idx, "targetId"],
+          message: `codeRelationship.targetId "${rel.targetId}" not found in codeElements (relationship targets must be internal)`,
+        });
+      }
     }
   });
 
