@@ -66,6 +66,44 @@ export interface ScanResult {
  */
 export const SCAN_SCHEMA_VERSION = 2;
 
+/**
+ * Bump when L1–L3 model-building logic changes in a way that would make
+ * previously cached per-project `model.yaml` fragments inconsistent with
+ * the current builder — e.g. a change in how components are grouped.
+ *
+ * Kept separate from SCAN_SCHEMA_VERSION so that scan-output-format bumps
+ * don't needlessly invalidate model caches (and vice versa).
+ */
+export const MODEL_SCHEMA_VERSION = 1;
+
+/**
+ * Build the fingerprint used to decide whether the L1–L3 architecture model
+ * is stale. Must contain every config key that affects `model-builder.ts`
+ * output (containers, components, relationships). Must NOT contain L4-only
+ * knobs (`levels.code`, `code.*`) — those re-invalidate the scan but the
+ * cached model can be reused and L4 re-attached from the fresh scan.
+ *
+ * Contract: any new config key that influences L1–L3 must be added here AND
+ * in `buildScanFingerprint`. The tripwire test in
+ * `tests/config/fingerprint-coverage.test.ts` enforces explicit
+ * classification of every top-level config key.
+ */
+export function buildModelFingerprint(
+  effectiveExcludes: string[],
+  config: Config,
+  options?: { includeScanInclude?: boolean },
+): string {
+  const fingerprint: Record<string, unknown> = {
+    modelSchemaVersion: MODEL_SCHEMA_VERSION,
+    exclude: effectiveExcludes,
+    abstraction: config.abstraction,
+  };
+  if (options?.includeScanInclude) {
+    fingerprint.include = config.scan.include;
+  }
+  return JSON.stringify(fingerprint);
+}
+
 export function buildScanFingerprint(
   effectiveExcludes: string[],
   config: Config,
