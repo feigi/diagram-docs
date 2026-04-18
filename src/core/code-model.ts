@@ -184,6 +184,12 @@ export function buildCodeModel(
   const filteredElements = elements.filter(
     (el) => (countByComponent.get(el.componentId) ?? 0) >= minElements,
   );
+  const droppedElementCount = elements.length - filteredElements.length;
+  if (droppedElementCount > 0) {
+    process.stderr.write(
+      `Warning: L4: ${droppedElementCount} element(s) dropped because their component has < code.minElements=${minElements}.\n`,
+    );
+  }
   const keepIds = new Set(filteredElements.map((e) => e.id));
 
   const ctx: ResolveContext = {
