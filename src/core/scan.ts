@@ -659,8 +659,12 @@ export async function runScanAll(options: {
       verbose,
     });
 
-    if (result.fromCache) {
+    if (result.fromCache && !result.modelStale) {
       console.error(`  Cached (unchanged)`);
+    } else if (result.fromCache && result.modelStale) {
+      // Rare: scan cache is still valid but MODEL_SCHEMA_VERSION bumped,
+      // so the cached model must be rebuilt from the cached scan.
+      console.error(`  Cached scan, model rebuild needed`);
     } else if (result.modelStale) {
       console.error(`  Scanned`);
       staleProjects.push(project);
