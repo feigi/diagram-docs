@@ -425,6 +425,7 @@ async function resolveModel(
   >();
   for (const result of projectResults) {
     if (result.project.type !== "container") continue;
+    // Reuse when the L1–L3 model is not stale — covers both full cache hits and L4-only re-scans.
     if (!result.modelStale) {
       const cache = readProjectCache(
         path.resolve(configDir, result.project.path),
