@@ -120,6 +120,10 @@
           },
           "name": { "type": "string" },
           "qualifiedName": { "type": "string" },
+          "language": {
+            "type": "string",
+            "enum": ["java", "typescript", "python", "c"]
+          },
           "visibility": {
             "type": "string",
             "enum": ["public", "internal", "private"]

@@ -61,15 +61,35 @@ export function buildCodeModel(
   const includeMembers = config.code?.includeMembers ?? true;
   const minElements = config.code?.minElements ?? 2;
 
+  // Pre-index module→owning-app language so every CodeElement we build can
+  // carry it. Persisting language on the element lets `--model` round-trips
+  // pick the correct L4 profile without needing rawStructure at generate time.
+  const languageByModuleId = new Map<
+    string,
+    "java" | "typescript" | "python" | "c"
+  >();
+  for (const app of raw.applications) {
+    for (const mod of app.modules) {
+      languageByModuleId.set(mod.id, app.language);
+    }
+  }
+
   const moduleOwnership = new Map<
     string,
-    { containerId: string; componentId: string }
+    {
+      containerId: string;
+      componentId: string;
+      language: "java" | "typescript" | "python" | "c";
+    }
   >();
   for (const comp of components) {
     for (const moduleId of comp.moduleIds ?? []) {
+      const language = languageByModuleId.get(moduleId);
+      if (!language) continue;
       moduleOwnership.set(moduleId, {
         containerId: comp.containerId,
         componentId: comp.id,
+        language,
       });
     }
   }
@@ -78,7 +98,11 @@ export function buildCodeModel(
     string,
     Array<{
       raw: RawCodeElement;
-      owner: { containerId: string; componentId: string };
+      owner: {
+        containerId: string;
+        componentId: string;
+        language: "java" | "typescript" | "python" | "c";
+      };
     }>
   >();
   for (const app of raw.applications) {
@@ -118,6 +142,7 @@ export function buildCodeModel(
         kind: re.kind,
         name: re.name,
         qualifiedName: re.qualifiedName,
+        language: owner.language,
         visibility: re.visibility,
         members: filteredMembers,
         tags: re.tags,
