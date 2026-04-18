@@ -86,6 +86,70 @@ export function removeStaleContainerDirs(
 }
 
 /**
+ * Remove root-mode `containers/<containerId>/components/<compId>/` dirs whose
+ * component is no longer in the model. Mirrors removeStaleSubmoduleComponentDirs
+ * for the root layout. `_generated/` is always removed; scaffold + dir are
+ * removed only when the scaffold has no user content.
+ */
+export function removeStaleComponentDirs(
+  outputDir: string,
+  model: ArchitectureModel,
+): void {
+  const containersDir = path.join(outputDir, "containers");
+  if (!fs.existsSync(containersDir)) return;
+
+  const activeByContainer = new Map<string, Set<string>>();
+  for (const comp of model.components) {
+    const set = activeByContainer.get(comp.containerId) ?? new Set<string>();
+    set.add(comp.id);
+    activeByContainer.set(comp.containerId, set);
+  }
+
+  for (const containerEntry of fs.readdirSync(containersDir)) {
+    const componentsDir = path.join(
+      containersDir,
+      containerEntry,
+      "components",
+    );
+    if (!fs.existsSync(componentsDir)) continue;
+
+    const activeIds =
+      activeByContainer.get(containerEntry) ?? new Set<string>();
+
+    for (const compEntry of fs.readdirSync(componentsDir)) {
+      if (activeIds.has(compEntry)) continue;
+
+      const compDir = path.join(componentsDir, compEntry);
+      const stat = fs.statSync(compDir, { throwIfNoEntry: false });
+      if (!stat?.isDirectory()) continue;
+
+      const generatedDir = path.join(compDir, "_generated");
+      if (fs.existsSync(generatedDir)) {
+        fs.rmSync(generatedDir, { recursive: true, force: true });
+      }
+
+      const scaffoldFile = path.join(compDir, "c4-code.d2");
+      if (isUserModified(scaffoldFile)) {
+        console.error(
+          `Warning: containers/${containerEntry}/components/${compEntry}/c4-code.d2 has user customizations — remove manually if no longer needed.`,
+        );
+        continue;
+      }
+
+      if (fs.existsSync(scaffoldFile)) fs.rmSync(scaffoldFile);
+
+      const remaining = fs.readdirSync(compDir);
+      if (remaining.length === 0) {
+        fs.rmdirSync(compDir);
+        console.error(
+          `Removed: containers/${containerEntry}/components/${compEntry}/`,
+        );
+      }
+    }
+  }
+}
+
+/**
  * Remove submodule `components/<compId>/` dirs whose component is no longer
  * in the model for the owning container. Mirrors removeStaleContainerDirs:
  * `_generated/` is always removed; scaffold + dir are removed only when the
