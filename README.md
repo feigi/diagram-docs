@@ -104,6 +104,31 @@ User-facing files use D2 `@import` to pull in generated content. Edit them freel
 
 Container diagrams include drill-down links to component diagrams. All output is deterministic and sorted for stable diffs.
 
+### Output generators
+
+diagram-docs can emit diagrams as D2 source or drawio (`.drawio` / mxGraph XML).
+The default is **drawio**.
+
+- Stay on D2: `output.generators: ["d2"]` in `diagram-docs.yaml`.
+- Run both: `output.generators: ["d2", "drawio"]`.
+
+#### Editing drawio output
+
+Drawio files are written once and then preserved across regenerations:
+
+- Node positions, sizes, colours, and shapes you set in drawio are kept.
+- Labels and edge endpoints are refreshed from the model on every run.
+- Cells you add by hand (freehand) are kept untouched.
+- Cells for containers/components removed from the model are deleted, along
+  with any edges that referenced them.
+
+If you rename the auto-generated id of a managed cell by hand, diagram-docs
+treats the renamed cell as freehand and re-emits a fresh cell for the
+original id. Manage ids through the model, not the drawio editor.
+
+Corrupt drawio files abort the merge and are left untouched — fix the XML
+by hand before regenerating.
+
 ### Submodule docs
 
 With submodules enabled, each application also gets its own docs directory:

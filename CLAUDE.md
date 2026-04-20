@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-diagram-docs is a TypeScript CLI that generates C4 architecture diagrams in D2 format from source code. It implements a three-phase pipeline:
+diagram-docs is a TypeScript CLI that generates C4 architecture diagrams — as drawio (default) or D2 — from source code. It implements a three-phase pipeline:
 
 1. **Scan** — Static analysis extracts code structure → `.diagram-docs/raw-structure.json`
 2. **Model** — Deterministic or LLM-agent-driven conversion → `architecture-model.yaml`
@@ -44,6 +44,7 @@ npm run bench              # Performance benchmarks (vitest bench)
 - **`src/config/`** — Zod-validated config from `diagram-docs.yaml` (`schema.ts` + `loader.ts`).
 - **`src/core/`** — Discovery, manifest caching (checksums for skip-unchanged), model building, humanization, slugification. `code-model.ts` resolves code elements and qualified IDs for L4.
 - **`src/generator/d2/`** — D2 generators per C4 level (`context.ts`, `container.ts`, `component.ts`, `code.ts`), plus `writer.ts` (D2 syntax builder), `stability.ts` (deterministic ordering), `drift.ts` (stale reference detection), `scaffold.ts`/`submodule-scaffold.ts`/`code-scaffold.ts` (user-facing file generation). `code-profiles.ts` provides language-specific rendering profiles for the L4 generator.
+- **`src/generator/drawio/`** — Parallel generator emitting `.drawio` (mxGraph XML). Id-based merge preserves hand-edited geometry, style, and freehand cells across regenerations. Uses `fast-xml-parser` for round-trip and `elkjs` for deterministic layout.
 - **`src/schemas/`** — JSON Schemas for `raw-structure.json` and `architecture-model.yaml`.
 - **`assets/tree-sitter/`** — Bundled tree-sitter WASM grammars (Java, TypeScript, Python, C) loaded by `src/analyzers/tree-sitter.ts` for code-level parsing.
 
