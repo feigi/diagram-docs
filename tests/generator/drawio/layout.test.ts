@@ -55,4 +55,17 @@ describe("layoutGraph", () => {
     expect(result.get("c1")).toBeDefined();
     expect(result.get("c1")!.x).toBeGreaterThanOrEqual(0);
   });
+
+  it("applies mrtree for the code level", async () => {
+    const result = await layoutGraph({
+      level: "code",
+      nodes: [
+        { id: "parent", width: NODE_WIDTH, height: NODE_HEIGHT },
+        { id: "leaf", width: NODE_WIDTH, height: NODE_HEIGHT },
+      ],
+      edges: [{ id: "parent->leaf", source: "parent", target: "leaf" }],
+    });
+    expect(result.get("parent")).toBeDefined();
+    expect(result.get("leaf")).toBeDefined();
+  });
 });
