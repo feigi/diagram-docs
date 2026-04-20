@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import { configSchema } from "../../src/config/schema.js";
 
 describe("configSchema output.generators", () => {
-  it("defaults to ['drawio']", () => {
+  it("defaults to ['d2']", () => {
     const cfg = configSchema.parse({});
-    expect(cfg.output.generators).toEqual(["drawio"]);
+    expect(cfg.output.generators).toEqual(["d2"]);
   });
 
   it("accepts ['d2']", () => {

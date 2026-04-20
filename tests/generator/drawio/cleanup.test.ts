@@ -2,8 +2,12 @@ import { describe, it, expect } from "vitest";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { removeStaleDrawioFiles } from "../../../src/generator/drawio/cleanup.js";
+import {
+  removeStaleDrawioFiles,
+  removeStaleSubmoduleDrawioFiles,
+} from "../../../src/generator/drawio/cleanup.js";
 import type { ArchitectureModel } from "../../../src/analyzers/types.js";
+import { configSchema } from "../../../src/config/schema.js";
 
 const emptyModel: ArchitectureModel = {
   version: 1,
@@ -17,6 +21,34 @@ const emptyModel: ArchitectureModel = {
 
 function tmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "ddocs-dw-clean-"));
+}
+
+function writeManaged(filePath: string, id = "mgr"): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(
+    filePath,
+    `<?xml version="1.0"?>
+<mxfile><diagram><mxGraphModel><root>
+  <mxCell id="0"/><mxCell id="1" parent="0"/>
+  <mxCell id="${id}" style="ddocs_managed=1" vertex="1" parent="1">
+    <mxGeometry x="0" y="0" width="10" height="10" as="geometry"/>
+  </mxCell>
+</root></mxGraphModel></diagram></mxfile>`,
+  );
+}
+
+function writeUnmanaged(filePath: string, id = "note"): void {
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  fs.writeFileSync(
+    filePath,
+    `<?xml version="1.0"?>
+<mxfile><diagram><mxGraphModel><root>
+  <mxCell id="0"/><mxCell id="1" parent="0"/>
+  <mxCell id="${id}" style="fillColor=#fff2cc" vertex="1" parent="1">
+    <mxGeometry x="0" y="0" width="10" height="10" as="geometry"/>
+  </mxCell>
+</root></mxGraphModel></diagram></mxfile>`,
+  );
 }
 
 describe("removeStaleDrawioFiles", () => {
@@ -54,5 +86,178 @@ describe("removeStaleDrawioFiles", () => {
     );
     removeStaleDrawioFiles(dir, emptyModel);
     expect(fs.existsSync(preserved)).toBe(true);
+  });
+});
+
+describe("removeStaleSubmoduleDrawioFiles", () => {
+  it("removes c4-code.drawio for a component no longer in the container", () => {
+    const repo = tmp();
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "S", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "auth",
+          applicationId: "auth",
+          name: "Auth",
+          description: "",
+          technology: "",
+          path: "services/auth",
+        },
+      ],
+      components: [
+        {
+          id: "handler",
+          containerId: "auth",
+          name: "Handler",
+          description: "",
+          technology: "",
+          moduleIds: [],
+        },
+      ],
+      relationships: [],
+    };
+    const cfg = configSchema.parse({
+      output: { generators: ["drawio"] },
+      submodules: { enabled: true, docsDir: "docs" },
+    });
+
+    const archDir = path.join(repo, "services/auth/docs/architecture");
+    // Component still present — must be preserved.
+    const keep = path.join(archDir, "components", "handler", "c4-code.drawio");
+    writeManaged(keep, "handler");
+    // Component deleted from model — must be removed.
+    const stale = path.join(archDir, "components", "gone", "c4-code.drawio");
+    writeManaged(stale, "gone");
+    // Container is still in model — its c3 must be preserved.
+    const containerFile = path.join(archDir, "c3-component.drawio");
+    writeManaged(containerFile, "auth");
+
+    removeStaleSubmoduleDrawioFiles(repo, model, cfg);
+
+    expect(fs.existsSync(stale)).toBe(false);
+    expect(fs.existsSync(keep)).toBe(true);
+    expect(fs.existsSync(containerFile)).toBe(true);
+  });
+
+  it("preserves a stale submodule file that contains user-authored cells", () => {
+    const repo = tmp();
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "S", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "auth",
+          applicationId: "auth",
+          name: "Auth",
+          description: "",
+          technology: "",
+          path: "services/auth",
+        },
+      ],
+      components: [],
+      relationships: [],
+    };
+    const cfg = configSchema.parse({
+      output: { generators: ["drawio"] },
+      submodules: { enabled: true, docsDir: "docs" },
+    });
+
+    const archDir = path.join(repo, "services/auth/docs/architecture");
+    const staleWithUser = path.join(
+      archDir,
+      "components",
+      "gone",
+      "c4-code.drawio",
+    );
+    writeUnmanaged(staleWithUser, "free-drawn");
+
+    removeStaleSubmoduleDrawioFiles(repo, model, cfg);
+
+    expect(fs.existsSync(staleWithUser)).toBe(true);
+  });
+
+  it("is a no-op when submodules are not enabled", () => {
+    const repo = tmp();
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "S", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "auth",
+          applicationId: "auth",
+          name: "Auth",
+          description: "",
+          technology: "",
+          path: "services/auth",
+        },
+      ],
+      components: [],
+      relationships: [],
+    };
+    const cfg = configSchema.parse({
+      output: { generators: ["drawio"] },
+      submodules: { enabled: false, docsDir: "docs" },
+    });
+
+    const archDir = path.join(repo, "services/auth/docs/architecture");
+    const stale = path.join(archDir, "components", "gone", "c4-code.drawio");
+    writeManaged(stale, "gone");
+
+    removeStaleSubmoduleDrawioFiles(repo, model, cfg);
+
+    // Submodules disabled — nothing touched.
+    expect(fs.existsSync(stale)).toBe(true);
+  });
+
+  it("removes c3-component.drawio when its container became an aggregator", () => {
+    const repo = tmp();
+    // parent is aggregator (ancestor path of child).
+    const model: ArchitectureModel = {
+      version: 1,
+      system: { name: "S", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "parent",
+          applicationId: "parent",
+          name: "Parent",
+          description: "",
+          technology: "",
+          path: "apps/parent",
+        },
+        {
+          id: "child",
+          applicationId: "child",
+          name: "Child",
+          description: "",
+          technology: "",
+          path: "apps/parent/child",
+        },
+      ],
+      components: [],
+      relationships: [],
+    };
+    const cfg = configSchema.parse({
+      output: { generators: ["drawio"] },
+      submodules: { enabled: true, docsDir: "docs" },
+    });
+
+    const aggregatorFile = path.join(
+      repo,
+      "apps/parent/docs/architecture/c3-component.drawio",
+    );
+    writeManaged(aggregatorFile, "parent");
+
+    removeStaleSubmoduleDrawioFiles(repo, model, cfg);
+
+    expect(fs.existsSync(aggregatorFile)).toBe(false);
   });
 });

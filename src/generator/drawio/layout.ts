@@ -91,27 +91,34 @@ export async function layoutGraph(
 
   const laidOut = await elk.layout(graph);
   const result = new Map<string, Geometry>();
-  collect(laidOut, 0, 0, result);
+  collect(laidOut, result);
   return result;
 }
 
-function collect(
-  node: ElkNode,
-  parentX: number,
-  parentY: number,
-  out: Map<string, Geometry>,
-): void {
-  const ax = parentX + (node.x ?? 0);
-  const ay = parentY + (node.y ?? 0);
+/**
+ * Walk the ELK layout tree and emit one {@link Geometry} per node.
+ *
+ * ELK already reports each child's x/y relative to its immediate parent's
+ * origin. In drawio/mxGraph XML, an {@code mxCell} whose {@code parent}
+ * attribute references another vertex is likewise rendered with its
+ * {@code mxGeometry} x/y interpreted relative to the parent's origin. So we
+ * emit ELK's parent-relative coordinates verbatim and let the writer/merger
+ * pass them through unchanged.
+ *
+ * Top-level ELK children (whose parent is the synthetic {@code "root"}) end
+ * up as direct children of the drawio background layer (mxCell id="1"),
+ * which has origin (0, 0); relative and absolute coincide for them.
+ */
+function collect(node: ElkNode, out: Map<string, Geometry>): void {
   if (node.id && node.id !== "root") {
     out.set(node.id, {
-      x: Math.round(ax),
-      y: Math.round(ay),
+      x: Math.round(node.x ?? 0),
+      y: Math.round(node.y ?? 0),
       width: Math.round(node.width ?? 0),
       height: Math.round(node.height ?? 0),
     });
   }
   for (const child of node.children ?? []) {
-    collect(child, ax, ay, out);
+    collect(child, out);
   }
 }
