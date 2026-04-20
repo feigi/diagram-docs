@@ -122,9 +122,11 @@ export function removeStaleSubmoduleDirs(
 
   for (const container of model.containers) {
     if (!aggregatorIds.has(container.id)) continue;
-    if (!container.path) continue;
+    if (!container.path || container.path === ".") continue;
 
     const override = subCfg.overrides[container.applicationId];
+    if (override?.exclude) continue;
+
     const docsDir = override?.docsDir ?? subCfg.docsDir;
     const appRoot = path.join(repoRoot, container.path);
     const archDir = path.join(appRoot, docsDir, "architecture");
@@ -136,13 +138,8 @@ export function removeStaleSubmoduleDirs(
           `Warning: ${path.relative(repoRoot, scaffold)} has user customizations — aggregator site preserved. Remove manually if no longer needed.`,
         );
       } else {
-        fs.rmSync(path.join(appRoot, docsDir), {
-          recursive: true,
-          force: true,
-        });
-        console.error(
-          `Removed: ${path.relative(repoRoot, path.join(appRoot, docsDir))}/`,
-        );
+        fs.rmSync(archDir, { recursive: true, force: true });
+        console.error(`Removed: ${path.relative(repoRoot, archDir)}/`);
       }
     }
 

@@ -366,7 +366,9 @@ describe("removeStaleSubmoduleDirs", () => {
 
     removeStaleSubmoduleDirs(tmpDir, model, config);
 
-    expect(fs.existsSync(path.join(tmpDir, appPath, "docs"))).toBe(false);
+    expect(
+      fs.existsSync(path.join(tmpDir, appPath, "docs", "architecture")),
+    ).toBe(false);
     expect(fs.existsSync(path.join(tmpDir, appPath, "diagram-docs.yaml"))).toBe(
       false,
     );
@@ -465,5 +467,83 @@ describe("removeStaleSubmoduleDirs", () => {
     removeStaleSubmoduleDirs(tmpDir, model, config);
 
     expect(fs.existsSync(path.join(docsArch, "c3-component.d2"))).toBe(true);
+  });
+
+  it("skips cleanup when override.exclude is set on the aggregator", () => {
+    const appPath = "los-cha";
+    const docsArch = path.join(tmpDir, appPath, "docs", "architecture");
+    writeScaffold(path.join(docsArch, "c3-component.d2"));
+
+    const model: ArchitectureModel = {
+      ...makeModel([]),
+      containers: [
+        {
+          id: "los-cha",
+          applicationId: "los-cha",
+          name: "Los Cha",
+          description: "",
+          technology: "Java",
+          path: "los-cha",
+        },
+        {
+          id: "los-cha-app",
+          applicationId: "los-cha-app",
+          name: "App",
+          description: "",
+          technology: "Java",
+          path: "los-cha/app",
+        },
+      ],
+    };
+
+    const config = configSchema.parse({
+      submodules: {
+        enabled: true,
+        overrides: { "los-cha": { exclude: true } },
+      },
+    });
+
+    removeStaleSubmoduleDirs(tmpDir, model, config);
+
+    expect(fs.existsSync(path.join(docsArch, "c3-component.d2"))).toBe(true);
+  });
+
+  it('does not touch root docs when an aggregator has path === "."', () => {
+    // Simulate a repo where an aggregator container lives at the root.
+    // Under the path-ancestry rule, `collectAggregatorIds` would flag `.` if any
+    // other container's path started with "./"; even though unlikely, we guard
+    // against it to avoid wiping the root `docs/architecture/` site.
+    const rootDocsArch = path.join(tmpDir, "docs", "architecture");
+    writeScaffold(path.join(rootDocsArch, "c3-component.d2"));
+
+    const model: ArchitectureModel = {
+      ...makeModel([]),
+      containers: [
+        {
+          id: "root",
+          applicationId: "root",
+          name: "Root",
+          description: "",
+          technology: "Java",
+          path: ".",
+        },
+        {
+          id: "child",
+          applicationId: "child",
+          name: "Child",
+          description: "",
+          technology: "Java",
+          path: "./subproject",
+        },
+      ],
+    };
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    removeStaleSubmoduleDirs(tmpDir, model, config);
+
+    // Root scaffold must remain untouched.
+    expect(fs.existsSync(path.join(rootDocsArch, "c3-component.d2"))).toBe(
+      true,
+    );
   });
 });
