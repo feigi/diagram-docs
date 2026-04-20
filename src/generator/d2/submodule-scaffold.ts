@@ -12,6 +12,30 @@ import { STYLES_D2 } from "./styles.js";
 import { extractFragment } from "../../core/model-fragment.js";
 import { stringify as stringifyYaml } from "yaml";
 
+/**
+ * Returns the set of container ids whose `path` is a strict ancestor of
+ * another container's `path`. These are treated as aggregators (e.g. a
+ * Gradle multi-project root) and are skipped during per-folder docs
+ * generation because their real content lives in child containers.
+ */
+export function collectAggregatorIds(model: ArchitectureModel): Set<string> {
+  const paths = model.containers
+    .map((c) => ({ id: c.id, path: c.path }))
+    .filter((c): c is { id: string; path: string } => !!c.path);
+
+  const aggregators = new Set<string>();
+  for (const a of paths) {
+    for (const b of paths) {
+      if (a.id === b.id) continue;
+      if (b.path.startsWith(a.path + "/")) {
+        aggregators.add(a.id);
+        break;
+      }
+    }
+  }
+  return aggregators;
+}
+
 export interface SubmoduleOutputInfo {
   containerId: string;
   applicationPath: string;
