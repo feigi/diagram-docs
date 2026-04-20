@@ -9,6 +9,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ArchitectureModel } from "../../analyzers/types.js";
+import type { Config } from "../../config/schema.js";
+import { collectAggregatorIds } from "./submodule-scaffold.js";
 
 const CUSTOMIZATION_MARKER = "# Add your customizations below this line";
 
@@ -95,6 +97,59 @@ export function removeStaleContainerDirs(
     if (remaining.length === 0) {
       fs.rmdirSync(containerDir);
       console.error(`Removed: containers/${entry}/`);
+    }
+  }
+}
+
+/**
+ * Remove previously-scaffolded submodule sites for containers that are now
+ * classified as aggregators. Called from `generate` before
+ * `generateSubmoduleDocs`. Honors user customizations:
+ *
+ * - The aggregator docs subtree is removed only if the scaffold
+ *   `c3-component.d2` has no user customizations. Otherwise a warning is
+ *   printed and the tree is left intact.
+ * - The aggregator `diagram-docs.yaml` stub is removed only if inert
+ *   (all lines commented). Otherwise it is preserved.
+ */
+export function removeStaleSubmoduleDirs(
+  repoRoot: string,
+  model: ArchitectureModel,
+  config: Config,
+): void {
+  const aggregatorIds = collectAggregatorIds(model);
+  const subCfg = config.submodules;
+
+  for (const container of model.containers) {
+    if (!aggregatorIds.has(container.id)) continue;
+    if (!container.path) continue;
+
+    const override = subCfg.overrides[container.applicationId];
+    const docsDir = override?.docsDir ?? subCfg.docsDir;
+    const appRoot = path.join(repoRoot, container.path);
+    const archDir = path.join(appRoot, docsDir, "architecture");
+    const scaffold = path.join(archDir, "c3-component.d2");
+
+    if (fs.existsSync(archDir)) {
+      if (isUserModified(scaffold)) {
+        console.error(
+          `Warning: ${path.relative(repoRoot, scaffold)} has user customizations — aggregator site preserved. Remove manually if no longer needed.`,
+        );
+      } else {
+        fs.rmSync(path.join(appRoot, docsDir), {
+          recursive: true,
+          force: true,
+        });
+        console.error(
+          `Removed: ${path.relative(repoRoot, path.join(appRoot, docsDir))}/`,
+        );
+      }
+    }
+
+    const stub = path.join(appRoot, "diagram-docs.yaml");
+    if (fs.existsSync(stub) && isInertSubmoduleStub(stub)) {
+      fs.rmSync(stub);
+      console.error(`Removed: ${path.relative(repoRoot, stub)}`);
     }
   }
 }

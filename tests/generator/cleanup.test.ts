@@ -6,8 +6,10 @@ import {
   isUserModified,
   isInertSubmoduleStub,
   removeStaleContainerDirs,
+  removeStaleSubmoduleDirs,
 } from "../../src/generator/d2/cleanup.js";
 import type { ArchitectureModel } from "../../src/analyzers/types.js";
+import { configSchema } from "../../src/config/schema.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -293,5 +295,175 @@ describe("isInertSubmoduleStub", () => {
     const filePath = path.join(tmpDir, "diagram-docs.yaml");
     fs.writeFileSync(filePath, "# header\n\n   \n# more\n");
     expect(isInertSubmoduleStub(filePath)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// removeStaleSubmoduleDirs
+// ---------------------------------------------------------------------------
+
+describe("removeStaleSubmoduleDirs", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeScaffold(filePath: string, customized = false): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      customized ? CUSTOMIZED_SCAFFOLD : DEFAULT_SCAFFOLD,
+    );
+  }
+
+  function writeStub(filePath: string, inert = true): void {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(
+      filePath,
+      inert ? "# stub\n# system: ...\n" : "system:\n  name: Real\n",
+    );
+  }
+
+  it("removes aggregator docs dir + inert stub when scaffold is untouched", () => {
+    const appPath = "los-cha";
+    const docsArch = path.join(tmpDir, appPath, "docs", "architecture");
+    writeScaffold(path.join(docsArch, "c3-component.d2"));
+    fs.mkdirSync(path.join(docsArch, "_generated"), { recursive: true });
+    fs.writeFileSync(
+      path.join(docsArch, "_generated", "c3-component.d2"),
+      "generated\n",
+    );
+    writeStub(path.join(tmpDir, appPath, "diagram-docs.yaml"));
+
+    const model: ArchitectureModel = {
+      ...makeModel([]),
+      containers: [
+        {
+          id: "los-cha",
+          applicationId: "los-cha",
+          name: "Los Cha",
+          description: "",
+          technology: "Java",
+          path: "los-cha",
+        },
+        {
+          id: "los-cha-app",
+          applicationId: "los-cha-app",
+          name: "App",
+          description: "",
+          technology: "Java",
+          path: "los-cha/app",
+        },
+      ],
+    };
+
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    removeStaleSubmoduleDirs(tmpDir, model, config);
+
+    expect(fs.existsSync(path.join(tmpDir, appPath, "docs"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, appPath, "diagram-docs.yaml"))).toBe(
+      false,
+    );
+  });
+
+  it("preserves aggregator docs dir when scaffold has user customizations", () => {
+    const appPath = "los-cha";
+    const docsArch = path.join(tmpDir, appPath, "docs", "architecture");
+    writeScaffold(path.join(docsArch, "c3-component.d2"), true);
+    writeStub(path.join(tmpDir, appPath, "diagram-docs.yaml"));
+
+    const model: ArchitectureModel = {
+      ...makeModel([]),
+      containers: [
+        {
+          id: "los-cha",
+          applicationId: "los-cha",
+          name: "Los Cha",
+          description: "",
+          technology: "Java",
+          path: "los-cha",
+        },
+        {
+          id: "los-cha-app",
+          applicationId: "los-cha-app",
+          name: "App",
+          description: "",
+          technology: "Java",
+          path: "los-cha/app",
+        },
+      ],
+    };
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    removeStaleSubmoduleDirs(tmpDir, model, config);
+
+    expect(fs.existsSync(path.join(docsArch, "c3-component.d2"))).toBe(true);
+  });
+
+  it("preserves stub when it has user customizations (non-inert)", () => {
+    const appPath = "los-cha";
+    const docsArch = path.join(tmpDir, appPath, "docs", "architecture");
+    writeScaffold(path.join(docsArch, "c3-component.d2"));
+    writeStub(path.join(tmpDir, appPath, "diagram-docs.yaml"), false);
+
+    const model: ArchitectureModel = {
+      ...makeModel([]),
+      containers: [
+        {
+          id: "los-cha",
+          applicationId: "los-cha",
+          name: "Los Cha",
+          description: "",
+          technology: "Java",
+          path: "los-cha",
+        },
+        {
+          id: "los-cha-app",
+          applicationId: "los-cha-app",
+          name: "App",
+          description: "",
+          technology: "Java",
+          path: "los-cha/app",
+        },
+      ],
+    };
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    removeStaleSubmoduleDirs(tmpDir, model, config);
+
+    expect(fs.existsSync(path.join(tmpDir, appPath, "diagram-docs.yaml"))).toBe(
+      true,
+    );
+  });
+
+  it("does nothing for non-aggregator containers", () => {
+    const appPath = "services/user-api";
+    const docsArch = path.join(tmpDir, appPath, "docs", "architecture");
+    writeScaffold(path.join(docsArch, "c3-component.d2"));
+
+    const model: ArchitectureModel = {
+      ...makeModel([]),
+      containers: [
+        {
+          id: "user-api",
+          applicationId: "services-user-api",
+          name: "User API",
+          description: "",
+          technology: "Java",
+          path: "services/user-api",
+        },
+      ],
+    };
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    removeStaleSubmoduleDirs(tmpDir, model, config);
+
+    expect(fs.existsSync(path.join(docsArch, "c3-component.d2"))).toBe(true);
   });
 });
