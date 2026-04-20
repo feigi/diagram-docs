@@ -85,6 +85,126 @@ export function parseDrawioFile(filePath: string): ExistingDocument {
   return { cells };
 }
 
+import type { DiagramCells, VertexSpec, EdgeSpec } from "./context.js";
+
+export interface ResolvedVertex extends VertexSpec {
+  geometry: Geometry;
+}
+
+export interface ResolvedEdge extends EdgeSpec {
+  waypoints?: Array<{ x: number; y: number }>;
+}
+
+export interface ReconcileInput {
+  existing: ExistingDocument;
+  fresh: DiagramCells;
+  layout: Map<string, Geometry>;
+}
+
+export interface ReconcileResult {
+  vertices: ResolvedVertex[];
+  edges: ResolvedEdge[];
+  warnings: string[];
+}
+
+export function reconcile(input: ReconcileInput): ReconcileResult {
+  const { existing, fresh, layout } = input;
+  const warnings: string[] = [];
+
+  const freshVertexIds = new Set(fresh.vertices.map((v) => v.id));
+  const freshEdgeIds = new Set(fresh.edges.map((e) => e.id));
+  const preservedGeometry = new Set<string>();
+
+  const vertices: ResolvedVertex[] = [];
+
+  for (const v of fresh.vertices) {
+    const prior = existing.cells.get(v.id);
+    const priorParentStale =
+      prior?.parent !== undefined &&
+      prior.parent !== "1" &&
+      !freshVertexIds.has(prior.parent);
+
+    if (
+      prior &&
+      prior.vertex &&
+      prior.managed &&
+      prior.geometry &&
+      !priorParentStale
+    ) {
+      vertices.push({
+        ...v,
+        style: prior.style,
+        geometry: prior.geometry,
+        parent:
+          prior.parent && freshVertexIds.has(prior.parent)
+            ? prior.parent
+            : v.parent,
+      });
+      preservedGeometry.add(v.id);
+    } else {
+      if (prior && prior.managed && priorParentStale) {
+        warnings.push(
+          `Cell "${v.id}" parent "${prior.parent}" no longer exists; reparented to layer 1.`,
+        );
+      }
+      const geom = layout.get(v.id);
+      if (!geom) {
+        warnings.push(
+          `No layout assigned for vertex "${v.id}"; placing at origin.`,
+        );
+      }
+      vertices.push({
+        ...v,
+        parent: v.parent ?? "1",
+        geometry: geom ?? { x: 0, y: 0, width: 160, height: 60 },
+      });
+    }
+  }
+
+  for (const [id, cell] of existing.cells) {
+    if (freshVertexIds.has(id)) continue;
+    if (!cell.vertex) continue;
+    if (cell.managed) continue;
+    if (!cell.geometry) continue;
+    vertices.push({
+      id: cell.id,
+      value: cell.value ?? "",
+      style: cell.style,
+      parent: cell.parent,
+      geometry: cell.geometry,
+    });
+  }
+
+  const edges: ResolvedEdge[] = [];
+  for (const e of fresh.edges) {
+    const prior = existing.cells.get(e.id);
+    const bothPreserved =
+      preservedGeometry.has(e.source) && preservedGeometry.has(e.target);
+    const waypoints =
+      prior && prior.edge && prior.managed && bothPreserved
+        ? prior.waypoints
+        : undefined;
+    edges.push({ ...e, waypoints });
+  }
+
+  for (const [id, cell] of existing.cells) {
+    if (freshEdgeIds.has(id)) continue;
+    if (!cell.edge) continue;
+    if (cell.managed) continue;
+    if (!cell.source || !cell.target) continue;
+    edges.push({
+      id,
+      source: cell.source,
+      target: cell.target,
+      value: cell.value,
+      style: cell.style,
+      parent: cell.parent,
+    });
+  }
+
+  return { vertices, edges, warnings };
+}
+
 function extractCells(tree: unknown): unknown[] | null {
   const mxfile = (tree as Record<string, unknown>)?.mxfile as
     | Record<string, unknown>
