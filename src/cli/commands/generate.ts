@@ -33,7 +33,10 @@ import {
 } from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
-import { removeStaleContainerDirs } from "../../generator/d2/cleanup.js";
+import {
+  removeStaleContainerDirs,
+  removeStaleSubmoduleDirs,
+} from "../../generator/d2/cleanup.js";
 import type { Config } from "../../config/schema.js";
 import {
   readManifest,
@@ -202,6 +205,7 @@ export const generateCommand = new Command("generate")
 
     // Per-folder submodule docs
     if (options.submodules || config.submodules.enabled) {
+      removeStaleSubmoduleDirs(configDir, model, config);
       const subResults = generateSubmoduleDocs(
         configDir,
         outputDir,
