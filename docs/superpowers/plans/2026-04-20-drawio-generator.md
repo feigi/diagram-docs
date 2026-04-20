@@ -58,6 +58,7 @@ tests/fixtures/drawio/
 ## Task 1: Add `generators` config field
 
 **Files:**
+
 - Modify: `src/config/schema.ts`
 - Test: `tests/config/schema.test.ts` (create if missing; otherwise extend)
 
@@ -131,6 +132,7 @@ git commit -m "feat(config): add output.generators field (default ['drawio'])"
 ## Task 2: Add `fast-xml-parser` and `elkjs` dependencies
 
 **Files:**
+
 - Modify: `package.json`
 
 - [ ] **Step 1: Install the deps**
@@ -160,6 +162,7 @@ git commit -m "chore(deps): add fast-xml-parser and elkjs for drawio generator"
 ## Task 3: Stability helpers
 
 **Files:**
+
 - Create: `src/generator/drawio/stability.ts`
 - Test: `tests/generator/drawio/stability.test.ts`
 
@@ -261,6 +264,7 @@ git commit -m "feat(drawio): add stability helpers for deterministic cell orderi
 ## Task 4: Styles and managed-cell tagging
 
 **Files:**
+
 - Create: `src/generator/drawio/styles.ts`
 - Test: `tests/generator/drawio/styles.test.ts`
 
@@ -393,6 +397,7 @@ git commit -m "feat(drawio): add mxCell style definitions and managed-cell tag"
 ## Task 5: XML writer
 
 **Files:**
+
 - Create: `src/generator/drawio/writer.ts`
 - Test: `tests/generator/drawio/writer.test.ts`
 
@@ -637,6 +642,7 @@ git commit -m "feat(drawio): add mxGraph XML writer"
 ## Task 6: Layout wrapper
 
 **Files:**
+
 - Create: `src/generator/drawio/layout.ts`
 - Test: `tests/generator/drawio/layout.test.ts`
 
@@ -826,7 +832,7 @@ function collect(
       height: Math.round(node.height ?? 0),
     });
   }
-  for (const child of (node.children as typeof node[]) ?? []) {
+  for (const child of (node.children as (typeof node)[]) ?? []) {
     collect(child, ax, ay, out);
   }
 }
@@ -849,6 +855,7 @@ git commit -m "feat(drawio): add elkjs layout wrapper with per-level algorithms"
 ## Task 7: L1 context cell builder
 
 **Files:**
+
 - Create: `src/generator/drawio/context.ts`
 - Test: `tests/generator/drawio/context.test.ts`
 
@@ -1066,6 +1073,7 @@ git commit -m "feat(drawio): build L1 context cells from ArchitectureModel"
 ## Task 8: L2 container cell builder
 
 **Files:**
+
 - Create: `src/generator/drawio/container.ts`
 - Test: `tests/generator/drawio/container.test.ts`
 
@@ -1084,9 +1092,27 @@ const model: ArchitectureModel = {
     { id: "payment", name: "Payment", description: "", technology: "REST" },
   ],
   containers: [
-    { id: "web", applicationId: "web", name: "Web", description: "", technology: "TS" },
-    { id: "api", applicationId: "api", name: "API", description: "", technology: "Go" },
-    { id: "orphan", applicationId: "orphan", name: "Orphan", description: "", technology: "?" },
+    {
+      id: "web",
+      applicationId: "web",
+      name: "Web",
+      description: "",
+      technology: "TS",
+    },
+    {
+      id: "api",
+      applicationId: "api",
+      name: "API",
+      description: "",
+      technology: "Go",
+    },
+    {
+      id: "orphan",
+      applicationId: "orphan",
+      name: "Orphan",
+      description: "",
+      technology: "?",
+    },
   ],
   components: [],
   relationships: [
@@ -1116,7 +1142,9 @@ describe("buildContainerCells", () => {
 
   it("edges reference containers directly (not via system)", () => {
     const { edges } = buildContainerCells(model);
-    expect(edges.find((e) => e.source === "web" && e.target === "api")).toBeDefined();
+    expect(
+      edges.find((e) => e.source === "web" && e.target === "api"),
+    ).toBeDefined();
   });
 });
 ```
@@ -1156,8 +1184,7 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
     ...model.components.map((c) => c.id),
   ]);
 
-  const resolve = (id: string): string =>
-    componentToContainer.get(id) ?? id;
+  const resolve = (id: string): string => componentToContainer.get(id) ?? id;
 
   const connected = new Set<string>();
   const seenEdges = new Set<string>();
@@ -1250,6 +1277,7 @@ git commit -m "feat(drawio): build L2 container cells from ArchitectureModel"
 ## Task 9: L3 component cell builder
 
 **Files:**
+
 - Create: `src/generator/drawio/component.ts`
 - Test: `tests/generator/drawio/component.test.ts`
 
@@ -1266,13 +1294,46 @@ const model: ArchitectureModel = {
   actors: [],
   externalSystems: [],
   containers: [
-    { id: "api", applicationId: "api", name: "API", description: "", technology: "Go" },
-    { id: "web", applicationId: "web", name: "Web", description: "", technology: "TS" },
+    {
+      id: "api",
+      applicationId: "api",
+      name: "API",
+      description: "",
+      technology: "Go",
+    },
+    {
+      id: "web",
+      applicationId: "web",
+      name: "Web",
+      description: "",
+      technology: "TS",
+    },
   ],
   components: [
-    { id: "auth", containerId: "api", name: "Auth", description: "", technology: "Go", moduleIds: [] },
-    { id: "user", containerId: "api", name: "User", description: "", technology: "Go", moduleIds: [] },
-    { id: "ui", containerId: "web", name: "UI", description: "", technology: "TS", moduleIds: [] },
+    {
+      id: "auth",
+      containerId: "api",
+      name: "Auth",
+      description: "",
+      technology: "Go",
+      moduleIds: [],
+    },
+    {
+      id: "user",
+      containerId: "api",
+      name: "User",
+      description: "",
+      technology: "Go",
+      moduleIds: [],
+    },
+    {
+      id: "ui",
+      containerId: "web",
+      name: "UI",
+      description: "",
+      technology: "TS",
+      moduleIds: [],
+    },
   ],
   relationships: [
     { sourceId: "auth", targetId: "user", label: "uses" },
@@ -1424,6 +1485,7 @@ git commit -m "feat(drawio): build L3 component cells per container"
 ## Task 10: L4 code cell builder
 
 **Files:**
+
 - Create: `src/generator/drawio/code.ts`
 - Test: `tests/generator/drawio/code.test.ts`
 
@@ -1442,15 +1504,40 @@ const model: ArchitectureModel = {
   actors: [],
   externalSystems: [],
   containers: [
-    { id: "api", applicationId: "api", name: "API", description: "", technology: "Go" },
+    {
+      id: "api",
+      applicationId: "api",
+      name: "API",
+      description: "",
+      technology: "Go",
+    },
   ],
   components: [
-    { id: "auth", containerId: "api", name: "Auth", description: "", technology: "Go", moduleIds: [] },
+    {
+      id: "auth",
+      containerId: "api",
+      name: "Auth",
+      description: "",
+      technology: "Go",
+      moduleIds: [],
+    },
   ],
   relationships: [],
   codeElements: [
-    { id: "User", componentId: "auth", containerId: "api", name: "User", kind: "class" },
-    { id: "hashPassword", componentId: "auth", containerId: "api", name: "hashPassword", kind: "function" },
+    {
+      id: "User",
+      componentId: "auth",
+      containerId: "api",
+      name: "User",
+      kind: "class",
+    },
+    {
+      id: "hashPassword",
+      componentId: "auth",
+      containerId: "api",
+      name: "hashPassword",
+      kind: "function",
+    },
   ],
   codeRelationships: [
     { sourceId: "User", targetId: "hashPassword", kind: "uses" },
@@ -1582,6 +1669,7 @@ git commit -m "feat(drawio): build L4 code-level cells per component"
 ## Task 11: Parse existing drawio file
 
 **Files:**
+
 - Create: `src/generator/drawio/merge.ts`
 - Test: `tests/generator/drawio/merge.test.ts`
 - Create: `tests/fixtures/drawio/populated.drawio`
@@ -1638,7 +1726,9 @@ const FIXTURES = path.resolve(__dirname, "../../fixtures/drawio");
 
 describe("parseDrawioFile", () => {
   it("returns empty result when file does not exist", () => {
-    const result = parseDrawioFile(path.join(FIXTURES, "does-not-exist.drawio"));
+    const result = parseDrawioFile(
+      path.join(FIXTURES, "does-not-exist.drawio"),
+    );
     expect(result.cells.size).toBe(0);
   });
 
@@ -1739,7 +1829,9 @@ export function parseDrawioFile(filePath: string): ExistingDocument {
   if (rootCells === null) {
     throw new DrawioParseError(
       filePath,
-      new Error("unexpected structure: no mxfile > diagram > mxGraphModel > root > mxCell"),
+      new Error(
+        "unexpected structure: no mxfile > diagram > mxGraphModel > root > mxCell",
+      ),
     );
   }
 
@@ -1785,9 +1877,7 @@ function extractCells(tree: unknown): unknown[] | null {
   return Array.isArray(cells) ? cells : [cells];
 }
 
-function parseGeometry(
-  geom?: Record<string, unknown>,
-): Geometry | undefined {
+function parseGeometry(geom?: Record<string, unknown>): Geometry | undefined {
   if (!geom) return undefined;
   const x = Number(geom["@_x"] ?? NaN);
   const y = Number(geom["@_y"] ?? NaN);
@@ -1834,6 +1924,7 @@ git commit -m "feat(drawio): parse existing drawio file with fast-xml-parser"
 ## Task 12: Reconcile existing + fresh cells
 
 **Files:**
+
 - Modify: `src/generator/drawio/merge.ts`
 - Modify: `tests/generator/drawio/merge.test.ts`
 
@@ -1874,9 +1965,7 @@ describe("reconcile", () => {
       ]),
     };
     const fresh = {
-      vertices: [
-        { id: "auth", value: "new label", style: STYLES.container },
-      ],
+      vertices: [{ id: "auth", value: "new label", style: STYLES.container }],
       edges: [],
     };
     const layout = new Map([["auth", layoutGeom(0, 0)]]);
@@ -2110,7 +2199,9 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
       }
       const geom = layout.get(v.id);
       if (!geom) {
-        warnings.push(`No layout assigned for vertex "${v.id}"; placing at origin.`);
+        warnings.push(
+          `No layout assigned for vertex "${v.id}"; placing at origin.`,
+        );
       }
       vertices.push({
         ...v,
@@ -2182,6 +2273,7 @@ git commit -m "feat(drawio): reconcile fresh cells against existing file, preser
 ## Task 13: Orchestrator — generateDrawioFile
 
 **Files:**
+
 - Create: `src/generator/drawio/index.ts`
 - Test: `tests/generator/drawio/index.test.ts`
 
@@ -2237,9 +2329,19 @@ describe("generateDrawioFile", () => {
         },
       ],
     };
-    await generateDrawioFile({ filePath: out, diagramName: "L1", level: "context", cells });
+    await generateDrawioFile({
+      filePath: out,
+      diagramName: "L1",
+      level: "context",
+      cells,
+    });
     const first = fs.readFileSync(out, "utf-8");
-    await generateDrawioFile({ filePath: out, diagramName: "L1", level: "context", cells });
+    await generateDrawioFile({
+      filePath: out,
+      diagramName: "L1",
+      level: "context",
+      cells,
+    });
     const second = fs.readFileSync(out, "utf-8");
     expect(second).toBe(first);
   });
@@ -2375,6 +2477,7 @@ git commit -m "feat(drawio): orchestrate parse/layout/reconcile/write per diagra
 ## Task 14: Drift detection
 
 **Files:**
+
 - Create: `src/generator/drawio/drift.ts`
 - Test: `tests/generator/drawio/drift.test.ts`
 
@@ -2394,7 +2497,13 @@ const model: ArchitectureModel = {
   actors: [],
   externalSystems: [],
   containers: [
-    { id: "api", applicationId: "api", name: "API", description: "", technology: "" },
+    {
+      id: "api",
+      applicationId: "api",
+      name: "API",
+      description: "",
+      technology: "",
+    },
   ],
   components: [],
   relationships: [],
@@ -2559,6 +2668,7 @@ git commit -m "feat(drawio): drift detection for stale model references"
 ## Task 15: Cleanup — remove stale drawio files
 
 **Files:**
+
 - Create: `src/generator/drawio/cleanup.ts`
 - Test: `tests/generator/drawio/cleanup.test.ts`
 
@@ -2718,6 +2828,7 @@ git commit -m "feat(drawio): remove stale .drawio files for deleted containers/c
 ## Task 16: Submodule orchestration
 
 **Files:**
+
 - Create: `src/generator/drawio/submodule.ts`
 - Test: `tests/generator/drawio/submodule.test.ts`
 
@@ -2925,6 +3036,7 @@ git commit -m "feat(drawio): emit per-submodule .drawio files"
 ## Task 17: Wire into the `generate` command
 
 **Files:**
+
 - Modify: `src/cli/commands/generate.ts`
 
 Rationale: `config.output.generators` drives dispatch. D2 path stays unchanged; drawio path runs its own cleanup, builders, orchestrator, and drift. Rendering via the D2 CLI only fires when `d2` is in the list.
@@ -2947,11 +3059,13 @@ import { generateSubmoduleDrawio } from "../../generator/drawio/submodule.js";
 - [ ] **Step 2: Branch cleanup by generator**
 
 Replace the three existing cleanup calls
+
 ```typescript
 removeStaleContainerDirs(outputDir, model);
 removeStaleComponentDirs(outputDir, model);
 removeStaleSubmoduleComponentDirs(configDir, config, model);
 ```
+
 with:
 
 ```typescript
@@ -3074,6 +3188,7 @@ git commit -m "feat(cli): dispatch drawio generator from generate command"
 ## Task 18: End-to-end integration
 
 **Files:**
+
 - Create: `tests/generator/drawio/integration/end-to-end.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -3096,8 +3211,20 @@ const MODEL: ArchitectureModel = {
     { id: "payments", name: "Payments", description: "", technology: "REST" },
   ],
   containers: [
-    { id: "web", applicationId: "web", name: "Web", description: "", technology: "TS" },
-    { id: "api", applicationId: "api", name: "API", description: "", technology: "Go" },
+    {
+      id: "web",
+      applicationId: "web",
+      name: "Web",
+      description: "",
+      technology: "TS",
+    },
+    {
+      id: "api",
+      applicationId: "api",
+      name: "API",
+      description: "",
+      technology: "Go",
+    },
   ],
   components: [],
   relationships: [
@@ -3146,6 +3273,7 @@ git commit -m "test(drawio): end-to-end L2 diagram fixture test"
 ## Task 19: Regeneration determinism
 
 **Files:**
+
 - Create: `tests/generator/drawio/integration/regen-determinism.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -3212,6 +3340,7 @@ git commit -m "test(drawio): assert byte-identical output across reruns"
 ## Task 20: User-edit preservation
 
 **Files:**
+
 - Create: `tests/generator/drawio/integration/user-edit-preservation.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -3232,7 +3361,13 @@ const BASE: ArchitectureModel = {
   actors: [],
   externalSystems: [],
   containers: [
-    { id: "a", applicationId: "a", name: "A", description: "first", technology: "" },
+    {
+      id: "a",
+      applicationId: "a",
+      name: "A",
+      description: "first",
+      technology: "",
+    },
     { id: "b", applicationId: "b", name: "B", description: "", technology: "" },
   ],
   components: [],
@@ -3309,6 +3444,7 @@ git commit -m "test(drawio): preserve user geometry/style and freehand cells acr
 ## Task 21: Stale deletion integration
 
 **Files:**
+
 - Create: `tests/generator/drawio/integration/stale-deletion.test.ts`
 
 - [ ] **Step 1: Write the failing test**
@@ -3334,8 +3470,20 @@ describe("drawio stale-deletion", () => {
       actors: [],
       externalSystems: [],
       containers: [
-        { id: "a", applicationId: "a", name: "A", description: "", technology: "" },
-        { id: "b", applicationId: "b", name: "B", description: "", technology: "" },
+        {
+          id: "a",
+          applicationId: "a",
+          name: "A",
+          description: "",
+          technology: "",
+        },
+        {
+          id: "b",
+          applicationId: "b",
+          name: "B",
+          description: "",
+          technology: "",
+        },
       ],
       components: [],
       relationships: [{ sourceId: "a", targetId: "b", label: "uses" }],
@@ -3369,9 +3517,7 @@ describe("drawio stale-deletion", () => {
     const doc = parseDrawioFile(out);
     expect(doc.cells.has("b")).toBe(false);
     expect(
-      [...doc.cells.values()].some(
-        (c) => c.source === "a" && c.target === "b",
-      ),
+      [...doc.cells.values()].some((c) => c.source === "a" && c.target === "b"),
     ).toBe(false);
     expect(doc.cells.has("note")).toBe(true);
   });
@@ -3395,6 +3541,7 @@ git commit -m "test(drawio): delete stale managed cells and orphan edges, keep f
 ## Task 22: Pipeline-level CLI integration
 
 **Files:**
+
 - Create: `tests/integration/drawio-pipeline.test.ts`
 
 Rationale: the Task 17 changes touch the CLI's dispatch logic. A test matching the style of `tests/integration/pipeline.test.ts` drives the real code path, not the generator in isolation.
@@ -3473,6 +3620,7 @@ git commit -m "test(drawio): pipeline integration via buildModel + generateDrawi
 ## Task 23: Docs — README and CLAUDE.md
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `CLAUDE.md`
 
