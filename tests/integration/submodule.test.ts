@@ -1,4 +1,5 @@
 import { describe, it, expect, afterAll } from "vitest";
+import { resolveSubmoduleLink } from "../../src/cli/commands/generate.js";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -464,6 +465,73 @@ describe("Integration: Submodule per-folder docs", () => {
         path.join(tmpRoot, "los-cha/app/docs/architecture/c3-component.d2"),
       ),
     ).toBe(true);
+  });
+
+  function resolveSubmoduleLinkForTest(
+    containerId: string,
+    model: import("../../src/analyzers/types.js").ArchitectureModel,
+    config: import("../../src/config/schema.js").Config,
+  ): string | null {
+    return resolveSubmoduleLink(
+      containerId,
+      model,
+      config,
+      path.join(MONOREPO, "docs", "architecture"),
+    );
+  }
+
+  it("returns null drill-down link for aggregator containers in C2", () => {
+    const model: import("../../src/analyzers/types.js").ArchitectureModel = {
+      version: 1,
+      system: { name: "T", description: "" },
+      actors: [{ id: "user", name: "User", description: "" }],
+      externalSystems: [],
+      containers: [
+        {
+          id: "los-cha",
+          applicationId: "los-cha",
+          name: "Los Cha",
+          description: "",
+          technology: "Java",
+          path: "los-cha",
+        },
+        {
+          id: "los-cha-app",
+          applicationId: "los-cha-app",
+          name: "Charging App",
+          description: "",
+          technology: "Java / Spring Boot",
+          path: "los-cha/app",
+        },
+      ],
+      components: [],
+      relationships: [
+        {
+          sourceId: "user",
+          targetId: "los-cha",
+          label: "uses",
+        },
+        {
+          sourceId: "user",
+          targetId: "los-cha-app",
+          label: "uses",
+        },
+      ],
+    };
+
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    const d2 = generateContainerDiagram(model, {
+      componentLinks: true,
+      format: "svg",
+      submoduleLinkResolver: (containerId) =>
+        resolveSubmoduleLinkForTest(containerId, model, config),
+    });
+
+    // Leaf gets a link; aggregator does not.
+    expect(d2).toContain("los-cha/app/docs/architecture/c3-component.svg");
+    // The aggregator box should not carry a link attribute pointing to a los-cha/docs path.
+    expect(d2).not.toMatch(/los-cha\/docs\/architecture\/c3-component\.svg/);
   });
 
   it("generate-then-remove cleans up all files generate created", async () => {

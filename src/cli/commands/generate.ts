@@ -27,7 +27,10 @@ import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
-import { generateSubmoduleDocs } from "../../generator/d2/submodule-scaffold.js";
+import {
+  generateSubmoduleDocs,
+  collectAggregatorIds,
+} from "../../generator/d2/submodule-scaffold.js";
 import { checkDrift } from "../../generator/d2/drift.js";
 import { validateD2Files } from "../../generator/d2/validate.js";
 import { removeStaleContainerDirs } from "../../generator/d2/cleanup.js";
@@ -472,7 +475,7 @@ async function buildModelFromScan(
  * Resolve a container drill-down link for submodule mode.
  * Returns relative path from root output dir to the per-folder component diagram.
  */
-function resolveSubmoduleLink(
+export function resolveSubmoduleLink(
   containerId: string,
   model: import("../../analyzers/types.js").ArchitectureModel,
   config: Config,
@@ -484,6 +487,9 @@ function resolveSubmoduleLink(
   const appPath = container.path ?? container.applicationId.replace(/-/g, "/");
   const override = config.submodules.overrides[container.applicationId];
   if (override?.exclude) return null;
+
+  // Aggregator containers have no submodule site (see submodule-scaffold.ts).
+  if (collectAggregatorIds(model).has(container.id)) return null;
 
   const docsDir = override?.docsDir ?? config.submodules.docsDir;
   const targetDir = path.resolve(
