@@ -144,7 +144,7 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     } else {
       if (prior && prior.managed && priorParentStale) {
         warnings.push(
-          `Cell "${v.id}" parent "${prior.parent}" no longer exists; reparented to layer 1.`,
+          `Cell "${v.id}" parent "${prior.parent}" no longer exists; reparented to "${v.parent ?? "1"}".`,
         );
       }
       const geom = layout.get(v.id);
