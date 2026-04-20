@@ -234,4 +234,136 @@ describe("reconcile", () => {
     const edge = result.edges.find((e) => e.id === "a->b-uses")!;
     expect(edge.waypoints).toBeUndefined();
   });
+
+  it("drops and warns about unmanaged edges whose endpoint no longer exists", () => {
+    const existing = {
+      cells: new Map([
+        [
+          "a",
+          {
+            id: "a",
+            style: STYLES.container,
+            vertex: true,
+            edge: false,
+            parent: "1",
+            geometry: { x: 0, y: 0, width: 160, height: 60 },
+            managed: true,
+          },
+        ],
+        [
+          "b",
+          {
+            id: "b",
+            style: STYLES.container,
+            vertex: true,
+            edge: false,
+            parent: "1",
+            geometry: { x: 200, y: 0, width: 160, height: 60 },
+            managed: true,
+          },
+        ],
+        [
+          "freehand-a-to-b",
+          {
+            id: "freehand-a-to-b",
+            style: "endArrow=classic",
+            vertex: false,
+            edge: true,
+            source: "a",
+            target: "b",
+            managed: false,
+          },
+        ],
+      ]),
+    } as ExistingDocument;
+    const fresh = {
+      vertices: [{ id: "a", value: "A", style: STYLES.container }],
+      edges: [],
+    };
+    const layout = new Map([["a", layoutGeom(0, 0)]]);
+    const result = reconcile({ existing, fresh, layout });
+    expect(
+      result.edges.find((e) => e.id === "freehand-a-to-b"),
+    ).toBeUndefined();
+    expect(
+      result.warnings.some(
+        (w) =>
+          /^Dropped unmanaged edge .* endpoint .* no longer exists/.test(w) &&
+          w.includes("freehand-a-to-b") &&
+          w.includes("b"),
+      ),
+    ).toBe(true);
+  });
+
+  it("preserves waypoints when both endpoints are kept unchanged", () => {
+    const existing = {
+      cells: new Map([
+        [
+          "a",
+          {
+            id: "a",
+            style: STYLES.container,
+            vertex: true,
+            edge: false,
+            parent: "1",
+            geometry: { x: 10, y: 10, width: 160, height: 60 },
+            managed: true,
+          },
+        ],
+        [
+          "b",
+          {
+            id: "b",
+            style: STYLES.container,
+            vertex: true,
+            edge: false,
+            parent: "1",
+            geometry: { x: 400, y: 10, width: 160, height: 60 },
+            managed: true,
+          },
+        ],
+        [
+          "a->b-uses",
+          {
+            id: "a->b-uses",
+            style: STYLES.relationship,
+            vertex: false,
+            edge: true,
+            source: "a",
+            target: "b",
+            waypoints: [
+              { x: 200, y: 40 },
+              { x: 300, y: 40 },
+            ],
+            managed: true,
+          },
+        ],
+      ]),
+    } as ExistingDocument;
+    const fresh = {
+      vertices: [
+        { id: "a", value: "A", style: STYLES.container },
+        { id: "b", value: "B", style: STYLES.container },
+      ],
+      edges: [
+        {
+          id: "a->b-uses",
+          source: "a",
+          target: "b",
+          value: "uses",
+          style: STYLES.relationship,
+        },
+      ],
+    };
+    const layout = new Map([
+      ["a", layoutGeom(0, 0)],
+      ["b", layoutGeom(500, 0)],
+    ]);
+    const result = reconcile({ existing, fresh, layout });
+    const edge = result.edges.find((e) => e.id === "a->b-uses")!;
+    expect(edge.waypoints).toEqual([
+      { x: 200, y: 40 },
+      { x: 300, y: 40 },
+    ]);
+  });
 });
