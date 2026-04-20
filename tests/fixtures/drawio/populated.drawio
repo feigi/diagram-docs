@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="diagram-docs" type="device">
+  <diagram name="L2">
+    <mxGraphModel>
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="auth" value="Auth Service" style="rounded=1;fillColor=#438DD5;ddocs_managed=1" vertex="1" parent="1">
+          <mxGeometry x="120" y="80" width="160" height="60" as="geometry"/>
+        </mxCell>
+        <mxCell id="auth-&gt;db-uses" value="uses" style="endArrow=classic;ddocs_managed=1" edge="1" parent="1" source="auth" target="db">
+          <mxGeometry relative="1" as="geometry"/>
+        </mxCell>
+        <mxCell id="my-note" value="user drew this" style="rounded=1;fillColor=#fff2cc" vertex="1" parent="1">
+          <mxGeometry x="300" y="300" width="120" height="40" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>
