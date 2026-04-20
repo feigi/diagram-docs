@@ -187,11 +187,24 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     edges.push({ ...e, waypoints });
   }
 
+  const survivingVertexIds = new Set(vertices.map((v) => v.id));
+
   for (const [id, cell] of existing.cells) {
     if (freshEdgeIds.has(id)) continue;
     if (!cell.edge) continue;
     if (cell.managed) continue;
     if (!cell.source || !cell.target) continue;
+    const missing = !survivingVertexIds.has(cell.source)
+      ? cell.source
+      : !survivingVertexIds.has(cell.target)
+        ? cell.target
+        : undefined;
+    if (missing !== undefined) {
+      warnings.push(
+        `Dropped unmanaged edge ${id}: endpoint ${missing} no longer exists`,
+      );
+      continue;
+    }
     edges.push({
       id,
       source: cell.source,
