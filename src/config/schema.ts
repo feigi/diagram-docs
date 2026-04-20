@@ -70,6 +70,10 @@ export const configSchema = z
         format: z.enum(["svg", "png"]).default("svg"),
         /** Timeout in seconds for rendering a single D2 file to SVG/PNG. */
         renderTimeout: z.number().int().min(10).default(120),
+        generators: z
+          .array(z.enum(["d2", "drawio"]))
+          .min(1)
+          .default(["drawio"]),
       })
       .strict()
       .default({}),
