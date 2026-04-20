@@ -77,4 +77,56 @@ describe("generateDrawioFile", () => {
     ).rejects.toThrow();
     expect(fs.readFileSync(out, "utf-8")).toBe(corrupt);
   });
+
+  it("writes atomically and leaves no .tmp file behind", async () => {
+    const dir = tmp();
+    const out = path.join(dir, "c1-context.drawio");
+    await generateDrawioFile({
+      filePath: out,
+      diagramName: "L1",
+      level: "context",
+      cells: {
+        vertices: [{ id: "a", value: "A", style: STYLES.container }],
+        edges: [],
+      },
+    });
+    expect(fs.existsSync(out)).toBe(true);
+    expect(fs.existsSync(`${out}.tmp`)).toBe(false);
+  });
+
+  it("does not truncate an existing file when the write fails", async () => {
+    const dir = tmp();
+    const out = path.join(dir, "c1-context.drawio");
+    // Seed with a valid (empty) drawio file so the merge step succeeds.
+    await generateDrawioFile({
+      filePath: out,
+      diagramName: "L1",
+      level: "context",
+      cells: { vertices: [], edges: [] },
+    });
+    const original = fs.readFileSync(out, "utf-8");
+
+    // Pre-create a directory at the tmp path to force writeFileSync to fail
+    // with EISDIR, simulating a mid-write failure without mocking fs.
+    const tmpPath = `${out}.tmp`;
+    fs.mkdirSync(tmpPath);
+
+    await expect(
+      generateDrawioFile({
+        filePath: out,
+        diagramName: "L1",
+        level: "context",
+        cells: {
+          vertices: [{ id: "a", value: "A", style: STYLES.container }],
+          edges: [],
+        },
+      }),
+    ).rejects.toThrow();
+
+    // Original file is untouched.
+    expect(fs.readFileSync(out, "utf-8")).toBe(original);
+    // The directory we pre-created survives (it's not a regular file we
+    // expect cleanup to remove — rmSync with force handles that case too).
+    // What matters: the destination was not replaced.
+  });
 });
