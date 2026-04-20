@@ -120,12 +120,21 @@ export const generateCommand = new Command("generate")
     // L2: Container diagram
     if (config.levels.container) {
       const useSubmoduleLinks = options.submodules || config.submodules.enabled;
+      const aggregatorIds = useSubmoduleLinks
+        ? collectAggregatorIds(model)
+        : undefined;
       const d2 = generateContainerDiagram(model, {
         componentLinks: config.levels.component,
         format: config.output.format,
         submoduleLinkResolver: useSubmoduleLinks
           ? (containerId) =>
-              resolveSubmoduleLink(containerId, model, config, outputDir)
+              resolveSubmoduleLink(
+                containerId,
+                model,
+                config,
+                outputDir,
+                aggregatorIds,
+              )
           : undefined,
       });
       if (writeIfChanged(path.join(generatedDir, "c2-container.d2"), d2)) {
@@ -480,6 +489,7 @@ export function resolveSubmoduleLink(
   model: import("../../analyzers/types.js").ArchitectureModel,
   config: Config,
   rootOutputDir: string,
+  aggregatorIds?: Set<string>,
 ): string | null {
   const container = model.containers.find((c) => c.id === containerId);
   if (!container) return null;
@@ -489,7 +499,8 @@ export function resolveSubmoduleLink(
   if (override?.exclude) return null;
 
   // Aggregator containers have no submodule site (see submodule-scaffold.ts).
-  if (collectAggregatorIds(model).has(container.id)) return null;
+  const aggregators = aggregatorIds ?? collectAggregatorIds(model);
+  if (aggregators.has(container.id)) return null;
 
   const docsDir = override?.docsDir ?? config.submodules.docsDir;
   const targetDir = path.resolve(
