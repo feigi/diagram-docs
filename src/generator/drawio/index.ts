@@ -80,5 +80,12 @@ export async function generateDrawioFile(
   }
 
   fs.mkdirSync(path.dirname(input.filePath), { recursive: true });
-  fs.writeFileSync(input.filePath, writer.serialise(), "utf-8");
+  const tmpPath = `${input.filePath}.tmp`;
+  try {
+    fs.writeFileSync(tmpPath, writer.serialise(), "utf-8");
+    fs.renameSync(tmpPath, input.filePath);
+  } catch (err) {
+    fs.rmSync(tmpPath, { force: true });
+    throw err;
+  }
 }
