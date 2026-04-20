@@ -9,6 +9,7 @@ import { loadModel } from "../../src/core/model.js";
 import { buildModel } from "../../src/core/model-builder.js";
 import { generateContainerDiagram } from "../../src/generator/d2/container.js";
 import { generateSubmoduleDocs } from "../../src/generator/d2/submodule-scaffold.js";
+import { removeStaleSubmoduleDirs } from "../../src/generator/d2/cleanup.js";
 import { configSchema } from "../../src/config/schema.js";
 import { resolveConfig } from "../../src/core/cascading-config.js";
 import { collectRemovePaths, removePath } from "../../src/core/remove.js";
@@ -460,6 +461,81 @@ describe("Integration: Submodule per-folder docs", () => {
     ).toBe(false);
 
     // Leaf subproject site created as usual.
+    expect(
+      fs.existsSync(
+        path.join(tmpRoot, "los-cha/app/docs/architecture/c3-component.d2"),
+      ),
+    ).toBe(true);
+  });
+
+  it("skips aggregator + cleans a pre-existing aggregator site", () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-aggregator-cleanup");
+    trackDir(tmpRoot);
+
+    // Simulate a prior run that scaffolded a site at the aggregator path.
+    const archDir = path.join(tmpRoot, "los-cha/docs/architecture");
+    fs.mkdirSync(path.join(archDir, "_generated"), { recursive: true });
+    fs.writeFileSync(
+      path.join(archDir, "c3-component.d2"),
+      "# C4 Component Diagram — Los Cha\n\n...@_generated/c3-component.d2\n...@styles.d2\n\n# Add your customizations below this line\n",
+    );
+    fs.writeFileSync(
+      path.join(archDir, "_generated", "c3-component.d2"),
+      "los_cha: {}\n",
+    );
+    fs.writeFileSync(
+      path.join(tmpRoot, "los-cha", "diagram-docs.yaml"),
+      "# diagram-docs.yaml for Los Cha\n# system:\n#   name: Los Cha\n",
+    );
+
+    const model: import("../../src/analyzers/types.js").ArchitectureModel = {
+      version: 1,
+      system: { name: "T", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "los-cha",
+          applicationId: "los-cha",
+          name: "Los Cha",
+          description: "",
+          technology: "Java",
+          path: "los-cha",
+        },
+        {
+          id: "los-cha-app",
+          applicationId: "los-cha-app",
+          name: "Charging App",
+          description: "",
+          technology: "Java / Spring Boot",
+          path: "los-cha/app",
+        },
+      ],
+      components: [],
+      relationships: [],
+    };
+
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    removeStaleSubmoduleDirs(tmpRoot, model, config);
+    const subResults = generateSubmoduleDocs(
+      tmpRoot,
+      OUTPUT_DIR,
+      model,
+      config,
+    );
+
+    // Aggregator docs/architecture gone (Task 5 deletes only the architecture
+    // subtree). The parent `docs/` directory may linger empty — that's fine.
+    expect(fs.existsSync(path.join(tmpRoot, "los-cha/docs/architecture"))).toBe(
+      false,
+    );
+    expect(fs.existsSync(path.join(tmpRoot, "los-cha/diagram-docs.yaml"))).toBe(
+      false,
+    );
+
+    // Leaf site present.
+    expect(subResults.map((s) => s.containerId)).toEqual(["los-cha-app"]);
     expect(
       fs.existsSync(
         path.join(tmpRoot, "los-cha/app/docs/architecture/c3-component.d2"),
