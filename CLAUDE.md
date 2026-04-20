@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What This Is
 
-diagram-docs is a TypeScript CLI that generates C4 architecture diagrams — as drawio (default) or D2 — from source code. It implements a three-phase pipeline:
+diagram-docs is a TypeScript CLI that generates C4 architecture diagrams — as D2 (default) or drawio — from source code. It implements a three-phase pipeline:
 
 1. **Scan** — Static analysis extracts code structure → `.diagram-docs/raw-structure.json`
 2. **Model** — Deterministic or LLM-agent-driven conversion → `architecture-model.yaml`
