@@ -42,6 +42,14 @@ import {
   removeStaleComponentDirs,
   removeStaleSubmoduleComponentDirs,
 } from "../../generator/d2/cleanup.js";
+import { buildContextCells } from "../../generator/drawio/context.js";
+import { buildContainerCells } from "../../generator/drawio/container.js";
+import { buildComponentCells } from "../../generator/drawio/component.js";
+import { buildCodeCells } from "../../generator/drawio/code.js";
+import { generateDrawioFile } from "../../generator/drawio/index.js";
+import { removeStaleDrawioFiles } from "../../generator/drawio/cleanup.js";
+import { checkDrawioDrift } from "../../generator/drawio/drift.js";
+import { generateSubmoduleDrawio } from "../../generator/drawio/submodule.js";
 import {
   codeLinkableComponentIds,
   dominantLanguageForComponent,
@@ -112,219 +120,306 @@ export const generateCommand = new Command("generate")
 
     const submodulesOn = options.submodules || config.submodules.enabled;
 
+    const generators = config.output.generators;
+    const runD2 = generators.includes("d2");
+    const runDrawio = generators.includes("drawio");
+
     // Remove scaffold/generated dirs for containers deleted since last scan.
-    removeStaleContainerDirs(outputDir, model);
-    removeStaleComponentDirs(outputDir, model);
-    removeStaleSubmoduleComponentDirs(configDir, config, model);
-
-    // Ensure output directories exist
-    if (!fs.existsSync(generatedDir)) {
-      fs.mkdirSync(generatedDir, { recursive: true });
+    if (runD2) {
+      removeStaleContainerDirs(outputDir, model);
+      removeStaleComponentDirs(outputDir, model);
+      removeStaleSubmoduleComponentDirs(configDir, config, model);
+    }
+    if (runDrawio) {
+      removeStaleDrawioFiles(outputDir, model);
     }
 
-    let filesWritten = 0;
-    let filesUnchanged = 0;
-
-    // Compute code-linkable component IDs once; reused by L3 root and the
-    // per-submodule C3 emission so both render the same drill-down links.
-    const codeLinks = config.levels.code
-      ? codeLinkableComponentIds(model, config.code.minElements)
-      : undefined;
-
-    // L1: Context diagram
-    if (config.levels.context) {
-      const d2 = generateContextDiagram(model);
-      if (writeIfChanged(path.join(generatedDir, "c1-context.d2"), d2)) {
-        filesWritten++;
-      } else {
-        filesUnchanged++;
+    if (runD2) {
+      // Ensure output directories exist
+      if (!fs.existsSync(generatedDir)) {
+        fs.mkdirSync(generatedDir, { recursive: true });
       }
-    }
 
-    // L2: Container diagram
-    if (config.levels.container) {
-      const useSubmoduleLinks = options.submodules || config.submodules.enabled;
-      const aggregatorIds = useSubmoduleLinks
-        ? collectAggregatorIds(model)
+      let filesWritten = 0;
+      let filesUnchanged = 0;
+
+      // Compute code-linkable component IDs once; reused by L3 root and the
+      // per-submodule C3 emission so both render the same drill-down links.
+      const codeLinks = config.levels.code
+        ? codeLinkableComponentIds(model, config.code.minElements)
         : undefined;
-      const d2 = generateContainerDiagram(model, {
-        componentLinks: config.levels.component,
-        format: config.output.format,
-        submoduleLinkResolver: useSubmoduleLinks
-          ? (containerId) =>
-              resolveSubmoduleLink(
-                containerId,
-                model,
-                config,
-                outputDir,
-                aggregatorIds,
-              )
-          : undefined,
-      });
-      if (writeIfChanged(path.join(generatedDir, "c2-container.d2"), d2)) {
-        filesWritten++;
-      } else {
-        filesUnchanged++;
-      }
-    }
 
-    // L3: Component diagrams (one per container)
-    if (config.levels.component) {
-      for (const container of model.containers) {
-        const containerGenDir = path.join(
-          outputDir,
-          "containers",
-          container.id,
-          "_generated",
-        );
-        if (!fs.existsSync(containerGenDir)) {
-          fs.mkdirSync(containerGenDir, { recursive: true });
-        }
-
-        const d2 = generateComponentDiagram(model, container.id, {
-          codeLinks,
-          format: config.output.format,
-        });
-        if (writeIfChanged(path.join(containerGenDir, "c3-component.d2"), d2)) {
+      // L1: Context diagram
+      if (config.levels.context) {
+        const d2 = generateContextDiagram(model);
+        if (writeIfChanged(path.join(generatedDir, "c1-context.d2"), d2)) {
           filesWritten++;
         } else {
           filesUnchanged++;
         }
       }
-    }
 
-    if (config.levels.code && !submodulesOn) {
-      const codeResult = generateCodeLevelDiagrams({
-        model,
-        config,
-        outputDir,
-        rawStructure,
-      });
-      filesWritten += codeResult.written;
-      filesUnchanged += codeResult.unchanged;
-      const total = codeResult.written + codeResult.unchanged;
-      console.error(
-        `L4: ${total} component diagram(s) generated, ` +
-          `${codeResult.skipped} skipped (below code.minElements=${config.code.minElements}).`,
-      );
-      if (codeResult.scaffoldFailed > 0) {
-        console.error(
-          `Error: ${codeResult.scaffoldFailed} L4 scaffold file(s) failed to write. Process will exit with a non-zero status.`,
-        );
-        process.exitCode = 1;
+      // L2: Container diagram
+      if (config.levels.container) {
+        const useSubmoduleLinks =
+          options.submodules || config.submodules.enabled;
+        const aggregatorIds = useSubmoduleLinks
+          ? collectAggregatorIds(model)
+          : undefined;
+        const d2 = generateContainerDiagram(model, {
+          componentLinks: config.levels.component,
+          format: config.output.format,
+          submoduleLinkResolver: useSubmoduleLinks
+            ? (containerId) =>
+                resolveSubmoduleLink(
+                  containerId,
+                  model,
+                  config,
+                  outputDir,
+                  aggregatorIds,
+                )
+            : undefined,
+        });
+        if (writeIfChanged(path.join(generatedDir, "c2-container.d2"), d2)) {
+          filesWritten++;
+        } else {
+          filesUnchanged++;
+        }
       }
-    }
 
-    // Scaffold user-facing files (only creates, never overwrites)
-    scaffoldUserFiles(outputDir, model, config);
+      // L3: Component diagrams (one per container)
+      if (config.levels.component) {
+        for (const container of model.containers) {
+          const containerGenDir = path.join(
+            outputDir,
+            "containers",
+            container.id,
+            "_generated",
+          );
+          if (!fs.existsSync(containerGenDir)) {
+            fs.mkdirSync(containerGenDir, { recursive: true });
+          }
 
-    if (filesWritten > 0) {
-      console.error(
-        `Done. ${filesWritten} generated file(s) written to ${config.output.dir}/`,
-      );
-    }
-    if (filesUnchanged > 0) {
-      console.error(`${filesUnchanged} generated file(s) unchanged.`);
-    }
-
-    // Check for stale references in user customizations
-    const driftWarnings = checkDrift(outputDir, model, {
-      repoRoot: configDir,
-      config,
-    });
-    for (const w of driftWarnings) {
-      console.error(`Warning: ${w.file}:${w.line}: ${w.message}`);
-    }
-
-    // Collect all D2 files to render
-    const d2Files: string[] = [];
-    if (config.levels.context) {
-      d2Files.push(path.join(outputDir, "c1-context.d2"));
-    }
-    if (config.levels.container) {
-      d2Files.push(path.join(outputDir, "c2-container.d2"));
-    }
-    if (config.levels.component) {
-      for (const container of model.containers) {
-        d2Files.push(
-          path.join(outputDir, "containers", container.id, "c3-component.d2"),
-        );
-      }
-    }
-    if (config.levels.code && !submodulesOn) {
-      const compsByContainer = new Map<string, typeof model.components>();
-      for (const c of model.components) {
-        const list = compsByContainer.get(c.containerId) ?? [];
-        list.push(c);
-        compsByContainer.set(c.containerId, list);
-      }
-      const elemCountByComponent = new Map<string, number>();
-      for (const e of model.codeElements ?? []) {
-        elemCountByComponent.set(
-          e.componentId,
-          (elemCountByComponent.get(e.componentId) ?? 0) + 1,
-        );
-      }
-      for (const container of model.containers) {
-        for (const component of compsByContainer.get(container.id) ?? []) {
+          const d2 = generateComponentDiagram(model, container.id, {
+            codeLinks,
+            format: config.output.format,
+          });
           if (
-            (elemCountByComponent.get(component.id) ?? 0) <
-            config.code.minElements
-          )
-            continue;
+            writeIfChanged(path.join(containerGenDir, "c3-component.d2"), d2)
+          ) {
+            filesWritten++;
+          } else {
+            filesUnchanged++;
+          }
+        }
+      }
+
+      if (config.levels.code && !submodulesOn) {
+        const codeResult = generateCodeLevelDiagrams({
+          model,
+          config,
+          outputDir,
+          rawStructure,
+        });
+        filesWritten += codeResult.written;
+        filesUnchanged += codeResult.unchanged;
+        const total = codeResult.written + codeResult.unchanged;
+        console.error(
+          `L4: ${total} component diagram(s) generated, ` +
+            `${codeResult.skipped} skipped (below code.minElements=${config.code.minElements}).`,
+        );
+        if (codeResult.scaffoldFailed > 0) {
+          console.error(
+            `Error: ${codeResult.scaffoldFailed} L4 scaffold file(s) failed to write. Process will exit with a non-zero status.`,
+          );
+          process.exitCode = 1;
+        }
+      }
+
+      // Scaffold user-facing files (only creates, never overwrites)
+      scaffoldUserFiles(outputDir, model, config);
+
+      if (filesWritten > 0) {
+        console.error(
+          `Done. ${filesWritten} generated file(s) written to ${config.output.dir}/`,
+        );
+      }
+      if (filesUnchanged > 0) {
+        console.error(`${filesUnchanged} generated file(s) unchanged.`);
+      }
+
+      // Check for stale references in user customizations
+      const driftWarnings = checkDrift(outputDir, model, {
+        repoRoot: configDir,
+        config,
+      });
+      for (const w of driftWarnings) {
+        console.error(`Warning: ${w.file}:${w.line}: ${w.message}`);
+      }
+
+      // Collect all D2 files to render
+      const d2Files: string[] = [];
+      if (config.levels.context) {
+        d2Files.push(path.join(outputDir, "c1-context.d2"));
+      }
+      if (config.levels.container) {
+        d2Files.push(path.join(outputDir, "c2-container.d2"));
+      }
+      if (config.levels.component) {
+        for (const container of model.containers) {
           d2Files.push(
-            path.join(
-              outputDir,
-              "containers",
-              container.id,
-              "components",
-              component.id,
-              "c4-code.d2",
-            ),
+            path.join(outputDir, "containers", container.id, "c3-component.d2"),
           );
         }
       }
-    }
-
-    // Per-folder submodule docs
-    if (submodulesOn) {
-      removeStaleSubmoduleDirs(configDir, model, config);
-      const subResults = generateSubmoduleDocs(
-        configDir,
-        outputDir,
-        model,
-        config,
-        {
-          codeLinks,
-          format: config.output.format,
-          rawStructure,
-        },
-      );
-      for (const sub of subResults.outputs) {
-        d2Files.push(...sub.d2Files);
+      if (config.levels.code && !submodulesOn) {
+        const compsByContainer = new Map<string, typeof model.components>();
+        for (const c of model.components) {
+          const list = compsByContainer.get(c.containerId) ?? [];
+          list.push(c);
+          compsByContainer.set(c.containerId, list);
+        }
+        const elemCountByComponent = new Map<string, number>();
+        for (const e of model.codeElements ?? []) {
+          elemCountByComponent.set(
+            e.componentId,
+            (elemCountByComponent.get(e.componentId) ?? 0) + 1,
+          );
+        }
+        for (const container of model.containers) {
+          for (const component of compsByContainer.get(container.id) ?? []) {
+            if (
+              (elemCountByComponent.get(component.id) ?? 0) <
+              config.code.minElements
+            )
+              continue;
+            d2Files.push(
+              path.join(
+                outputDir,
+                "containers",
+                container.id,
+                "components",
+                component.id,
+                "c4-code.d2",
+              ),
+            );
+          }
+        }
       }
-      if (subResults.scaffoldFailed > 0) {
-        console.error(
-          `Error: ${subResults.scaffoldFailed} L4 scaffold file(s) failed to write. Process will exit with a non-zero status.`,
+
+      // Per-folder submodule docs
+      if (submodulesOn) {
+        removeStaleSubmoduleDirs(configDir, model, config);
+        const subResults = generateSubmoduleDocs(
+          configDir,
+          outputDir,
+          model,
+          config,
+          {
+            codeLinks,
+            format: config.output.format,
+            rawStructure,
+          },
         );
-        process.exitCode = 1;
+        for (const sub of subResults.outputs) {
+          d2Files.push(...sub.d2Files);
+        }
+        if (subResults.scaffoldFailed > 0) {
+          console.error(
+            `Error: ${subResults.scaffoldFailed} L4 scaffold file(s) failed to write. Process will exit with a non-zero status.`,
+          );
+          process.exitCode = 1;
+        }
+      }
+
+      // Validate generated D2 files
+      const validation = validateD2Files(d2Files);
+      if (validation && validation.errors.length > 0) {
+        for (const err of validation.errors) {
+          console.error(`Validation error: ${err.file}: ${err.message}`);
+        }
+        process.exit(1);
+      }
+
+      renderD2Files(d2Files, config);
+
+      // Post-process rendered SVGs to add interactive edge highlighting
+      if (config.output.format === "svg") {
+        postProcessSVGs(d2Files);
       }
     }
 
-    // Validate generated D2 files
-    const validation = validateD2Files(d2Files);
-    if (validation && validation.errors.length > 0) {
-      for (const err of validation.errors) {
-        console.error(`Validation error: ${err.file}: ${err.message}`);
+    if (runDrawio) {
+      if (config.levels.context) {
+        await generateDrawioFile({
+          filePath: path.join(outputDir, "c1-context.drawio"),
+          diagramName: "L1 - Context",
+          level: "context",
+          cells: buildContextCells(model),
+        });
       }
-      process.exit(1);
-    }
-
-    renderD2Files(d2Files, config);
-
-    // Post-process rendered SVGs to add interactive edge highlighting
-    if (config.output.format === "svg") {
-      postProcessSVGs(d2Files);
+      if (config.levels.container) {
+        await generateDrawioFile({
+          filePath: path.join(outputDir, "c2-container.drawio"),
+          diagramName: "L2 - Containers",
+          level: "container",
+          cells: buildContainerCells(model),
+        });
+      }
+      if (config.levels.component && !submodulesOn) {
+        for (const container of model.containers) {
+          await generateDrawioFile({
+            filePath: path.join(
+              outputDir,
+              "containers",
+              container.id,
+              "c3-component.drawio",
+            ),
+            diagramName: `L3 - ${container.name}`,
+            level: "component",
+            cells: buildComponentCells(model, container.id),
+          });
+        }
+      }
+      if (config.levels.code && !submodulesOn) {
+        const elemCountByComponent = new Map<string, number>();
+        for (const e of model.codeElements ?? []) {
+          elemCountByComponent.set(
+            e.componentId,
+            (elemCountByComponent.get(e.componentId) ?? 0) + 1,
+          );
+        }
+        for (const container of model.containers) {
+          for (const component of model.components.filter(
+            (c) => c.containerId === container.id,
+          )) {
+            if (
+              (elemCountByComponent.get(component.id) ?? 0) <
+              config.code.minElements
+            )
+              continue;
+            await generateDrawioFile({
+              filePath: path.join(
+                outputDir,
+                "containers",
+                container.id,
+                "components",
+                component.id,
+                "c4-code.drawio",
+              ),
+              diagramName: `L4 - ${component.name}`,
+              level: "code",
+              cells: buildCodeCells(model, component),
+            });
+          }
+        }
+      }
+      if (submodulesOn) {
+        await generateSubmoduleDrawio(configDir, model, config);
+      }
+      for (const w of checkDrawioDrift(outputDir, model)) {
+        console.error(`Warning: ${w.file}: ${w.message}`);
+      }
     }
 
     console.error(`Done in ${formatElapsed(Date.now() - startTime)}.`);
