@@ -55,12 +55,17 @@ export function generateSubmoduleDocs(
 ): SubmoduleOutputInfo[] {
   const results: SubmoduleOutputInfo[] = [];
   const subCfg = config.submodules;
+  const aggregatorIds = collectAggregatorIds(model);
   let unchangedCount = 0;
 
   for (const container of model.containers) {
     // Check for explicit exclude
     const override = subCfg.overrides[container.applicationId];
     if (override?.exclude) continue;
+
+    // Skip aggregator containers (path is ancestor of another container).
+    // Their real content lives in child subprojects that get their own site.
+    if (aggregatorIds.has(container.id)) continue;
 
     // Use the container's path if available, otherwise fall back to applicationId
     const appPath =
