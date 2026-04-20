@@ -459,7 +459,7 @@ describe("Integration: Submodule per-folder docs", () => {
       OUTPUT_DIR,
       model,
       config,
-    );
+    ).outputs;
 
     // Aggregator skipped, leaf kept.
     expect(subResults.map((s) => s.containerId).sort()).toEqual([
@@ -536,7 +536,7 @@ describe("Integration: Submodule per-folder docs", () => {
       OUTPUT_DIR,
       model,
       config,
-    );
+    ).outputs;
 
     // Aggregator docs/architecture gone (Task 5 deletes only the architecture
     // subtree). The parent `docs/` directory may linger empty — that's fine.
@@ -993,7 +993,7 @@ describe("Integration: Submodule per-folder docs", () => {
       OUTPUT_DIR,
       model,
       config,
-    );
+    ).outputs;
 
     // The root-pathed container must not produce a submodule site.
     expect(subResults).toEqual([]);
