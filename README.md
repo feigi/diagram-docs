@@ -107,9 +107,9 @@ Container diagrams include drill-down links to component diagrams. All output is
 ### Output generators
 
 diagram-docs can emit diagrams as D2 source or drawio (`.drawio` / mxGraph XML).
-The default is **drawio**.
+The default is **d2**.
 
-- Stay on D2: `output.generators: ["d2"]` in `diagram-docs.yaml`.
+- Switch to drawio: `output.generators: ["drawio"]` in `diagram-docs.yaml`.
 - Run both: `output.generators: ["d2", "drawio"]`.
 
 #### Editing drawio output

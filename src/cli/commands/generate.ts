@@ -47,7 +47,10 @@ import { buildContainerCells } from "../../generator/drawio/container.js";
 import { buildComponentCells } from "../../generator/drawio/component.js";
 import { buildCodeCells } from "../../generator/drawio/code.js";
 import { generateDrawioFile } from "../../generator/drawio/index.js";
-import { removeStaleDrawioFiles } from "../../generator/drawio/cleanup.js";
+import {
+  removeStaleDrawioFiles,
+  removeStaleSubmoduleDrawioFiles,
+} from "../../generator/drawio/cleanup.js";
 import { checkDrawioDrift } from "../../generator/drawio/drift.js";
 import { generateSubmoduleDrawio } from "../../generator/drawio/submodule.js";
 import {
@@ -415,6 +418,7 @@ export const generateCommand = new Command("generate")
         }
       }
       if (submodulesOn) {
+        removeStaleSubmoduleDrawioFiles(configDir, model, config);
         await generateSubmoduleDrawio(configDir, model, config);
       }
       for (const w of checkDrawioDrift(outputDir, model)) {

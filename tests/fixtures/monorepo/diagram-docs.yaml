@@ -20,5 +20,3 @@ output:
   dir: docs/architecture
   theme: 0
   layout: elk
-  generators:
-    - d2

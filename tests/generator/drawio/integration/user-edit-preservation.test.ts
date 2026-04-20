@@ -44,10 +44,13 @@ describe("user-edit preservation", () => {
       /(id="a"[^>]*style=")[^"]*(")/s,
       `$1rounded=1;fillColor=#ff0000;ddocs_managed=1$2`,
     );
-    // Replace geometry for cell "a" - use precise attribute match
+    // Replace geometry for cell "a". Drawio interprets child geometry relative
+    // to its mxCell parent ("system" here), so the numbers the layout picked
+    // are parent-relative; we don't hard-code them in the match so the test
+    // survives layout tweaks.
     xml = xml.replace(
-      /x="24" y="24" width="160" height="60" as="geometry"/,
-      `x="999" y="777" width="200" height="80" as="geometry"`,
+      /(id="a"[\s\S]*?)<mxGeometry\b[^>]*\/?>(<\/mxGeometry>)?/,
+      `$1<mxGeometry x="999" y="777" width="200" height="80" as="geometry"/>`,
     );
     // Add a freehand user note cell before closing root
     xml = xml.replace(
