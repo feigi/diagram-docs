@@ -6,7 +6,7 @@ import {
   collectAggregatorIds,
   resolveSubmodulePaths,
 } from "../d2/submodule-scaffold.js";
-import { parseDrawioFile } from "./merge.js";
+import { DrawioParseError, parseDrawioFile } from "./merge.js";
 import { toDrawioId } from "./stability.js";
 
 export function removeStaleDrawioFiles(
@@ -141,7 +141,13 @@ function hasUserContent(file: string): boolean {
       if (!cell.managed) return true;
     }
     return false;
-  } catch {
-    return true;
+  } catch (err) {
+    if (err instanceof DrawioParseError) {
+      console.error(
+        `Warning: ${file} could not be parsed (${err.message}) — preserved; fix the XML by hand.`,
+      );
+      return true;
+    }
+    throw err;
   }
 }
