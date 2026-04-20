@@ -1,8 +1,14 @@
 import ELKModule from "elkjs/lib/elk.bundled.js";
+import type {
+  ELK as ElkInstance,
+  ELKConstructorArguments,
+  ElkNode,
+} from "elkjs/lib/elk-api.js";
 import type { Geometry } from "./writer.js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ELK = (ELKModule as any).default ?? ELKModule;
+const ELK = ELKModule as unknown as new (
+  args?: ELKConstructorArguments,
+) => ElkInstance;
 
 export const NODE_WIDTH = 160;
 export const NODE_HEIGHT = 60;
@@ -37,10 +43,7 @@ const ALGORITHMS: Record<Level, string> = {
   code: "mrtree",
 };
 
- 
-const elk = new ELK() as {
-  layout: (graph: Record<string, unknown>) => Promise<Record<string, unknown>>;
-};
+const elk = new ELK();
 
 export async function layoutGraph(
   input: LayoutInput,
@@ -55,7 +58,7 @@ export async function layoutGraph(
     }
   }
 
-  const buildElkNode = (id: string): Record<string, unknown> => {
+  const buildElkNode = (id: string): ElkNode => {
     const n = byId.get(id)!;
     const kids = childrenOf.get(id) ?? [];
     return {
@@ -93,14 +96,7 @@ export async function layoutGraph(
 }
 
 function collect(
-  node: {
-    id?: string;
-    x?: number;
-    y?: number;
-    width?: number;
-    height?: number;
-    children?: unknown[];
-  },
+  node: ElkNode,
   parentX: number,
   parentY: number,
   out: Map<string, Geometry>,
@@ -115,7 +111,7 @@ function collect(
       height: Math.round(node.height ?? 0),
     });
   }
-  for (const child of (node.children as (typeof node)[]) ?? []) {
+  for (const child of node.children ?? []) {
     collect(child, ax, ay, out);
   }
 }
