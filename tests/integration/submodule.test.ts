@@ -403,6 +403,69 @@ describe("Integration: Submodule per-folder docs", () => {
     }
   });
 
+  it("skips aggregator containers whose path is an ancestor of another container", () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-aggregator");
+    trackDir(tmpRoot);
+
+    const model: import("../../src/analyzers/types.js").ArchitectureModel = {
+      version: 1,
+      system: { name: "T", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "los-cha",
+          applicationId: "los-cha",
+          name: "Los Cha",
+          description: "",
+          technology: "Java",
+          path: "los-cha",
+        },
+        {
+          id: "los-cha-app",
+          applicationId: "los-cha-app",
+          name: "Charging App",
+          description: "",
+          technology: "Java / Spring Boot",
+          path: "los-cha/app",
+        },
+      ],
+      components: [],
+      relationships: [],
+    };
+
+    const config = configSchema.parse({
+      submodules: { enabled: true },
+      levels: { context: true, container: true, component: true },
+    });
+
+    const subResults = generateSubmoduleDocs(
+      tmpRoot,
+      OUTPUT_DIR,
+      model,
+      config,
+    );
+
+    // Aggregator skipped, leaf kept.
+    expect(subResults.map((s) => s.containerId).sort()).toEqual([
+      "los-cha-app",
+    ]);
+
+    // No docs dir scaffolded at the aggregator path.
+    expect(fs.existsSync(path.join(tmpRoot, "los-cha", "docs"))).toBe(false);
+    // No stub diagram-docs.yaml scaffolded at aggregator path.
+    expect(
+      fs.existsSync(path.join(tmpRoot, "los-cha", "diagram-docs.yaml")),
+    ).toBe(false);
+
+    // Leaf subproject site created as usual.
+    expect(
+      fs.existsSync(
+        path.join(tmpRoot, "los-cha/app/docs/architecture/c3-component.d2"),
+      ),
+    ).toBe(true);
+  });
+
   it("generate-then-remove cleans up all files generate created", async () => {
     const tmpRoot = fs.mkdtempSync(
       path.join(os.tmpdir(), "diagram-docs-symmetry-"),
