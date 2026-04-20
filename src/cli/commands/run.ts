@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import { loadConfig } from "../../config/loader.js";
-import { processFolder } from "../../core/recursive-runner.js";
+import { processFolder, totalFailures } from "../../core/recursive-runner.js";
 import { renderD2Files } from "../../generator/d2/render.js";
 
 export const runCommand = new Command("run")
@@ -12,7 +12,6 @@ export const runCommand = new Command("run")
   .action(async (options) => {
     const { config, configDir } = loadConfig(options.config);
 
-    // CLI --no-agent flag overrides config
     if (options.agent === false) {
       config.agent.enabled = false;
     }
@@ -24,10 +23,18 @@ export const runCommand = new Command("run")
     );
 
     try {
-      const d2Files = await processFolder(rootDir, rootDir, config);
+      const { d2Files, failures } = await processFolder(rootDir, rootDir, config);
       console.error(`Done. Generated ${d2Files.length} D2 file(s).`);
+
+      const nonFatal = totalFailures(failures);
+      if (nonFatal > 0) {
+        console.error(
+          `Summary of non-fatal failures: ${failures.llm} LLM, ${failures.analyzer} analyzer, ${failures.generation} generation, ${failures.scaffold} scaffold. See warnings above.`,
+        );
+      }
+
       const result = renderD2Files(d2Files, config);
-      if (result.failed > 0) {
+      if (result.failed > 0 || nonFatal > 0) {
         process.exitCode = 1;
       }
     } catch (err: unknown) {

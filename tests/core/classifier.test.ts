@@ -128,4 +128,29 @@ describe("collectSignals", () => {
 
     fs.rmSync(tmpDir, { recursive: true });
   });
+
+  it("returns signal arrays sorted so signalHash is stable across fs ordering", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const os = await import("node:os");
+
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "classifier-test-"));
+    // Create files/children in non-alphabetical order
+    fs.writeFileSync(path.join(tmpDir, "setup.py"), "");
+    fs.writeFileSync(path.join(tmpDir, "pom.xml"), "<project/>");
+    fs.writeFileSync(path.join(tmpDir, "Dockerfile"), "");
+    fs.mkdirSync(path.join(tmpDir, "zzz-last"));
+    fs.mkdirSync(path.join(tmpDir, "aaa-first"));
+
+    const signals = collectSignals(tmpDir, tmpDir);
+
+    const isSorted = <T>(arr: T[]) =>
+      arr.every((v, i) => i === 0 || arr[i - 1] <= v);
+    expect(isSorted(signals.buildFiles)).toBe(true);
+    expect(isSorted(signals.infraFiles)).toBe(true);
+    expect(isSorted(signals.childFolderNames)).toBe(true);
+    expect(isSorted(signals.sourceLanguages)).toBe(true);
+
+    fs.rmSync(tmpDir, { recursive: true });
+  });
 });

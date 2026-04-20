@@ -66,7 +66,14 @@ const PACKAGE_MARKERS = new Set(["__init__.py"]);
 
 /**
  * Collect signals from a folder for classification.
- * Scans the current folder and one level of children for performance.
+ *
+ * Scans the current folder plus one level of children, with a special-case
+ * probe for `src/main/java` so Maven/Gradle package layouts are detected
+ * without a full recursive walk.
+ *
+ * All returned arrays are sorted so `computeSignalHash` produces the same
+ * hash across operating systems and filesystems, making the agent cache
+ * portable between machines.
  */
 export function collectSignals(
   folderPath: string,
@@ -110,17 +117,14 @@ export function collectSignals(
     const name = entry.name;
 
     if (entry.isFile()) {
-      // Check for build files
       if (BUILD_FILES.has(name)) {
         buildFiles.push(name);
       }
 
-      // Check for infra files
       if (INFRA_FILES.has(name)) {
         infraFiles.push(name);
       }
 
-      // Check for source files
       const ext = path.extname(name);
       const lang = SOURCE_EXTENSIONS[ext];
       if (lang) {
@@ -128,16 +132,14 @@ export function collectSignals(
         languageSet.add(lang);
       }
 
-      // Check for package markers.
-      // __init__.py sets isPackageDir (used for component classification when no
-      // build file is present) and hasPackageStructure (used for container
-      // classification when a build file is present).
+      // __init__.py is dual-purpose: sets isPackageDir (drives component
+      // classification when no build file is present) and hasPackageStructure
+      // (drives container classification when a build file is present).
       if (PACKAGE_MARKERS.has(name)) {
         isPackageDir = true;
         hasPackageStructure = true;
       }
 
-      // Read README snippet
       if (name.toLowerCase().startsWith("readme") && readmeSnippet === null) {
         try {
           const content = fs.readFileSync(
@@ -205,8 +207,14 @@ export function collectSignals(
         } catch (err: unknown) {
           const code = (err as NodeJS.ErrnoException).code;
           if (code === "EMFILE" || code === "ENFILE") throw err;
-          // Non-critical: if we can't check for Java package structure,
-          // the classifier will still work with other signals.
+          // ENOENT is benign (no src/main/java layout). Anything else
+          // (EACCES, EPERM, …) means we might be misclassifying a folder
+          // that actually has package structure — surface it.
+          if (code !== "ENOENT") {
+            console.error(
+              `Warning: cannot probe ${path.join(folderPath, "src", "main", "java")} for Java package structure, folder may be misclassified: ${err instanceof Error ? err.message : err}`,
+            );
+          }
         }
       }
     }
@@ -214,12 +222,18 @@ export function collectSignals(
 
   const depth = computeDepth(folderPath, rootPath);
 
+  // Sort to make signalHash stable across OS / filesystem ordering.
+  buildFiles.sort();
+  infraFiles.sort();
+  childFolderNames.sort();
+  const sourceLanguages = [...languageSet].sort();
+
   return {
     buildFiles,
     childrenWithBuildFiles,
     infraFiles,
     sourceFileCount,
-    sourceLanguages: [...languageSet],
+    sourceLanguages,
     hasPackageStructure,
     depth,
     childFolderNames,

@@ -1,7 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import {
   computeSignalHash,
+  loadAgentCache,
   parseAgentResponse,
+  saveAgentCache,
 } from "../../src/core/agent-assist.js";
 import type { FolderSignals } from "../../src/core/classifier.js";
 
@@ -132,4 +137,96 @@ describe("parseAgentResponse", () => {
     expect(result).not.toBeNull();
     expect(result!.role).toBe("code-only");
   });
+});
+
+describe("agent cache persistence", () => {
+  let rootDir: string;
+  let cacheFile: string;
+
+  beforeEach(() => {
+    rootDir = fs.mkdtempSync(path.join(os.tmpdir(), "diagram-docs-cache-"));
+    cacheFile = path.join(rootDir, ".diagram-docs", "agent-cache.yaml");
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    fs.rmSync(rootDir, { recursive: true, force: true });
+  });
+
+  it("loadAgentCache returns empty map when cache file is missing", () => {
+    const map = loadAgentCache(rootDir);
+    expect(map.size).toBe(0);
+  });
+
+  it("round-trips a cache entry through save + load", () => {
+    const cache = new Map();
+    cache.set("services/api", {
+      role: "container",
+      name: "API",
+      description: "",
+      confidence: 0.9,
+      signalHash: "abc",
+    });
+    saveAgentCache(rootDir, cache);
+
+    const loaded = loadAgentCache(rootDir);
+    expect(loaded.size).toBe(1);
+    expect(loaded.get("services/api")?.role).toBe("container");
+  });
+
+  it("renames corrupt YAML to .corrupt.<ts>.bak instead of deleting", () => {
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    fs.writeFileSync(cacheFile, "::: not valid yaml :::\n{[", "utf-8");
+
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const loaded = loadAgentCache(rootDir);
+
+    expect(loaded.size).toBe(0);
+    expect(fs.existsSync(cacheFile)).toBe(false);
+    const siblings = fs.readdirSync(path.dirname(cacheFile));
+    expect(siblings.some((f) => f.includes(".corrupt."))).toBe(true);
+  });
+
+  it("drops cache entries with invalid role", () => {
+    fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
+    fs.writeFileSync(
+      cacheFile,
+      `good:
+  role: container
+  name: x
+  description: ""
+  confidence: 0.9
+  signalHash: abc
+bad:
+  role: invalid-role
+  name: x
+  description: ""
+  confidence: 0.9
+  signalHash: def
+`,
+      "utf-8",
+    );
+
+    const loaded = loadAgentCache(rootDir);
+    expect(loaded.size).toBe(1);
+    expect(loaded.has("good")).toBe(true);
+    expect(loaded.has("bad")).toBe(false);
+  });
+
+  it("save is atomic — no partial cache file if write fails", () => {
+    const cache = new Map();
+    cache.set("a", {
+      role: "container",
+      name: "x",
+      description: "",
+      confidence: 0.9,
+      signalHash: "abc",
+    });
+    saveAgentCache(rootDir, cache);
+    expect(fs.existsSync(cacheFile)).toBe(true);
+    // Ensure no leftover .tmp file
+    const siblings = fs.readdirSync(path.dirname(cacheFile));
+    expect(siblings.some((f) => f.includes(".tmp."))).toBe(false);
+  });
+
 });

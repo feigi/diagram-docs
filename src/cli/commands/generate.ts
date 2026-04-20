@@ -57,35 +57,33 @@ export const generateCommand = new Command("generate")
       }
     }
 
-    // L3: Component diagrams (one per container) — gated by levels.component
-    if (config.levels.component) {
-      for (const container of model.containers) {
-        try {
-          const containerGenDir = path.join(
-            outputDir,
-            "containers",
-            container.id,
-            "_generated",
-          );
-          if (!fs.existsSync(containerGenDir)) {
-            fs.mkdirSync(containerGenDir, { recursive: true });
-          }
-
-          const d2 = generateComponentDiagram(model, container.id);
-          if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
-            filesWritten++;
-          } else {
-            filesUnchanged++;
-          }
-        } catch (err: unknown) {
-          const errCode = (err as NodeJS.ErrnoException).code;
-          if (errCode === "ENOSPC" || errCode === "ENOMEM" || errCode === "EMFILE" || errCode === "ENFILE" || errCode === "EROFS") {
-            throw err;
-          }
-          console.error(
-            `Warning: component diagram failed for ${container.id}: ${err instanceof Error ? err.message : err}`,
-          );
+    // L3: Component diagrams — one per container
+    for (const container of model.containers) {
+      try {
+        const containerGenDir = path.join(
+          outputDir,
+          "containers",
+          container.id,
+          "_generated",
+        );
+        if (!fs.existsSync(containerGenDir)) {
+          fs.mkdirSync(containerGenDir, { recursive: true });
         }
+
+        const d2 = generateComponentDiagram(model, container.id);
+        if (writeIfChanged(path.join(containerGenDir, "component.d2"), d2)) {
+          filesWritten++;
+        } else {
+          filesUnchanged++;
+        }
+      } catch (err: unknown) {
+        const errCode = (err as NodeJS.ErrnoException).code;
+        if (errCode === "ENOSPC" || errCode === "ENOMEM" || errCode === "EMFILE" || errCode === "ENFILE" || errCode === "EROFS") {
+          throw err;
+        }
+        console.error(
+          `Warning: component diagram failed for ${container.id}: ${err instanceof Error ? err.message : err}`,
+        );
       }
     }
 
@@ -114,12 +112,10 @@ export const generateCommand = new Command("generate")
     const d2Files: string[] = [];
     d2Files.push(path.join(outputDir, "context.d2"));
     d2Files.push(path.join(outputDir, "container.d2"));
-    if (config.levels.component) {
-      for (const container of model.containers) {
-        d2Files.push(
-          path.join(outputDir, "containers", container.id, "component.d2"),
-        );
-      }
+    for (const container of model.containers) {
+      d2Files.push(
+        path.join(outputDir, "containers", container.id, "component.d2"),
+      );
     }
 
     const result = renderD2Files(d2Files, config);

@@ -2,10 +2,7 @@ import type { ModuleSymbols } from "../../analyzers/types.js";
 import { D2Writer } from "./writer.js";
 import { toD2Id, sortById, sortRelationships } from "./stability.js";
 
-/**
- * Generate L4 Code diagram for a single module.
- * Shows: classes, interfaces, functions, structs, enums, and their relationships.
- */
+/** Generate the L4 Code diagram for a single module. */
 export function generateCodeDiagram(
   symbols: ModuleSymbols,
   moduleName: string,
@@ -29,6 +26,9 @@ export function generateCodeDiagram(
 
   if (sorted.length > 0) w.blank();
 
+  // Drop relationships pointing outside this module's symbol set
+  // (e.g. external types filtered by abstraction rules) so we don't render
+  // edges to nodes that never get a shape declaration.
   const symIds = new Set(symbols.symbols.map((s) => s.id));
   const validRels = symbols.relationships.filter(
     (r) => symIds.has(r.sourceId) && symIds.has(r.targetId),

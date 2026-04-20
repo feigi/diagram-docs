@@ -11,21 +11,14 @@ describe("configSchema", () => {
     expect(config.output.docsDir).toBe("docs");
     expect(config.abstraction.codeLevel.minSymbols).toBe(2);
     expect(config.overrides).toEqual({});
-    expect(config.levels.component).toBe(false);
   });
 
-  it("preserves levels from existing config", () => {
+  it("strips unknown fields like levels and submodules", () => {
     const config = configSchema.parse({
       levels: { context: true, component: true },
-    });
-    expect(config.levels.context).toBe(true);
-    expect(config.levels.component).toBe(true);
-  });
-
-  it("strips unknown fields like submodules", () => {
-    const config = configSchema.parse({
       submodules: { enabled: true },
     });
+    expect((config as Record<string, unknown>).levels).toBeUndefined();
     expect((config as Record<string, unknown>).submodules).toBeUndefined();
   });
 

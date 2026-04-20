@@ -10,7 +10,7 @@ import * as path from "node:path";
 import picomatch from "picomatch";
 
 import type { Config, FolderRole } from "../config/schema.js";
-import type { ScanConfig } from "../analyzers/types.js";
+import type { ScanConfig, ScannedApplication } from "../analyzers/types.js";
 import { collectSignals, inferRole } from "./classifier.js";
 import { agentClassify, loadAgentCache, saveAgentCache, type CacheEntry } from "./agent-assist.js";
 import { humanizeName } from "./humanize.js";
@@ -24,14 +24,50 @@ import { getAnalyzer } from "../analyzers/registry.js";
 import { scaffoldForRole } from "../generator/d2/scaffold.js";
 
 /* ------------------------------------------------------------------ */
+/*  Public result types                                                */
+/* ------------------------------------------------------------------ */
+
+export interface ProcessFailures {
+  /** Agent classification fell back to heuristic due to an LLM error. */
+  llm: number;
+  /** An analyzer threw while scanning an application. */
+  analyzer: number;
+  /** Diagram generation threw for a folder's role. */
+  generation: number;
+  /** Scaffolding threw while writing user-facing D2 files. */
+  scaffold: number;
+}
+
+export interface ProcessResult {
+  d2Files: string[];
+  failures: ProcessFailures;
+}
+
+function emptyFailures(): ProcessFailures {
+  return { llm: 0, analyzer: 0, generation: 0, scaffold: 0 };
+}
+
+function mergeFailures(a: ProcessFailures, b: ProcessFailures): ProcessFailures {
+  return {
+    llm: a.llm + b.llm,
+    analyzer: a.analyzer + b.analyzer,
+    generation: a.generation + b.generation,
+    scaffold: a.scaffold + b.scaffold,
+  };
+}
+
+export function totalFailures(f: ProcessFailures): number {
+  return f.llm + f.analyzer + f.generation + f.scaffold;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-/**
- * Infrastructure directories that are ALWAYS excluded from traversal
- * regardless of user config. These are never useful to scan.
- */
-const INFRA_EXCLUDE_DIRS = new Set([
+// Always-excluded directories. Mixes VCS/runtime dirs (.git, __pycache__,
+// venv) with this tool's own output dirs (_generated, architecture) — both
+// are noise for traversal regardless of user config.
+const ALWAYS_EXCLUDE_DIRS = new Set([
   ".git",
   ".diagram-docs",
   "__pycache__",
@@ -41,11 +77,6 @@ const INFRA_EXCLUDE_DIRS = new Set([
   "architecture",
 ]);
 
-/**
- * Build a predicate that tests whether a relative path should be excluded
- * from traversal, combining infrastructure dirs with user-configured
- * scan.exclude glob patterns.
- */
 function buildExcludeMatcher(config: Config): (relPath: string) => boolean {
   const docsDir = config.output.docsDir;
   const docsDirFirstSegment = docsDir === "." ? null : (docsDir.split(/[\\/]/)[0] || null);
@@ -54,16 +85,9 @@ function buildExcludeMatcher(config: Config): (relPath: string) => boolean {
 
   return (childRelPath: string) => {
     const dirName = path.basename(childRelPath);
-
-    // Always exclude infrastructure dirs
-    if (INFRA_EXCLUDE_DIRS.has(dirName)) return true;
-
-    // Exclude the docs output directory's first segment
+    if (ALWAYS_EXCLUDE_DIRS.has(dirName)) return true;
     if (docsDirFirstSegment && dirName === docsDirFirstSegment) return true;
-
-    // Test against user-configured scan.exclude globs
     if (isMatch(childRelPath)) return true;
-
     return false;
   };
 }
@@ -82,11 +106,7 @@ function writeIfChanged(filePath: string, content: string): boolean {
   return true;
 }
 
-/**
- * Map of file extensions to analyzer language IDs.
- * Only includes languages with `analyzeModule` support (used for L4 code diagrams).
- * Keep in sync with analyzers that implement `analyzeModule`.
- */
+// Keep in sync with analyzers that implement `analyzeModule` (L4 code-level).
 const EXT_TO_LANGUAGE: Record<string, string> = {
   ".java": "java",
   ".py": "python",
@@ -94,9 +114,6 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   ".h": "c",
 };
 
-/**
- * Detect the dominant language in a folder by scanning file extensions.
- */
 function detectLanguage(folderPath: string): string | null {
   const counts: Record<string, number> = {};
   let entries: fs.Dirent[];
@@ -129,14 +146,67 @@ function detectLanguage(folderPath: string): string | null {
   return best;
 }
 
-/**
- * Build a ScanConfig from the top-level Config for passing to analyzers.
- */
 function toScanConfig(config: Config): ScanConfig {
   return {
     exclude: config.scan.exclude,
     abstraction: config.abstraction,
   };
+}
+
+/**
+ * Analyze a set of discovered applications, counting per-app failures.
+ * EMFILE/ENFILE/ENOMEM propagate so a saturated fd table doesn't silently
+ * produce empty diagrams.
+ */
+async function analyzeApps(
+  folderPath: string,
+  apps: Awaited<ReturnType<typeof discoverApplications>>,
+  scanConfig: ScanConfig,
+): Promise<{ validApps: ScannedApplication[]; analyzerFailures: number }> {
+  let analyzerFailures = 0;
+  const scanned = await Promise.all(
+    apps.map(async (app) => {
+      const analyzer = getAnalyzer(app.analyzerId);
+      if (!analyzer) {
+        console.error(
+          `Warning: no analyzer found for language "${app.analyzerId}" (application at ${app.path}). Skipping.`,
+        );
+        analyzerFailures++;
+        return null;
+      }
+      const absAppPath = path.resolve(folderPath, app.path);
+      try {
+        return await analyzer.analyze(absAppPath, scanConfig);
+      } catch (err: unknown) {
+        const code = (err as NodeJS.ErrnoException).code;
+        if (code === "EMFILE" || code === "ENFILE" || code === "ENOMEM") {
+          throw err;
+        }
+        // Programming errors in an analyzer are bugs, not recoverable.
+        if (
+          err instanceof TypeError ||
+          err instanceof ReferenceError ||
+          err instanceof SyntaxError
+        ) {
+          throw err;
+        }
+        console.error(
+          `Warning: analysis failed for application at ${app.path}: ${err instanceof Error ? err.message : err}`,
+        );
+        analyzerFailures++;
+        return null;
+      }
+    }),
+  );
+  const validApps = scanned.filter((a): a is NonNullable<typeof a> => a !== null);
+
+  if (apps.length > 0 && validApps.length === 0) {
+    console.error(
+      `Error: all ${apps.length} application(s) in ${folderPath} failed to analyze — no diagrams will be generated for this folder.`,
+    );
+  }
+
+  return { validApps, analyzerFailures };
 }
 
 /* ------------------------------------------------------------------ */
@@ -145,43 +215,16 @@ function toScanConfig(config: Config): ScanConfig {
 
 async function generateSystemDiagrams(
   folderPath: string,
-  rootPath: string,
   config: Config,
   folderName: string,
   folderDesc: string,
   docsDir: string,
-): Promise<string[]> {
+): Promise<{ d2Files: string[]; analyzerFailures: number }> {
   const apps = await discoverApplications(folderPath, config);
   const scanConfig = toScanConfig(config);
+  const { validApps, analyzerFailures } = await analyzeApps(folderPath, apps, scanConfig);
   const d2Files: string[] = [];
 
-  // Analyze each discovered application — individual failures do not block siblings
-  const scannedApps = await Promise.all(
-    apps.map(async (app) => {
-      const analyzer = getAnalyzer(app.analyzerId);
-      if (!analyzer) {
-        console.error(
-          `Warning: no analyzer found for language "${app.analyzerId}" (application at ${app.path}). Skipping.`,
-        );
-        return null;
-      }
-      const absAppPath = path.resolve(folderPath, app.path);
-      try {
-        return await analyzer.analyze(absAppPath, scanConfig);
-      } catch (err: unknown) {
-        console.error(
-          `Warning: analysis failed for application at ${app.path}: ${err instanceof Error ? err.message : err}`,
-        );
-        return null;
-      }
-    }),
-  );
-
-  const validApps = scannedApps.filter(
-    (a): a is NonNullable<typeof a> => a !== null,
-  );
-
-  // Build the model
   const model = buildModel({
     config,
     rawStructure: {
@@ -192,22 +235,17 @@ async function generateSystemDiagrams(
     },
   });
 
-  // Override system name/description from classification
   model.system.name = folderName;
   model.system.description = folderDesc;
 
-  // Write diagrams
   const outputDir = path.join(folderPath, docsDir, "architecture");
   const generatedDir = path.join(outputDir, "_generated");
   fs.mkdirSync(generatedDir, { recursive: true });
 
-  // Context diagram
   const contextD2 = generateContextDiagram(model);
-  const contextPath = path.join(generatedDir, "context.d2");
-  writeIfChanged(contextPath, contextD2);
+  writeIfChanged(path.join(generatedDir, "context.d2"), contextD2);
   d2Files.push(path.join(outputDir, "context.d2"));
 
-  // Container diagram — with submodule link resolver for drill-down
   const containerD2 = generateContainerDiagram(model, {
     submoduleLinkResolver: (containerId) => {
       const container = model.containers.find((c) => c.id === containerId);
@@ -223,11 +261,10 @@ async function generateSystemDiagrams(
       return `${relPath}/component.${config.output.format}`;
     },
   });
-  const containerPath = path.join(generatedDir, "container.d2");
-  writeIfChanged(containerPath, containerD2);
+  writeIfChanged(path.join(generatedDir, "container.d2"), containerD2);
   d2Files.push(path.join(outputDir, "container.d2"));
 
-  return d2Files;
+  return { d2Files, analyzerFailures };
 }
 
 /* ------------------------------------------------------------------ */
@@ -240,40 +277,14 @@ async function generateContainerDiagrams(
   folderName: string,
   folderDesc: string,
   docsDir: string,
-): Promise<string[]> {
+): Promise<{ d2Files: string[]; analyzerFailures: number }> {
   const apps = await discoverApplications(folderPath, config);
   const scanConfig = toScanConfig(config);
+  const { validApps, analyzerFailures } = await analyzeApps(folderPath, apps, scanConfig);
   const d2Files: string[] = [];
 
-  // Analyze the application(s) at this folder — individual failures do not block siblings
-  const scannedApps = await Promise.all(
-    apps.map(async (app) => {
-      const analyzer = getAnalyzer(app.analyzerId);
-      if (!analyzer) {
-        console.error(
-          `Warning: no analyzer found for language "${app.analyzerId}" (application at ${app.path}). Skipping.`,
-        );
-        return null;
-      }
-      const absAppPath = path.resolve(folderPath, app.path);
-      try {
-        return await analyzer.analyze(absAppPath, scanConfig);
-      } catch (err: unknown) {
-        console.error(
-          `Warning: analysis failed for application at ${app.path}: ${err instanceof Error ? err.message : err}`,
-        );
-        return null;
-      }
-    }),
-  );
+  if (validApps.length === 0) return { d2Files, analyzerFailures };
 
-  const validApps = scannedApps.filter(
-    (a): a is NonNullable<typeof a> => a !== null,
-  );
-
-  if (validApps.length === 0) return d2Files;
-
-  // Build the model
   const model = buildModel({
     config,
     rawStructure: {
@@ -287,20 +298,17 @@ async function generateContainerDiagrams(
   model.system.name = folderName;
   model.system.description = folderDesc;
 
-  // Write component diagram for each container
   const outputDir = path.join(folderPath, docsDir, "architecture");
   const generatedDir = path.join(outputDir, "_generated");
   fs.mkdirSync(generatedDir, { recursive: true });
 
-  const componentParts = model.containers.map((container) =>
-    generateComponentDiagram(model, container.id),
-  );
-  const componentD2 = componentParts.join("\n\n");
-  const componentPath = path.join(generatedDir, "component.d2");
-  writeIfChanged(componentPath, componentD2);
+  const componentD2 = model.containers
+    .map((container) => generateComponentDiagram(model, container.id))
+    .join("\n\n");
+  writeIfChanged(path.join(generatedDir, "component.d2"), componentD2);
   d2Files.push(path.join(outputDir, "component.d2"));
 
-  return d2Files;
+  return { d2Files, analyzerFailures };
 }
 
 /* ------------------------------------------------------------------ */
@@ -354,8 +362,7 @@ async function generateCodeDiagrams(
   const generatedDir = path.join(outputDir, "_generated");
   fs.mkdirSync(generatedDir, { recursive: true });
 
-  const codePath = path.join(generatedDir, "code.d2");
-  writeIfChanged(codePath, codeD2);
+  writeIfChanged(path.join(generatedDir, "code.d2"), codeD2);
   d2Files.push(path.join(outputDir, "code.d2"));
 
   return d2Files;
@@ -366,18 +373,21 @@ async function generateCodeDiagrams(
 /* ------------------------------------------------------------------ */
 
 /**
- * Recursively process a folder: classify, generate diagrams, scaffold, recurse.
- *
- * @param folderPath - Absolute path to the folder to process
- * @param rootPath   - Absolute path to the project root
- * @param config     - Resolved configuration
- * @param parentContext - Human-readable context string from the parent folder,
- *   formatted as "Name (role)". Passed to the LLM agent for classification context.
- * @param parentFolderPath - Absolute path to the parent folder (for scaffold breadcrumbs)
- * @param agentCache - Shared agent cache map, loaded once at the root call
- * @param depth - Current recursion depth (0 at root)
- * @returns List of generated D2 file paths
+ * A folder with a build file plus package structure (e.g. `src/main/java`
+ * under a Maven/Gradle project) is sufficient evidence for "container"
+ * even when direct source files are too deeply nested for the shallow
+ * signal scan to count them. Refines `inferRole`'s default "skip".
  */
+function refineHeuristicRole(
+  role: FolderRole,
+  signals: { buildFiles: string[]; hasPackageStructure: boolean },
+): FolderRole {
+  if (role === "skip" && signals.buildFiles.length > 0 && signals.hasPackageStructure) {
+    return "container";
+  }
+  return role;
+}
+
 export async function processFolder(
   folderPath: string,
   rootPath: string,
@@ -386,47 +396,57 @@ export async function processFolder(
   parentFolderPath?: string,
   agentCache?: Map<string, CacheEntry>,
   depth = 0,
-): Promise<string[]> {
-  // Load agent cache once at the root call, reuse for all recursive calls
-  const cache = agentCache ?? (config.agent.enabled ? loadAgentCache(rootPath) : undefined);
+): Promise<ProcessResult> {
   const isRootCall = agentCache === undefined;
-  const d2Files: string[] = [];
+  const cache = agentCache ?? (config.agent.enabled ? loadAgentCache(rootPath) : undefined);
+  // Save cache in finally so a mid-traversal crash (EMFILE deep in the tree,
+  // OOM, etc.) still persists LLM classifications the user has paid for.
+  try {
+    return await processFolderInner(folderPath, rootPath, config, parentContext, parentFolderPath, cache, depth);
+  } finally {
+    if (isRootCall && cache) saveAgentCache(rootPath, cache);
+  }
+}
 
-  // Guard against unbounded recursion
+async function processFolderInner(
+  folderPath: string,
+  rootPath: string,
+  config: Config,
+  parentContext: string | undefined,
+  parentFolderPath: string | undefined,
+  cache: Map<string, CacheEntry> | undefined,
+  depth: number,
+): Promise<ProcessResult> {
+  const d2Files: string[] = [];
+  const failures = emptyFailures();
+
   if (depth > config.scan.maxDepth) {
     console.warn(
       `Warning: max recursion depth (${config.scan.maxDepth}) reached at ${path.relative(rootPath, folderPath) || "."}. Skipping subtree.`,
     );
-    return d2Files;
+    return { d2Files, failures };
   }
 
-  // 1. Compute relative path for override lookup
   const relPath = path.relative(rootPath, folderPath);
   const overrideKey = relPath === "" ? "." : relPath;
   const override = config.overrides[overrideKey];
 
-  // 2. Collect signals
   const signals = collectSignals(folderPath, rootPath);
 
-  // 3. Classify
+  // Classification: override > LLM > heuristic. After this block role,
+  // folderName, folderDesc reflect the effective classification.
   let role: FolderRole;
   let folderName: string;
   let folderDesc: string;
 
   if (override?.role) {
-    // Config override takes priority
     role = override.role;
-    folderName =
-      override.name ?? humanizeName(path.basename(folderPath) || "Root");
+    folderName = override.name ?? humanizeName(path.basename(folderPath) || "Root");
     folderDesc = override.description ?? "";
   } else if (config.agent.enabled) {
-    // Agent classification — apply heuristic refinement before sending to LLM
-    // so the prompt reflects the corrected role (e.g. skip → container for
-    // folders with build files + package structure like src/main/java).
-    let heuristic = inferRole(signals);
-    if (heuristic === "skip" && signals.buildFiles.length > 0 && signals.hasPackageStructure) {
-      heuristic = "container";
-    }
+    // Apply heuristic refinement before LLM so the prompt reflects the
+    // corrected role.
+    const heuristic = refineHeuristicRole(inferRole(signals), signals);
     const classification = await agentClassify(
       folderPath,
       signals,
@@ -439,88 +459,38 @@ export async function processFolder(
     role = classification.role;
     folderName = classification.name || humanizeName(path.basename(folderPath) || "Root");
     folderDesc = classification.description || "";
+    if (classification.failed) failures.llm++;
+    // Apply override name/description on top of LLM classification.
+    if (override?.name) folderName = override.name;
+    if (override?.description) folderDesc = override.description;
   } else {
-    // Heuristic classification
-    role = inferRole(signals);
-
-    // Refine: a build file + package structure (e.g. src/main/java) is
-    // sufficient evidence for "container" even when source files are too
-    // deeply nested for the shallow signal scan to count them.
-    if (role === "skip" && signals.buildFiles.length > 0 && signals.hasPackageStructure) {
-      role = "container";
-    }
-
-    folderName = humanizeName(path.basename(folderPath) || "Root");
-    folderDesc = "";
+    role = refineHeuristicRole(inferRole(signals), signals);
+    folderName = override?.name ?? humanizeName(path.basename(folderPath) || "Root");
+    folderDesc = override?.description ?? "";
   }
 
-  // Apply override name/description even when role is not overridden
-  if (override?.name) folderName = override.name;
-  if (override?.description) folderDesc = override.description;
-
-  // 4. Skip diagram generation but still recurse into children
   if (role === "skip") {
-    const shouldExclude = buildExcludeMatcher(config);
-    let skipEntries: fs.Dirent[];
-    try {
-      skipEntries = fs.readdirSync(folderPath, { withFileTypes: true });
-    } catch (err: unknown) {
-      const code = (err as NodeJS.ErrnoException).code;
-      if (code === "EMFILE" || code === "ENFILE") {
-        throw err;
-      }
-      console.error(
-        `Warning: cannot read directory ${relPath || "."}: ${err instanceof Error ? err.message : err}. Skipping subtree.`,
-      );
-      return d2Files;
-    }
-    for (const entry of skipEntries) {
-      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
-      const childRelPath = path.join(relPath, entry.name);
-      if (shouldExclude(childRelPath)) continue;
-      const childFiles = await processFolder(
-        path.join(folderPath, entry.name),
-        rootPath,
-        config,
-        parentContext,
-        folderPath,
-        cache,
-        depth + 1,
-      );
-      d2Files.push(...childFiles);
-    }
-    if (isRootCall && cache) saveAgentCache(rootPath, cache);
-    return d2Files;
+    return recurseChildren(
+      folderPath, rootPath, config, parentContext, cache, depth,
+      d2Files, failures, relPath,
+    );
   }
 
-  // Resolve effective docsDir — per-folder override takes priority
   const effectiveDocsDir = override?.docsDir ?? config.output.docsDir;
 
-  // 5. Generate diagrams based on role
   let generationSucceeded = false;
   try {
     switch (role) {
       case "system": {
-        const systemFiles = await generateSystemDiagrams(
-          folderPath,
-          rootPath,
-          config,
-          folderName,
-          folderDesc,
-          effectiveDocsDir,
-        );
-        d2Files.push(...systemFiles);
+        const r = await generateSystemDiagrams(folderPath, config, folderName, folderDesc, effectiveDocsDir);
+        d2Files.push(...r.d2Files);
+        failures.analyzer += r.analyzerFailures;
         break;
       }
       case "container": {
-        const containerFiles = await generateContainerDiagrams(
-          folderPath,
-          config,
-          folderName,
-          folderDesc,
-          effectiveDocsDir,
-        );
-        d2Files.push(...containerFiles);
+        const r = await generateContainerDiagrams(folderPath, config, folderName, folderDesc, effectiveDocsDir);
+        d2Files.push(...r.d2Files);
+        failures.analyzer += r.analyzerFailures;
         break;
       }
       case "component":
@@ -537,27 +507,27 @@ export async function processFolder(
     generationSucceeded = true;
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
+    // Resource-exhaustion and filesystem-permission errors must not be
+    // swallowed — they indicate environmental problems that will recur
+    // across every sibling folder, and they mask data-loss scenarios.
     if (
       code === "ENOSPC" || code === "ENOMEM" ||
       code === "EMFILE" || code === "ENFILE" ||
+      code === "EACCES" || code === "EPERM" || code === "EROFS" ||
       err instanceof RangeError
     ) {
       throw err;
     }
-    // Re-throw programming errors — they indicate bugs, not recoverable failures
-    if (
-      err instanceof TypeError ||
-      err instanceof ReferenceError ||
-      err instanceof SyntaxError
-    ) {
+    // Programming errors are bugs, not recoverable failures.
+    if (err instanceof TypeError || err instanceof ReferenceError || err instanceof SyntaxError) {
       throw err;
     }
+    failures.generation++;
     console.error(
       `Warning: diagram generation failed for ${relPath || "."} (${role}): ${err instanceof Error ? err.message : err}`,
     );
   }
 
-  // 6. Scaffold user-facing D2 files only if generation succeeded
   if (generationSucceeded) {
     try {
       const outputDir = path.join(folderPath, effectiveDocsDir, "architecture");
@@ -578,40 +548,58 @@ export async function processFolder(
       );
     } catch (err: unknown) {
       const code = (err as NodeJS.ErrnoException).code;
-      if (code === "ENOSPC" || code === "ENOMEM" || code === "EMFILE" || code === "ENFILE") throw err;
+      if (
+        code === "ENOSPC" || code === "ENOMEM" ||
+        code === "EMFILE" || code === "ENFILE" ||
+        code === "EACCES" || code === "EPERM" || code === "EROFS"
+      ) {
+        throw err;
+      }
+      failures.scaffold++;
       console.error(
         `Warning: scaffolding failed for ${relPath || "."}: ${err instanceof Error ? err.message : err}`,
       );
     }
   }
 
-  // 7. Recurse into child directories
+  const childContext = `${folderName} (${role})`;
+  return recurseChildren(
+    folderPath, rootPath, config, childContext, cache, depth,
+    d2Files, failures, relPath,
+  );
+}
+
+async function recurseChildren(
+  folderPath: string,
+  rootPath: string,
+  config: Config,
+  childContext: string | undefined,
+  cache: Map<string, CacheEntry> | undefined,
+  depth: number,
+  d2Files: string[],
+  failures: ProcessFailures,
+  relPath: string,
+): Promise<ProcessResult> {
   const shouldExclude = buildExcludeMatcher(config);
   let entries: fs.Dirent[];
   try {
     entries = fs.readdirSync(folderPath, { withFileTypes: true });
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
-    if (code === "EMFILE" || code === "ENFILE") {
-      throw err;
-    }
+    if (code === "EMFILE" || code === "ENFILE") throw err;
     console.error(
       `Warning: cannot read directory ${relPath || "."}: ${err instanceof Error ? err.message : err}. Skipping subtree.`,
     );
-    return d2Files;
+    return { d2Files, failures };
   }
 
-  const childContext = `${folderName} (${role})`;
-
   for (const entry of entries) {
-    if (!entry.isDirectory()) continue;
-    if (entry.name.startsWith(".")) continue;
+    if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
     const childRelPath = path.join(relPath, entry.name);
     if (shouldExclude(childRelPath)) continue;
 
-    const childPath = path.join(folderPath, entry.name);
-    const childFiles = await processFolder(
-      childPath,
+    const childResult = await processFolderInner(
+      path.join(folderPath, entry.name),
       rootPath,
       config,
       childContext,
@@ -619,11 +607,9 @@ export async function processFolder(
       cache,
       depth + 1,
     );
-    d2Files.push(...childFiles);
+    d2Files.push(...childResult.d2Files);
+    Object.assign(failures, mergeFailures(failures, childResult.failures));
   }
 
-  // Save agent cache once at the root call after full traversal
-  if (isRootCall && cache) saveAgentCache(rootPath, cache);
-
-  return d2Files;
+  return { d2Files, failures };
 }

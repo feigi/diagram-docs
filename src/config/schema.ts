@@ -61,14 +61,6 @@ export const configSchema = z
       })
       .default({}),
 
-    levels: z
-      .object({
-        context: z.boolean().default(true),
-        container: z.boolean().default(true),
-        component: z.boolean().default(false),
-      })
-      .default({}),
-
     overrides: z
       .record(
         z.string(),

@@ -20,7 +20,6 @@ export function renderD2Files(d2Files: string[], config: Config): { rendered: nu
     const outPath = d2Path.replace(/\.d2$/, `.${ext}`);
     const relPath = path.relative(process.cwd(), outPath);
 
-    // Skip rendering if the output is already newer than all contributing D2 sources.
     if (isUpToDate(d2Path, outPath)) {
       skipped++;
       continue;
@@ -46,7 +45,8 @@ export function renderD2Files(d2Files: string[], config: Config): { rendered: nu
         console.error(
           "Error: d2 CLI not found. Install it to render diagrams: https://d2lang.com/releases/install",
         );
-        return { rendered, skipped, failed: failed + d2Files.length - rendered - skipped - failed };
+        // d2 CLI missing — remaining files cannot be rendered; count them as failed.
+        return { rendered, skipped, failed: d2Files.length - rendered - skipped };
       }
       const msg = err instanceof Error ? err.message : String(err);
       if (errCode === "ETIMEDOUT" || msg.includes("killed")) {
@@ -95,7 +95,8 @@ function isUpToDate(d2Path: string, outPath: string): boolean {
     const stylesFile = path.join(dir, "styles.d2");
     if (fs.existsSync(stylesFile)) sources.push(stylesFile);
 
-    // For component diagrams nested in containers/, styles.d2 is two levels up
+    // Probe two-up unconditionally: harmless no-op for top-level diagrams,
+    // required for nested component/code diagrams that inherit parent styles.
     const parentStyles = path.join(dir, "..", "..", "styles.d2");
     if (fs.existsSync(parentStyles)) sources.push(parentStyles);
 

@@ -14,6 +14,12 @@ export interface AgentClassification {
   name: string;
   description: string;
   confidence: number;
+  /**
+   * True when the LLM call failed and the classification is a heuristic
+   * fallback. Callers track this to surface a non-zero exit code — a run
+   * that silently degraded to heuristics is not a successful run.
+   */
+  failed?: boolean;
 }
 
 export interface CacheEntry extends AgentClassification {
@@ -71,12 +77,17 @@ export function loadAgentCache(rootDir: string): Map<string, CacheEntry> {
     if (code === "EMFILE" || code === "ENFILE" || code === "ENOMEM") {
       throw err;
     }
-    console.error(
-      `Warning: agent cache at ${filePath} is corrupted, deleting and starting fresh: ${err instanceof Error ? err.message : err}`,
-    );
-    try { fs.unlinkSync(filePath); } catch (cleanupErr: unknown) {
+    // Preserve the user's paid-for LLM history: rename the corrupt file so
+    // the user can inspect/recover it instead of silently deleting.
+    const backupPath = `${filePath}.corrupt.${Date.now()}.bak`;
+    try {
+      fs.renameSync(filePath, backupPath);
       console.error(
-        `Warning: failed to delete corrupted cache file ${filePath}. Please remove it manually: ${cleanupErr instanceof Error ? cleanupErr.message : cleanupErr}`,
+        `Warning: agent cache at ${filePath} is corrupted, renamed to ${backupPath} and starting fresh: ${err instanceof Error ? err.message : err}`,
+      );
+    } catch (renameErr: unknown) {
+      console.error(
+        `Warning: agent cache at ${filePath} is corrupted but could not be renamed. Please move it manually. Original error: ${err instanceof Error ? err.message : err}. Rename error: ${renameErr instanceof Error ? renameErr.message : renameErr}`,
       );
     }
   }
@@ -100,7 +111,11 @@ export function saveAgentCache(
     for (const [key, entry] of cache) {
       obj[key] = entry;
     }
-    fs.writeFileSync(filePath, YAML.stringify(obj), "utf-8");
+    // Atomic write: temp + rename. A crash mid-write would otherwise leave
+    // the cache corrupted, forcing loadAgentCache to discard paid-for work.
+    const tmpPath = `${filePath}.tmp.${process.pid}`;
+    fs.writeFileSync(tmpPath, YAML.stringify(obj), "utf-8");
+    fs.renameSync(tmpPath, filePath);
   } catch (err: unknown) {
     const code = (err as NodeJS.ErrnoException).code;
     if (code === "EMFILE" || code === "ENFILE" || code === "ENOMEM" || code === "ENOSPC") {
@@ -120,12 +135,13 @@ const VALID_ROLES = new Set<FolderRole>(roleEnum.options);
 
 /**
  * Extract a JSON classification from the LLM response text.
- * Handles responses wrapped in markdown code blocks.
- * Returns null when the response cannot be parsed, so the caller can decide the fallback.
+ *
+ * Returns null on JSON syntax errors (so the caller can fall back to a
+ * heuristic); rethrows anything else (TypeError from a bad getter etc.)
+ * since those indicate programming bugs.
  */
 export function parseAgentResponse(text: string): AgentClassification | null {
   try {
-    // Strip optional markdown code fences
     let cleaned = text.trim();
     const fenceMatch = cleaned.match(/```(?:json)?\s*\n?([\s\S]*?)\n?\s*```/);
     if (fenceMatch) {
@@ -211,13 +227,15 @@ function buildPrompt(
 
 /* ------------------------------------------------------------------ */
 /*  LLM calling                                                       */
+/*                                                                    */
+/*  Both SDKs are dynamic imports because they are optional peer deps */
+/*  — users who run `--no-agent` should not need them installed.      */
 /* ------------------------------------------------------------------ */
 
 async function callAnthropic(
   prompt: string,
   model: string,
 ): Promise<string | null> {
-  // Dynamic import — SDK may not be installed
   const { default: Anthropic } = await import("@anthropic-ai/sdk");
   const client = new Anthropic({ timeout: 15_000 });
   const response = await client.messages.create({
@@ -237,7 +255,6 @@ async function callOpenAI(
   prompt: string,
   model: string,
 ): Promise<string | null> {
-  // Dynamic import — SDK may not be installed
   const { default: OpenAI } = await import("openai");
   const client = new OpenAI({ timeout: 15_000 });
   const response = await client.chat.completions.create({
@@ -263,17 +280,10 @@ async function callOpenAI(
 /**
  * Classify a folder using an LLM, with caching.
  *
- * 1. Compute signal hash
- * 2. Check cache — return cached result if hash matches
- * 3. Build prompt and call LLM
- * 4. Parse response (fall back to heuristic on parse failure)
- * 5. Cache and return
- *
- * @param cache - Shared cache map. Pass in a single map loaded once at the
- *   start of the run to avoid re-reading the YAML file on every call.
- *   When provided, the caller is responsible for saving the cache after the
- *   full traversal. When omitted, a fresh cache is loaded and saved
- *   automatically after classification.
+ * @param cache - Shared cache map. When provided, the caller owns saving
+ *   after the full traversal (cheaper + consistent across recursion). When
+ *   omitted, a fresh cache is loaded and saved per-call — used for one-shot
+ *   tests and the root call before recursion sets up a shared map.
  */
 export async function agentClassify(
   folderPath: string,
@@ -287,7 +297,6 @@ export async function agentClassify(
   const hash = computeSignalHash(signals);
   const cacheKey = path.relative(rootDir, folderPath) || ".";
 
-  // Check cache
   const effectiveCache = cache ?? loadAgentCache(rootDir);
   const cached = effectiveCache.get(cacheKey);
   if (cached && cached.signalHash === hash) {
@@ -299,7 +308,6 @@ export async function agentClassify(
     };
   }
 
-  // Build prompt and call LLM
   const prompt = buildPrompt(folderPath, rootDir, signals, heuristicRole, parentContext);
   const { provider, model } = config.agent;
 
@@ -318,7 +326,6 @@ export async function agentClassify(
       }
     }
   } catch (err: unknown) {
-    // Check for missing SDK via error code (more reliable than string matching)
     const errCode = (err as NodeJS.ErrnoException).code;
     if (errCode === "MODULE_NOT_FOUND" || errCode === "ERR_MODULE_NOT_FOUND") {
       throw new Error(
@@ -326,7 +333,6 @@ export async function agentClassify(
       );
     }
 
-    // Check for HTTP status errors via the .status property (set by both SDKs)
     const status = (err as { status?: number }).status;
     if (status === 401 || status === 403) {
       throw new Error(
@@ -348,18 +354,23 @@ export async function agentClassify(
       name: "",
       description: "",
       confidence: 0,
+      failed: true,
     };
   }
 
   // Parse response — fall back to heuristic role on parse failure
-  const classification = (responseText ? parseAgentResponse(responseText) : null) ?? {
+  const parsed = responseText ? parseAgentResponse(responseText) : null;
+  const classification: AgentClassification = parsed ?? {
     role: heuristicRole,
     name: "",
     description: "",
     confidence: 0,
+    failed: true,
   };
 
-  // Cache result — skip fallback results (confidence 0) so the LLM is retried
+  // Skip caching fallback results so the LLM is retried next run.
+  // Invariant: confidence === 0 is only produced by our fallback paths
+  // (parse failure or exception above), never returned by a real LLM call.
   if (classification.confidence > 0) {
     effectiveCache.set(cacheKey, { ...classification, signalHash: hash });
   }
