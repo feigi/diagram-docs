@@ -665,4 +665,45 @@ describe("Integration: Submodule per-folder docs", () => {
       fs.rmSync(tmpRoot, { recursive: true, force: true });
     }
   });
+
+  it('skips containers whose path === "." to avoid clobbering root site', () => {
+    const tmpRoot = path.join(MONOREPO, "test-submodule-dot-path");
+    trackDir(tmpRoot);
+
+    const model: import("../../src/analyzers/types.js").ArchitectureModel = {
+      version: 1,
+      system: { name: "T", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        {
+          id: "root",
+          applicationId: "root",
+          name: "Root",
+          description: "",
+          technology: "Java",
+          path: ".",
+        },
+      ],
+      components: [],
+      relationships: [],
+    };
+
+    const config = configSchema.parse({ submodules: { enabled: true } });
+
+    const subResults = generateSubmoduleDocs(
+      tmpRoot,
+      OUTPUT_DIR,
+      model,
+      config,
+    );
+
+    // The root-pathed container must not produce a submodule site.
+    expect(subResults).toEqual([]);
+    expect(
+      fs.existsSync(
+        path.join(tmpRoot, "docs/architecture/_generated/c3-component.d2"),
+      ),
+    ).toBe(false);
+  });
 });

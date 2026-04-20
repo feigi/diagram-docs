@@ -67,6 +67,10 @@ export function generateSubmoduleDocs(
     // Their real content lives in child subprojects that get their own site.
     if (aggregatorIds.has(container.id)) continue;
 
+    // A container with path === "." would resolve to the repo root and
+    // collide with the root site. Skip defensively.
+    if (container.path === ".") continue;
+
     // Use the container's path if available, otherwise fall back to applicationId
     const appPath =
       container.path ?? container.applicationId.replace(/-/g, "/");
