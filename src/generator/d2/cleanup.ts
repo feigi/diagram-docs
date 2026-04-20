@@ -27,6 +27,22 @@ export function isUserModified(filePath: string): boolean {
 }
 
 /**
+ * Returns true if `filePath` is an untouched submodule config stub:
+ * every non-empty, non-whitespace line starts with `#`. Returns false if
+ * the file does not exist or contains any real YAML content.
+ */
+export function isInertSubmoduleStub(filePath: string): boolean {
+  if (!fs.existsSync(filePath)) return false;
+  const content = fs.readFileSync(filePath, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed.length === 0) continue;
+    if (!trimmed.startsWith("#")) return false;
+  }
+  return true;
+}
+
+/**
  * Remove scaffold and generated directories for containers that are no longer
  * in `model`. Called after the model is resolved, before new content is written.
  *

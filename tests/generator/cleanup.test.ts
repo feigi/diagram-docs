@@ -4,6 +4,7 @@ import * as os from "node:os";
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   isUserModified,
+  isInertSubmoduleStub,
   removeStaleContainerDirs,
 } from "../../src/generator/d2/cleanup.js";
 import type { ArchitectureModel } from "../../src/analyzers/types.js";
@@ -251,5 +252,46 @@ describe("removeStaleContainerDirs", () => {
       fs.existsSync(path.join(containersDir, "svc-a", "c3-component.d2")),
     ).toBe(true);
     expect(fs.existsSync(staleDir)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isInertSubmoduleStub
+// ---------------------------------------------------------------------------
+
+describe("isInertSubmoduleStub", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns true when every non-empty line is a comment", () => {
+    const filePath = path.join(tmpDir, "diagram-docs.yaml");
+    fs.writeFileSync(
+      filePath,
+      "# diagram-docs.yaml for Foo\n#\n# system:\n#   name: Foo\n",
+    );
+    expect(isInertSubmoduleStub(filePath)).toBe(true);
+  });
+
+  it("returns false when any non-comment, non-empty line exists", () => {
+    const filePath = path.join(tmpDir, "diagram-docs.yaml");
+    fs.writeFileSync(filePath, "# header\nsystem:\n  name: Foo\n");
+    expect(isInertSubmoduleStub(filePath)).toBe(false);
+  });
+
+  it("returns false when the file does not exist", () => {
+    expect(isInertSubmoduleStub(path.join(tmpDir, "missing.yaml"))).toBe(false);
+  });
+
+  it("ignores blank lines and whitespace-only lines", () => {
+    const filePath = path.join(tmpDir, "diagram-docs.yaml");
+    fs.writeFileSync(filePath, "# header\n\n   \n# more\n");
+    expect(isInertSubmoduleStub(filePath)).toBe(true);
   });
 });
