@@ -9,6 +9,7 @@ export interface DriftWarning {
   line: number;
   id: string;
   message: string;
+  severity: "warning" | "error";
 }
 
 export function checkDrawioDrift(
@@ -62,6 +63,7 @@ function checkFile(filePath: string, valid: Set<string>): DriftWarning[] {
           line: 0,
           id: "",
           message: `drawio parse failed: ${err.message}`,
+          severity: "error",
         },
       ];
     }
@@ -80,6 +82,7 @@ function checkFile(filePath: string, valid: Set<string>): DriftWarning[] {
         line: 0,
         id: endpoint,
         message: `Reference to "${endpoint}" not found in architecture model`,
+        severity: "warning",
       });
     }
   }

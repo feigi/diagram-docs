@@ -421,8 +421,18 @@ export const generateCommand = new Command("generate")
         removeStaleSubmoduleDrawioFiles(configDir, model, config);
         await generateSubmoduleDrawio(configDir, model, config);
       }
+      let drawioDriftHadError = false;
       for (const w of checkDrawioDrift(outputDir, model)) {
-        console.error(`Warning: ${w.file}: ${w.message}`);
+        if (w.severity === "error") {
+          const detail = w.message.replace(/^drawio parse failed:\s*/, "");
+          console.error(`Error: drawio parse failed for ${w.file}: ${detail}`);
+          drawioDriftHadError = true;
+        } else {
+          console.error(`Warning: ${w.file}: ${w.message}`);
+        }
+      }
+      if (drawioDriftHadError) {
+        process.exitCode = 1;
       }
     }
 
