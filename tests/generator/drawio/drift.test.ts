@@ -63,4 +63,18 @@ describe("checkDrawioDrift", () => {
     const warns = checkDrawioDrift(dir, model);
     expect(warns).toEqual([]);
   });
+
+  it("reports a severity=error warning for corrupt drawio files", () => {
+    const dir = tmpDir();
+    const file = path.join(dir, "c2-container.drawio");
+    const fixture = path.resolve(
+      __dirname,
+      "../../fixtures/drawio/corrupted.drawio",
+    );
+    fs.copyFileSync(fixture, file);
+    const warns = checkDrawioDrift(dir, model);
+    const errors = warns.filter((w) => w.severity === "error");
+    expect(errors.length).toBeGreaterThanOrEqual(1);
+    expect(errors[0]!.message.startsWith("drawio parse failed")).toBe(true);
+  });
 });
