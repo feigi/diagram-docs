@@ -18,6 +18,7 @@ export class DrawioParseError extends Error {
 export interface ExistingCell {
   id: string;
   value?: string;
+  tooltip?: string;
   style: string;
   vertex: boolean;
   edge: boolean;
@@ -174,6 +175,7 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     vertices.push({
       id: cell.id,
       value: cell.value ?? "",
+      tooltip: cell.tooltip,
       style: cell.style,
       parent: cell.parent,
       geometry: cell.geometry,
@@ -214,6 +216,7 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
       source: cell.source,
       target: cell.target,
       value: cell.value,
+      tooltip: cell.tooltip,
       style: cell.style,
       parent: cell.parent,
     });
