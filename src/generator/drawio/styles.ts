@@ -29,7 +29,9 @@ const BASE: Record<StyleKey, string> = {
   "code-fn":
     "rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#000000",
   relationship:
-    "endArrow=classic;html=1;rounded=0;strokeColor=#707070;fontSize=11",
+    "endArrow=classic;html=1;rounded=0;strokeColor=#707070;fontSize=11;" +
+    "edgeStyle=orthogonalEdgeStyle;curved=0;" +
+    "labelBackgroundColor=#ffffff;labelBorderColor=none",
 };
 
 export function withManagedTag(style: string): string {

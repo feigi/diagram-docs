@@ -43,4 +43,11 @@ describe("drawio styles", () => {
       expect(isManagedStyle(STYLES[key as keyof typeof STYLES])).toBe(true);
     }
   });
+
+  it("relationship style enables orthogonal routing with opaque labels", () => {
+    expect(STYLES.relationship).toContain("edgeStyle=orthogonalEdgeStyle");
+    expect(STYLES.relationship).toContain("curved=0");
+    expect(STYLES.relationship).toContain("labelBackgroundColor=#ffffff");
+    expect(STYLES.relationship).toContain("labelBorderColor=none");
+  });
 });
