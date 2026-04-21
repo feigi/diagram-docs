@@ -70,4 +70,18 @@ describe("buildCodeCells", () => {
       edges.find((x) => x.source === "user" && x.target === "hashpassword"),
     ).toBeDefined();
   });
+
+  it("tags code-element vertices with code-class or code-fn kind", () => {
+    const { vertices } = buildCodeCells(model, model.components[0]);
+    const classVertex = vertices.find((v) => v.kind === "code-class");
+    const fnVertex = vertices.find((v) => v.kind === "code-fn");
+    expect(classVertex).toBeDefined();
+    expect(fnVertex).toBeDefined();
+  });
+
+  it("tags the component boundary as system-boundary", () => {
+    const { vertices } = buildCodeCells(model, model.components[0]);
+    const boundary = vertices.find((v) => v.style.includes("dashed=1"));
+    expect(boundary?.kind).toBe("system-boundary");
+  });
 });
