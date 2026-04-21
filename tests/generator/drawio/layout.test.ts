@@ -37,9 +37,9 @@ describe("layoutGraph", () => {
       ],
       edges: [{ id: "a->b", source: "a", target: "b" }],
     });
-    expect(result.get("a")).toBeDefined();
-    expect(result.get("b")).toBeDefined();
-    expect(result.get("a")!.width).toBe(NODE_W);
+    expect(result.nodes.get("a")).toBeDefined();
+    expect(result.nodes.get("b")).toBeDefined();
+    expect(result.nodes.get("a")!.width).toBe(NODE_W);
   });
 
   it("is deterministic across repeated runs", async () => {
@@ -59,7 +59,7 @@ describe("layoutGraph", () => {
     const first = await layoutGraph(input);
     const second = await layoutGraph(input);
     for (const id of ["a", "b", "c", "d"]) {
-      expect(first.get(id)).toEqual(second.get(id));
+      expect(first.nodes.get(id)).toEqual(second.nodes.get(id));
     }
   });
 
@@ -73,9 +73,9 @@ describe("layoutGraph", () => {
       ],
       edges: [{ id: "c1->c2", source: "c1", target: "c2" }],
     });
-    expect(result.get("boundary")).toBeDefined();
-    expect(result.get("c1")).toBeDefined();
-    expect(result.get("c1")!.x).toBeGreaterThanOrEqual(0);
+    expect(result.nodes.get("boundary")).toBeDefined();
+    expect(result.nodes.get("c1")).toBeDefined();
+    expect(result.nodes.get("c1")!.x).toBeGreaterThanOrEqual(0);
   });
 
   it("applies mrtree for the code level", async () => {
@@ -87,8 +87,8 @@ describe("layoutGraph", () => {
       ],
       edges: [{ id: "parent->leaf", source: "parent", target: "leaf" }],
     });
-    expect(result.get("parent")).toBeDefined();
-    expect(result.get("leaf")).toBeDefined();
+    expect(result.nodes.get("parent")).toBeDefined();
+    expect(result.nodes.get("leaf")).toBeDefined();
   });
 
   it("emits child geometry relative to the immediate parent, not absolute", async () => {
@@ -104,9 +104,9 @@ describe("layoutGraph", () => {
       ],
       edges: [{ id: "c1->c2", source: "c1", target: "c2" }],
     });
-    const boundary = result.get("boundary")!;
-    const c1 = result.get("c1")!;
-    const c2 = result.get("c2")!;
+    const boundary = result.nodes.get("boundary")!;
+    const c1 = result.nodes.get("c1")!;
+    const c2 = result.nodes.get("c2")!;
     expect(boundary).toBeDefined();
     expect(c1).toBeDefined();
     expect(c2).toBeDefined();
@@ -140,8 +140,8 @@ describe("layoutGraph", () => {
       ],
       edges: [],
     });
-    const comp = result.get("comp")!;
-    const leaf = result.get("leaf")!;
+    const comp = result.nodes.get("comp")!;
+    const leaf = result.nodes.get("leaf")!;
     expect(comp).toBeDefined();
     expect(leaf).toBeDefined();
     // leaf is drawn inside comp; its relative coords must fit inside comp's

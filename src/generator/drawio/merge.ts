@@ -27,6 +27,7 @@ export interface ExistingCell {
   target?: string;
   geometry?: Geometry;
   waypoints?: Array<{ x: number; y: number }>;
+  labelOffset?: { x: number; y: number };
   managed: boolean;
 }
 
@@ -129,6 +130,7 @@ function toExistingCellFromPlain(raw: unknown): ExistingCell | null {
     target: r["@_target"] as string | undefined,
     geometry: parseGeometry(geometryNode),
     waypoints: parseWaypoints(geometryNode),
+    labelOffset: parseLabelOffset(geometryNode),
     managed: isManagedStyle(style),
   };
 }
@@ -166,11 +168,13 @@ function toExistingCellFromUserObject(
     target: inner["@_target"] as string | undefined,
     geometry: parseGeometry(geometryNode),
     waypoints: parseWaypoints(geometryNode),
+    labelOffset: parseLabelOffset(geometryNode),
     managed: attrManaged || isManagedStyle(style),
   };
 }
 
 import type { DiagramCells, VertexSpec, EdgeSpec } from "./context.js";
+import type { EdgeRoute } from "./layout.js";
 
 export interface ResolvedVertex extends VertexSpec {
   geometry: Geometry;
@@ -178,12 +182,14 @@ export interface ResolvedVertex extends VertexSpec {
 
 export interface ResolvedEdge extends EdgeSpec {
   waypoints?: Array<{ x: number; y: number }>;
+  labelOffset?: { x: number; y: number };
 }
 
 export interface ReconcileInput {
   existing: ExistingDocument;
   fresh: DiagramCells;
   layout: Map<string, Geometry>;
+  edgeRoutes?: Map<string, EdgeRoute>;
 }
 
 export interface ReconcileResult {
@@ -271,11 +277,23 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     const prior = existing.cells.get(e.id);
     const bothPreserved =
       preservedGeometry.has(e.source) && preservedGeometry.has(e.target);
-    const waypoints =
-      prior && prior.edge && prior.managed && bothPreserved
-        ? prior.waypoints
+    const priorIsUserRouted =
+      prior && prior.edge && prior.managed && bothPreserved;
+    // When both endpoints were preserved from a prior file the user may
+    // have hand-routed the edge; keep their waypoints AND any prior label
+    // offset so regen is byte-identical across runs. Otherwise use the
+    // ELK plan so drawio doesn't fall back to its own orthogonal router
+    // (which happily cuts through other nodes).
+    const freshRoute = input.edgeRoutes?.get(e.id);
+    const waypoints = priorIsUserRouted
+      ? prior.waypoints
+      : freshRoute?.waypoints && freshRoute.waypoints.length > 0
+        ? freshRoute.waypoints
         : undefined;
-    edges.push({ ...e, waypoints });
+    const labelOffset = priorIsUserRouted
+      ? prior.labelOffset
+      : freshRoute?.labelOffset;
+    edges.push({ ...e, waypoints, labelOffset });
   }
 
   const survivingVertexIds = new Set(vertices.map((v) => v.id));
@@ -316,6 +334,28 @@ function parseGeometry(geom?: Record<string, unknown>): Geometry | undefined {
   const h = Number(geom["@_height"] ?? NaN);
   if ([x, y, w, h].some((n) => Number.isNaN(n))) return undefined;
   return { x, y, width: w, height: h };
+}
+
+function parseLabelOffset(
+  geom?: Record<string, unknown>,
+): { x: number; y: number } | undefined {
+  if (!geom) return undefined;
+  const mxPoint = geom["mxPoint"];
+  if (!mxPoint) return undefined;
+  // fast-xml-parser may emit a single mxPoint or an array when multiple
+  // children exist. The edge geometry can hold both `<mxPoint as="offset">`
+  // and source/target terminal points — only the `as="offset"` one is the
+  // label offset we want to round-trip.
+  const points = Array.isArray(mxPoint) ? mxPoint : [mxPoint];
+  for (const p of points) {
+    const entry = p as Record<string, unknown>;
+    if (entry["@_as"] !== "offset") continue;
+    const x = Number(entry["@_x"] ?? NaN);
+    const y = Number(entry["@_y"] ?? NaN);
+    if (Number.isNaN(x) || Number.isNaN(y)) continue;
+    return { x, y };
+  }
+  return undefined;
 }
 
 function parseWaypoints(

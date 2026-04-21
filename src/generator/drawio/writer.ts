@@ -39,6 +39,7 @@ export interface EdgeCell {
   style: string;
   parent?: string;
   waypoints?: Array<{ x: number; y: number }>;
+  labelOffset?: { x: number; y: number };
 }
 
 export interface DrawioWriterOptions {
@@ -113,6 +114,17 @@ export class DrawioWriter {
           "@_x": String(p.x),
           "@_y": String(p.y),
         })),
+      };
+    }
+    if (cell.labelOffset) {
+      // `<mxPoint as="offset">` inside an edge's mxGeometry shifts the
+      // default midpoint label by (dx, dy). ELK already planned a label
+      // position per edge (layout.ts), so we hand drawio the delta
+      // instead of letting it stack all labels at the geometric midpoint.
+      geom.mxPoint = {
+        "@_x": String(cell.labelOffset.x),
+        "@_y": String(cell.labelOffset.y),
+        "@_as": "offset",
       };
     }
     if (cell.tooltip !== undefined) {

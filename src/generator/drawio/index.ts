@@ -49,7 +49,7 @@ export async function generateDrawioFile(
     };
   });
 
-  const layout = await layoutGraph({
+  const { nodes: layout, edges: edgeRoutes } = await layoutGraph({
     level: input.level,
     nodes: layoutNodes,
     edges: input.cells.edges.map((e) => ({
@@ -60,7 +60,12 @@ export async function generateDrawioFile(
     })),
   });
 
-  const result = reconcile({ existing, fresh: input.cells, layout });
+  const result = reconcile({
+    existing,
+    fresh: input.cells,
+    layout,
+    edgeRoutes,
+  });
   for (const w of result.warnings) console.error(`Warning: drawio merge: ${w}`);
 
   const writer = new DrawioWriter({ diagramName: input.diagramName });
@@ -84,6 +89,7 @@ export async function generateDrawioFile(
       style: e.style,
       parent: e.parent,
       waypoints: e.waypoints,
+      labelOffset: e.labelOffset,
     });
   }
 

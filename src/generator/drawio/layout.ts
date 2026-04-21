@@ -2,10 +2,28 @@ import ELKModule from "elkjs/lib/elk.bundled.js";
 import type {
   ELK as ElkInstance,
   ELKConstructorArguments,
+  ElkEdgeSection,
+  ElkExtendedEdge,
+  ElkLabel,
   ElkNode,
 } from "elkjs/lib/elk-api.js";
 import type { Geometry } from "./writer.js";
 import type { StyleKey } from "./styles.js";
+
+export interface Point {
+  x: number;
+  y: number;
+}
+
+export interface EdgeRoute {
+  waypoints: Point[];
+  labelOffset?: Point;
+}
+
+export interface LayoutResult {
+  nodes: Map<string, Geometry>;
+  edges: Map<string, EdgeRoute>;
+}
 
 const ELK = ELKModule as unknown as new (
   args?: ELKConstructorArguments,
@@ -96,9 +114,7 @@ const ALGORITHMS: Record<Level, string> = {
 
 const elk = new ELK();
 
-export async function layoutGraph(
-  input: LayoutInput,
-): Promise<Map<string, Geometry>> {
+export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
   const byId = new Map(input.nodes.map((n) => [n.id, n]));
   const childrenOf = new Map<string, string[]>();
   const allChildIds = new Set<string>();
@@ -173,9 +189,91 @@ export async function layoutGraph(
   };
 
   const laidOut = await elk.layout(graph);
-  const result = new Map<string, Geometry>();
-  collect(laidOut, result);
-  return result;
+  const nodes = new Map<string, Geometry>();
+  collect(laidOut, nodes);
+  const edges = collectEdges(laidOut);
+  return { nodes, edges };
+}
+
+function collectEdges(root: ElkNode): Map<string, EdgeRoute> {
+  const out = new Map<string, EdgeRoute>();
+  visitEdges(root, out);
+  return out;
+}
+
+function visitEdges(node: ElkNode, out: Map<string, EdgeRoute>): void {
+  for (const edge of (node.edges as ElkExtendedEdge[] | undefined) ?? []) {
+    const route = edgeRoute(edge);
+    if (route) out.set(edge.id, route);
+  }
+  for (const child of node.children ?? []) visitEdges(child, out);
+}
+
+/**
+ * Turn an ELK edge into the drawio-friendly route used by the writer:
+ *
+ * - `waypoints` = interior bend points of the first section, which drawio
+ *   emits as `<mxPoint>` children inside `<Array as="points">`. We drop
+ *   ELK's startPoint/endPoint because drawio computes those from the
+ *   source/target cell positions at render time.
+ * - `labelOffset` = pixel delta from the polyline midpoint to the center
+ *   of the first label. Emitted as `<mxPoint as="offset">` so drawio
+ *   places the label where ELK planned instead of defaulting to the
+ *   geometric midpoint (which is how two parallel edges' labels end up
+ *   stacked on the same spot).
+ */
+function edgeRoute(edge: ElkExtendedEdge): EdgeRoute | null {
+  const section = edge.sections?.[0] as ElkEdgeSection | undefined;
+  if (!section) return null;
+  const path = [
+    section.startPoint,
+    ...(section.bendPoints ?? []),
+    section.endPoint,
+  ];
+  const waypoints = (section.bendPoints ?? []).map((p) => ({
+    x: Math.round(p.x),
+    y: Math.round(p.y),
+  }));
+  const label = edge.labels?.[0] as ElkLabel | undefined;
+  let labelOffset: Point | undefined;
+  if (label && label.x !== undefined && label.y !== undefined) {
+    const labelCenter = {
+      x: label.x + (label.width ?? 0) / 2,
+      y: label.y + (label.height ?? 0) / 2,
+    };
+    const mid = polylineMidpoint(path);
+    const dx = Math.round(labelCenter.x - mid.x);
+    const dy = Math.round(labelCenter.y - mid.y);
+    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) labelOffset = { x: dx, y: dy };
+  }
+  return { waypoints, labelOffset };
+}
+
+function polylineMidpoint(points: Array<{ x: number; y: number }>): Point {
+  if (points.length === 0) return { x: 0, y: 0 };
+  if (points.length === 1) return { x: points[0].x, y: points[0].y };
+  const segs: number[] = [];
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const d = Math.hypot(
+      points[i].x - points[i - 1].x,
+      points[i].y - points[i - 1].y,
+    );
+    segs.push(d);
+    total += d;
+  }
+  let half = total / 2;
+  for (let i = 0; i < segs.length; i++) {
+    if (half <= segs[i]) {
+      const t = segs[i] === 0 ? 0 : half / segs[i];
+      return {
+        x: points[i].x + t * (points[i + 1].x - points[i].x),
+        y: points[i].y + t * (points[i + 1].y - points[i].y),
+      };
+    }
+    half -= segs[i];
+  }
+  return points[points.length - 1];
 }
 
 /**
