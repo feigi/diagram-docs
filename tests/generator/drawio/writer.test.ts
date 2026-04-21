@@ -136,4 +136,31 @@ describe("DrawioWriter", () => {
     expect(xml).toContain('tooltip="[HTTPS/REST]"');
     expect(xml).toMatch(/<UserObject[^>]*>\s*<mxCell[^>]*edge="1"/);
   });
+
+  it("omits label when edge has tooltip but no value", () => {
+    const w = new DrawioWriter({ diagramName: "L2" });
+    w.addVertex({
+      id: "a",
+      value: "A",
+      style: STYLES.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    w.addVertex({
+      id: "b",
+      value: "B",
+      style: STYLES.container,
+      geometry: { x: 300, y: 0, width: 180, height: 70 },
+    });
+    w.addEdge({
+      id: "a->b",
+      source: "a",
+      target: "b",
+      tooltip: "[HTTPS]",
+      style: STYLES.relationship,
+    });
+    const xml = w.serialise();
+    expect(xml).toMatch(/<UserObject[^>]*id="a-&gt;b"/);
+    expect(xml).toContain('tooltip="[HTTPS]"');
+    expect(xml).not.toMatch(/<UserObject[^>]*label=/);
+  });
 });

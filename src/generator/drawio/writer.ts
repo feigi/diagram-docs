@@ -108,7 +108,7 @@ export class DrawioWriter {
     if (cell.tooltip !== undefined) {
       this.userObjects.push({
         "@_id": cell.id,
-        "@_label": cell.value ?? "",
+        ...(cell.value !== undefined ? { "@_label": cell.value } : {}),
         "@_tooltip": cell.tooltip,
         "@_ddocs_managed": "1",
         mxCell: inner,
