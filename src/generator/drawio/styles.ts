@@ -28,15 +28,14 @@ const BASE: Record<StyleKey, string> = {
     "rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#000000",
   "code-fn":
     "rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#000000",
-  // Opaque white label background + no border keeps edge labels legible
-  // when orthogonal routing causes them to overlap other edges. Explicit
-  // black fontColor is required because drawio's dark-mode default flips
-  // fontColor to white — without this, edge labels render white-on-white
-  // and look like empty white rectangles.
+  // Intentionally no fontColor or labelBackgroundColor — drawio resolves
+  // the font color from the active theme (black on light, white on dark),
+  // so labels stay legible in either mode. ELK reserves label space via
+  // `labelBounds` in layout.ts, so we don't need an opaque label pill to
+  // stop labels from overlapping edges.
   relationship:
-    "endArrow=classic;html=1;rounded=0;strokeColor=#707070;fontSize=11;" +
-    "edgeStyle=orthogonalEdgeStyle;curved=0;" +
-    "fontColor=#000000;labelBackgroundColor=#ffffff;labelBorderColor=none",
+    "endArrow=classic;html=1;rounded=0;strokeColor=#909090;fontSize=11;" +
+    "edgeStyle=orthogonalEdgeStyle;curved=0",
 };
 
 export function withManagedTag(style: string): string {

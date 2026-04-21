@@ -44,10 +44,12 @@ describe("drawio styles", () => {
     }
   });
 
-  it("relationship style enables orthogonal routing with opaque labels", () => {
+  it("relationship style uses orthogonal routing and theme-default label colors", () => {
     expect(STYLES.relationship).toContain("edgeStyle=orthogonalEdgeStyle");
     expect(STYLES.relationship).toContain("curved=0");
-    expect(STYLES.relationship).toContain("labelBackgroundColor=#ffffff");
-    expect(STYLES.relationship).toContain("labelBorderColor=none");
+    // Theme-agnostic: no explicit fontColor or labelBackgroundColor so
+    // drawio picks black/white from the active theme (light/dark mode).
+    expect(STYLES.relationship).not.toContain("fontColor=");
+    expect(STYLES.relationship).not.toContain("labelBackgroundColor=");
   });
 });
