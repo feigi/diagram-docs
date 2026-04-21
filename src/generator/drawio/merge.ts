@@ -173,6 +173,7 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
       style: cell.style,
       parent: cell.parent,
       geometry: cell.geometry,
+      kind: "container",
     });
   }
 

@@ -18,7 +18,14 @@ describe("generateDrawioFile", () => {
       diagramName: "L1",
       level: "context",
       cells: {
-        vertices: [{ id: "a", value: "A", style: STYLES.container }],
+        vertices: [
+          {
+            id: "a",
+            value: "A",
+            style: STYLES.container,
+            kind: "container" as const,
+          },
+        ],
         edges: [],
       },
     });
@@ -32,8 +39,18 @@ describe("generateDrawioFile", () => {
     const out = path.join(dir, "c1-context.drawio");
     const cells = {
       vertices: [
-        { id: "a", value: "A", style: STYLES.container },
-        { id: "b", value: "B", style: STYLES.container },
+        {
+          id: "a",
+          value: "A",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
+        {
+          id: "b",
+          value: "B",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
       ],
       edges: [
         {
@@ -86,12 +103,57 @@ describe("generateDrawioFile", () => {
       diagramName: "L1",
       level: "context",
       cells: {
-        vertices: [{ id: "a", value: "A", style: STYLES.container }],
+        vertices: [
+          {
+            id: "a",
+            value: "A",
+            style: STYLES.container,
+            kind: "container" as const,
+          },
+        ],
         edges: [],
       },
     });
     expect(fs.existsSync(out)).toBe(true);
     expect(fs.existsSync(`${out}.tmp`)).toBe(false);
+  });
+
+  it("sizes person vertex at 48x80 via nodeSize(kind)", async () => {
+    const dir = tmp();
+    const filePath = path.join(dir, "size-test.drawio");
+    await generateDrawioFile({
+      filePath,
+      diagramName: "L1",
+      level: "context",
+      cells: {
+        vertices: [
+          {
+            id: "user",
+            value: "User\n[Person]",
+            style: STYLES.person,
+            kind: "person",
+          },
+          {
+            id: "svc",
+            value: "Svc\n[Container: Go]",
+            style: STYLES.container,
+            kind: "container",
+          },
+        ],
+        edges: [
+          {
+            id: "user->svc-uses",
+            source: "user",
+            target: "svc",
+            value: "uses",
+            style: STYLES.relationship,
+          },
+        ],
+      },
+    });
+    const xml = fs.readFileSync(filePath, "utf-8");
+    expect(xml).toMatch(/id="user"[\s\S]*?width="48"[^>]*height="80"/);
+    expect(xml).toMatch(/id="svc"[\s\S]*?width="180"[^>]*height="70"/);
   });
 
   it("does not truncate an existing file when the write fails", async () => {
@@ -117,7 +179,14 @@ describe("generateDrawioFile", () => {
         diagramName: "L1",
         level: "context",
         cells: {
-          vertices: [{ id: "a", value: "A", style: STYLES.container }],
+          vertices: [
+            {
+              id: "a",
+              value: "A",
+              style: STYLES.container,
+              kind: "container" as const,
+            },
+          ],
           edges: [],
         },
       }),
