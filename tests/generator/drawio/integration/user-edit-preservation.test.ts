@@ -39,11 +39,22 @@ describe("user-edit preservation", () => {
     });
 
     let xml = fs.readFileSync(out, "utf-8");
-    // Replace style for cell "a" - change the managed style to user-edited color
-    xml = xml.replace(
-      /(id="a"[^>]*style=")[^"]*(")/s,
-      `$1rounded=1;fillColor=#ff0000;ddocs_managed=1$2`,
-    );
+    // Replace style for cell "a". When description is set, the writer emits a
+    // UserObject wrapper around the mxCell (the id sits on UserObject, style
+    // on the inner mxCell). When no description is set, it emits a plain
+    // mxCell (id and style both on the same element). Handle both shapes.
+    const userStyle = "rounded=1;fillColor=#ff0000;ddocs_managed=1";
+    if (/<UserObject[^>]*id="a"/s.test(xml)) {
+      xml = xml.replace(
+        /(<UserObject[^>]*id="a"[\s\S]*?<mxCell[^>]*style=")[^"]*(")/,
+        `$1${userStyle}$2`,
+      );
+    } else {
+      xml = xml.replace(
+        /(<mxCell[^>]*id="a"[^>]*style=")[^"]*(")/,
+        `$1${userStyle}$2`,
+      );
+    }
     // Replace geometry for cell "a". Drawio interprets child geometry relative
     // to its mxCell parent ("system" here), so the numbers the layout picked
     // are parent-relative; we don't hard-code them in the match so the test
@@ -77,7 +88,9 @@ describe("user-edit preservation", () => {
     const a = doc.cells.get("a")!;
     expect(a.style).toBe("rounded=1;fillColor=#ff0000;ddocs_managed=1");
     expect(a.geometry).toEqual({ x: 999, y: 777, width: 200, height: 80 });
-    expect(a.value).toContain("updated");
+    // Description moved into the tooltip (see container.ts / Task 8); the
+    // regenerated description still reaches the cell, just via `tooltip`.
+    expect(a.tooltip).toContain("updated");
     const note = doc.cells.get("user-note")!;
     expect(note.managed).toBe(false);
     expect(note.geometry).toEqual({ x: 10, y: 10, width: 120, height: 40 });
