@@ -1,4 +1,18 @@
 import { XMLBuilder } from "fast-xml-parser";
+import { MANAGED_TAG } from "./styles.js";
+
+/**
+ * When a cell is wrapped in `<UserObject>`, the `ddocs_managed="1"` attribute
+ * on the wrapper is the source of truth for managed detection — strip the
+ * style-tag duplicate so the inner `mxCell` doesn't carry redundant state.
+ * Merge still accepts either form.
+ */
+function stripManagedTag(style: string): string {
+  return style
+    .split(";")
+    .filter((p) => p.trim() !== MANAGED_TAG)
+    .join(";");
+}
 
 export interface Geometry {
   x: number;
@@ -57,6 +71,10 @@ export class DrawioWriter {
       "@_height": String(cell.geometry.height),
       "@_as": "geometry",
     };
+    // mxGraph: the `tooltip` attribute only exists on `<UserObject>`
+    // wrappers, not plain `<mxCell>` — so tooltip-bearing cells require the
+    // wrapper form. When wrapped, the display label moves from `@_value`
+    // (on mxCell) to `@_label` (on UserObject); merge.ts mirrors this.
     if (cell.tooltip !== undefined) {
       this.userObjects.push({
         "@_id": cell.id,
@@ -64,7 +82,7 @@ export class DrawioWriter {
         "@_tooltip": cell.tooltip,
         "@_ddocs_managed": "1",
         mxCell: {
-          "@_style": cell.style,
+          "@_style": stripManagedTag(cell.style),
           "@_vertex": "1",
           "@_parent": cell.parent ?? "1",
           mxGeometry: geometry,
@@ -97,27 +115,31 @@ export class DrawioWriter {
         })),
       };
     }
-    const inner: CellNode = {
-      "@_style": cell.style,
-      "@_edge": "1",
-      "@_parent": cell.parent ?? "1",
-      "@_source": cell.source,
-      "@_target": cell.target,
-      mxGeometry: geom,
-    };
     if (cell.tooltip !== undefined) {
       this.userObjects.push({
         "@_id": cell.id,
         ...(cell.value !== undefined ? { "@_label": cell.value } : {}),
         "@_tooltip": cell.tooltip,
         "@_ddocs_managed": "1",
-        mxCell: inner,
+        mxCell: {
+          "@_style": stripManagedTag(cell.style),
+          "@_edge": "1",
+          "@_parent": cell.parent ?? "1",
+          "@_source": cell.source,
+          "@_target": cell.target,
+          mxGeometry: geom,
+        },
       });
     } else {
       this.plainCells.push({
         "@_id": cell.id,
         ...(cell.value !== undefined ? { "@_value": cell.value } : {}),
-        ...inner,
+        "@_style": cell.style,
+        "@_edge": "1",
+        "@_parent": cell.parent ?? "1",
+        "@_source": cell.source,
+        "@_target": cell.target,
+        mxGeometry: geom,
       });
     }
     return this;

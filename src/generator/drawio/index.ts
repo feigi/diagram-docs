@@ -33,6 +33,9 @@ export async function generateDrawioFile(
   const layoutNodes: LayoutNode[] = input.cells.vertices.map((v) => {
     const kids = childrenOf.get(v.id);
     const base = nodeSize(v.kind);
+    // Boundary/edge kinds return {0,0} (ELK INCLUDE_CHILDREN sizes them from
+    // their contents). Fall back to a container footprint so the child-count
+    // scaling below has a non-zero seed.
     const { width: baseW, height: baseH } =
       base.width > 0 ? base : nodeSize("container");
     return {

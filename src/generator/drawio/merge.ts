@@ -36,7 +36,12 @@ export interface ExistingDocument {
 
 export function parseDrawioFile(filePath: string): ExistingDocument {
   if (!fs.existsSync(filePath)) return { cells: new Map() };
-  const xml = fs.readFileSync(filePath, "utf-8");
+  let xml: string;
+  try {
+    xml = fs.readFileSync(filePath, "utf-8");
+  } catch (err) {
+    throw new DrawioParseError(filePath, err);
+  }
   let tree: unknown;
   try {
     const parser = new XMLParser({
@@ -68,7 +73,16 @@ export function parseDrawioFile(filePath: string): ExistingDocument {
   }
   for (const raw of iterateUserObjects(rootNode)) {
     const cell = toExistingCellFromUserObject(raw, filePath);
-    if (cell) cells.set(cell.id, cell);
+    if (!cell) continue;
+    if (cells.has(cell.id)) {
+      // Same id appeared as both <mxCell> and <UserObject>. Keep the
+      // UserObject form (richer metadata) but log — user may have
+      // hand-edited in a confusing state.
+      console.error(
+        `Warning: drawio parse ${filePath}: id "${cell.id}" appears as both <mxCell> and <UserObject>; using UserObject form.`,
+      );
+    }
+    cells.set(cell.id, cell);
   }
   return { cells };
 }

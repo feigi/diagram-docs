@@ -39,22 +39,16 @@ describe("user-edit preservation", () => {
     });
 
     let xml = fs.readFileSync(out, "utf-8");
-    // Replace style for cell "a". When description is set, the writer emits a
-    // UserObject wrapper around the mxCell (the id sits on UserObject, style
-    // on the inner mxCell). When no description is set, it emits a plain
-    // mxCell (id and style both on the same element). Handle both shapes.
-    const userStyle = "rounded=1;fillColor=#ff0000;ddocs_managed=1";
-    if (/<UserObject[^>]*id="a"/s.test(xml)) {
-      xml = xml.replace(
-        /(<UserObject[^>]*id="a"[\s\S]*?<mxCell[^>]*style=")[^"]*(")/,
-        `$1${userStyle}$2`,
-      );
-    } else {
-      xml = xml.replace(
-        /(<mxCell[^>]*id="a"[^>]*style=")[^"]*(")/,
-        `$1${userStyle}$2`,
-      );
-    }
+    // Container "a" has a description ("first") so the writer emits a
+    // <UserObject> wrapper: id sits on UserObject, style on the inner mxCell.
+    // Assert the shape first so a regression that silently drops the wrapper
+    // fails loudly instead of falling through to a plain-cell fallback.
+    expect(xml).toMatch(/<UserObject[^>]*id="a"/);
+    const userStyle = "rounded=1;fillColor=#ff0000";
+    xml = xml.replace(
+      /(<UserObject[^>]*id="a"[\s\S]*?<mxCell[^>]*style=")[^"]*(")/,
+      `$1${userStyle}$2`,
+    );
     // Replace geometry for cell "a". Drawio interprets child geometry relative
     // to its mxCell parent ("system" here), so the numbers the layout picked
     // are parent-relative; we don't hard-code them in the match so the test
@@ -86,7 +80,11 @@ describe("user-edit preservation", () => {
 
     const doc = parseDrawioFile(out);
     const a = doc.cells.get("a")!;
-    expect(a.style).toBe("rounded=1;fillColor=#ff0000;ddocs_managed=1");
+    // Inner mxCell style is stripped of the managed tag on UserObject emit
+    // (wrapper attribute is the source of truth) — preserve the user's other
+    // style tweaks while still recognising the cell as managed.
+    expect(a.style).toBe("rounded=1;fillColor=#ff0000");
+    expect(a.managed).toBe(true);
     expect(a.geometry).toEqual({ x: 999, y: 777, width: 200, height: 80 });
     // Description moved into the tooltip (see container.ts / Task 8); the
     // regenerated description still reaches the cell, just via `tooltip`.
