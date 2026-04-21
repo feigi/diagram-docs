@@ -9,7 +9,8 @@ describe("nodeSize", () => {
     expect(nodeSize("person")).toEqual({ width: 48, height: 80 });
   });
 
-  it("returns 180x70 for containers, components and externals", () => {
+  it("returns 180x70 for system, containers, components and externals", () => {
+    expect(nodeSize("system")).toEqual({ width: 180, height: 70 });
     expect(nodeSize("container")).toEqual({ width: 180, height: 70 });
     expect(nodeSize("component")).toEqual({ width: 180, height: 70 });
     expect(nodeSize("external-system")).toEqual({ width: 180, height: 70 });
@@ -20,8 +21,7 @@ describe("nodeSize", () => {
     expect(nodeSize("code-fn")).toEqual({ width: 160, height: 60 });
   });
 
-  it("returns 0x0 for boundary/container-like placeholders sized by ELK", () => {
-    expect(nodeSize("system")).toEqual({ width: 0, height: 0 });
+  it("returns 0x0 for system-boundary and relationship (ELK-sized/non-node)", () => {
     expect(nodeSize("system-boundary")).toEqual({ width: 0, height: 0 });
     expect(nodeSize("relationship")).toEqual({ width: 0, height: 0 });
   });

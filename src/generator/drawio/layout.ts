@@ -19,10 +19,20 @@ export interface NodeSize {
   height: number;
 }
 
+/**
+ * Intrinsic drawio shape aspect per kind — person/umlActor is a tall, narrow
+ * stick figure; containers/components/externals need width for a two-line
+ * label + `[Type: tech]`; code boxes pack tighter.
+ *
+ * Returns `{0,0}` for boundary/edge kinds so ELK `INCLUDE_CHILDREN` sizes
+ * `system-boundary` from its contents. `system` itself is a real vertex in L1
+ * (it has no children), so it receives a container-sized footprint.
+ */
 export function nodeSize(kind: StyleKey): NodeSize {
   switch (kind) {
     case "person":
       return { width: 48, height: 80 };
+    case "system":
     case "container":
     case "component":
     case "external-system":
@@ -30,7 +40,6 @@ export function nodeSize(kind: StyleKey): NodeSize {
     case "code-class":
     case "code-fn":
       return { width: 160, height: 60 };
-    case "system":
     case "system-boundary":
     case "relationship":
       return { width: 0, height: 0 };
@@ -101,9 +110,14 @@ export async function layoutGraph(
     layoutOptions: {
       "elk.algorithm": ALGORITHMS[input.level],
       "elk.direction": "DOWN",
+      // Orthogonal routing matches the `orthogonalEdgeStyle` set on
+      // relationship cells in styles.ts, so ELK's planned segments align
+      // with drawio's rendered lines instead of drawio re-routing on open.
       "elk.edgeRouting": "ORTHOGONAL",
       "elk.spacing.nodeNode": String(NODE_SPACING_Y),
       "elk.layered.spacing.nodeNodeBetweenLayers": String(NODE_SPACING_X),
+      // Reserve gutters between edges and edges/nodes so labels don't pile
+      // up when several relationships share the same pair of layers.
       "elk.layered.spacing.edgeNodeBetweenLayers": "40",
       "elk.layered.spacing.edgeEdgeBetweenLayers": "30",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",

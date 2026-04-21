@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import * as path from "node:path";
 import {
   parseDrawioFile,
@@ -67,6 +67,81 @@ describe("parseDrawioFile", () => {
     const orders = result.cells.get("orders")!;
     expect(orders.style).not.toContain("ddocs_managed=1");
     expect(orders.managed).toBe(true);
+  });
+
+  it("warns when same id appears as both <mxCell> and <UserObject>", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path2 = await import("node:path");
+    const dir = fs.mkdtempSync(path2.join(os.tmpdir(), "ddocs-collision-"));
+    const out = path2.join(dir, "c.drawio");
+    fs.writeFileSync(
+      out,
+      `<?xml version="1.0" encoding="UTF-8"?>
+<mxfile><diagram><mxGraphModel><root>
+  <mxCell id="0"/>
+  <mxCell id="1" parent="0"/>
+  <mxCell id="dup" value="plain" style="rounded=1" vertex="1" parent="1">
+    <mxGeometry x="0" y="0" width="10" height="10" as="geometry"/>
+  </mxCell>
+  <UserObject id="dup" label="wrapped" tooltip="t" ddocs_managed="1">
+    <mxCell style="rounded=1" vertex="1" parent="1">
+      <mxGeometry x="5" y="5" width="20" height="20" as="geometry"/>
+    </mxCell>
+  </UserObject>
+</root></mxGraphModel></diagram></mxfile>`,
+    );
+    const spy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      const result = parseDrawioFile(out);
+      const dup = result.cells.get("dup")!;
+      expect(dup.value).toBe("wrapped");
+      expect(dup.geometry).toEqual({ x: 5, y: 5, width: 20, height: 20 });
+      expect(
+        spy.mock.calls.some((c) =>
+          String(c[0]).includes(
+            'id "dup" appears as both <mxCell> and <UserObject>',
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("round-trips mixed plain + UserObject cells within one file", async () => {
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path2 = await import("node:path");
+    const { DrawioWriter } =
+      await import("../../../src/generator/drawio/writer.js");
+    const { STYLES: S } =
+      await import("../../../src/generator/drawio/styles.js");
+    const dir = fs.mkdtempSync(path2.join(os.tmpdir(), "ddocs-mixed-"));
+    const out = path2.join(dir, "m.drawio");
+    const w = new DrawioWriter({ diagramName: "mixed" });
+    w.addVertex({
+      id: "plain",
+      value: "Plain",
+      style: S.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    w.addVertex({
+      id: "rich",
+      value: "Rich",
+      tooltip: "has tooltip",
+      style: S.container,
+      geometry: { x: 200, y: 0, width: 180, height: 70 },
+    });
+    fs.writeFileSync(out, w.serialise(), "utf-8");
+    const doc = parseDrawioFile(out);
+    expect(doc.cells.get("plain")?.value).toBe("Plain");
+    expect(doc.cells.get("plain")?.tooltip).toBeUndefined();
+    expect(doc.cells.get("rich")?.value).toBe("Rich");
+    expect(doc.cells.get("rich")?.tooltip).toBe("has tooltip");
+    // Structural cells still present.
+    expect(doc.cells.get("0")).toBeDefined();
+    expect(doc.cells.get("1")).toBeDefined();
   });
 });
 

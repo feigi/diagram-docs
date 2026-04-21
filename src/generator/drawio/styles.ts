@@ -28,6 +28,8 @@ const BASE: Record<StyleKey, string> = {
     "rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#000000",
   "code-fn":
     "rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#000000",
+  // Opaque white label background + no border keeps edge labels legible
+  // when orthogonal routing causes them to overlap other edges.
   relationship:
     "endArrow=classic;html=1;rounded=0;strokeColor=#707070;fontSize=11;" +
     "edgeStyle=orthogonalEdgeStyle;curved=0;" +

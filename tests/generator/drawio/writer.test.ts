@@ -137,6 +137,58 @@ describe("DrawioWriter", () => {
     expect(xml).toMatch(/<UserObject[^>]*>\s*<mxCell[^>]*edge="1"/);
   });
 
+  it("strips ddocs_managed=1 from inner mxCell style on UserObject wrap", () => {
+    const w = new DrawioWriter({ diagramName: "L2" });
+    w.addVertex({
+      id: "auth",
+      value: "Auth",
+      tooltip: "desc",
+      style: STYLES.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    const xml = w.serialise();
+    // ddocs_managed is asserted via the UserObject attribute, not the style.
+    expect(xml).toMatch(
+      /<UserObject[^>]*id="auth"[^>]*ddocs_managed="1"[^>]*>\s*<mxCell[^>]*style="(?!.*ddocs_managed=1)/,
+    );
+  });
+
+  it("preserves ddocs_managed=1 in style on plain mxCell (no tooltip)", () => {
+    const w = new DrawioWriter({ diagramName: "L2" });
+    w.addVertex({
+      id: "auth",
+      value: "Auth",
+      style: STYLES.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    const xml = w.serialise();
+    expect(xml).toMatch(
+      /<mxCell[^>]*id="auth"[^>]*style="[^"]*ddocs_managed=1/,
+    );
+  });
+
+  it("escapes XML-unsafe chars in tooltip (quotes, angle brackets, ampersand)", async () => {
+    const { parseDrawioFile } =
+      await import("../../../src/generator/drawio/merge.js");
+    const fs = await import("node:fs");
+    const os = await import("node:os");
+    const path = await import("node:path");
+    const w = new DrawioWriter({ diagramName: "L2" });
+    const tricky = 'has "quotes" & <angles>';
+    w.addVertex({
+      id: "auth",
+      value: "Auth",
+      tooltip: tricky,
+      style: STYLES.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ddocs-esc-"));
+    const out = path.join(dir, "t.drawio");
+    fs.writeFileSync(out, w.serialise(), "utf-8");
+    const doc = parseDrawioFile(out);
+    expect(doc.cells.get("auth")?.tooltip).toBe(tricky);
+  });
+
   it("omits label when edge has tooltip but no value", () => {
     const w = new DrawioWriter({ diagramName: "L2" });
     w.addVertex({
