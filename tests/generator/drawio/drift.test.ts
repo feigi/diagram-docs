@@ -78,4 +78,26 @@ describe("checkDrawioDrift", () => {
     expect(errors[0]!.file).toBe(file);
     expect(errors[0]!.message.length).toBeGreaterThan(0);
   });
+
+  it("emits an error-severity warning when a UserObject has no child mxCell", () => {
+    const fixtureDir = path.resolve(
+      __dirname,
+      "../../fixtures/drawio/drift-invalid",
+    );
+    const warnings = checkDrawioDrift(fixtureDir, {
+      version: 1,
+      system: { name: "S", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [],
+      components: [],
+      relationships: [],
+    });
+    const bad = warnings.find((w) =>
+      w.file.endsWith("userobject-missing-mxcell.drawio"),
+    );
+    expect(bad).toBeDefined();
+    expect(bad!.severity).toBe("error");
+    expect(bad!.message).toContain("missing child mxCell");
+  });
 });
