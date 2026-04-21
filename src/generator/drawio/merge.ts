@@ -73,6 +73,7 @@ export function parseDrawioFile(filePath: string): ExistingDocument {
     cells.set(id, {
       id,
       value: r["@_value"] as string | undefined,
+      tooltip: r["@_tooltip"] as string | undefined,
       style,
       vertex,
       edge,

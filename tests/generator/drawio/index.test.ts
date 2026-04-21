@@ -157,8 +157,8 @@ describe("generateDrawioFile", () => {
   });
 
   it("propagates vertex and edge tooltips through to the serialised XML", async () => {
-    const tmpDir = tmp();
-    const filePath = path.join(tmpDir, "tooltip-flow.drawio");
+    const dir = tmp();
+    const filePath = path.join(dir, "tooltip-flow.drawio");
     await generateDrawioFile({
       filePath,
       diagramName: "L2",
