@@ -11,8 +11,8 @@ const ELK = ELKModule as unknown as new (
   args?: ELKConstructorArguments,
 ) => ElkInstance;
 
-export const NODE_SPACING_X = 200;
-export const NODE_SPACING_Y = 120;
+export const NODE_SPACING_X = 320;
+export const NODE_SPACING_Y = 160;
 
 export interface NodeSize {
   width: number;
@@ -36,7 +36,7 @@ export function nodeSize(kind: StyleKey): NodeSize {
     case "container":
     case "component":
     case "external-system":
-      return { width: 180, height: 70 };
+      return { width: 220, height: 80 };
     case "code-class":
     case "code-fn":
       return { width: 160, height: 60 };
@@ -143,6 +143,12 @@ export async function layoutGraph(
       "elk.spacing.edgeEdge": "30",
       "elk.spacing.edgeNode": "40",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+      // More optimization passes + straighter edges → ORTHOGONAL routing
+      // has a better chance of steering around nodes instead of cutting
+      // corners on dense L3 component graphs.
+      "elk.layered.thoroughness": "10",
+      "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
+      "elk.layered.nodePlacement.bk.edgeStraightening": "IMPROVE_STRAIGHTNESS",
       // Route labels off the line and give each a generous gutter so two
       // adjacent "Uses"-style labels don't settle on top of each other.
       // drawio draws the label at the edge midpoint regardless of what

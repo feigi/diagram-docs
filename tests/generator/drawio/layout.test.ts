@@ -9,11 +9,11 @@ describe("nodeSize", () => {
     expect(nodeSize("person")).toEqual({ width: 48, height: 80 });
   });
 
-  it("returns 180x70 for system, containers, components and externals", () => {
-    expect(nodeSize("system")).toEqual({ width: 180, height: 70 });
-    expect(nodeSize("container")).toEqual({ width: 180, height: 70 });
-    expect(nodeSize("component")).toEqual({ width: 180, height: 70 });
-    expect(nodeSize("external-system")).toEqual({ width: 180, height: 70 });
+  it("returns 220x80 for system, containers, components and externals", () => {
+    expect(nodeSize("system")).toEqual({ width: 220, height: 80 });
+    expect(nodeSize("container")).toEqual({ width: 220, height: 80 });
+    expect(nodeSize("component")).toEqual({ width: 220, height: 80 });
+    expect(nodeSize("external-system")).toEqual({ width: 220, height: 80 });
   });
 
   it("returns 160x60 for code kinds (L4 compact)", () => {

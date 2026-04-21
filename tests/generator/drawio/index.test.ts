@@ -153,7 +153,7 @@ describe("generateDrawioFile", () => {
     });
     const xml = fs.readFileSync(filePath, "utf-8");
     expect(xml).toMatch(/id="user"[\s\S]*?width="48"[^>]*height="80"/);
-    expect(xml).toMatch(/id="svc"[\s\S]*?width="180"[^>]*height="70"/);
+    expect(xml).toMatch(/id="svc"[\s\S]*?width="220"[^>]*height="80"/);
   });
 
   it("propagates vertex and edge tooltips through to the serialised XML", async () => {
