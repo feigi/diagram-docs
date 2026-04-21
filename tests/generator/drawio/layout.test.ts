@@ -1,23 +1,45 @@
 import { describe, it, expect } from "vitest";
-import {
-  layoutGraph,
-  NODE_WIDTH,
-  NODE_HEIGHT,
-} from "../../../src/generator/drawio/layout.js";
+import { layoutGraph, nodeSize } from "../../../src/generator/drawio/layout.js";
+
+const NODE_W = nodeSize("container").width;
+const NODE_H = nodeSize("container").height;
+
+describe("nodeSize", () => {
+  it("returns 48x80 for person (narrow shape + label gutter)", () => {
+    expect(nodeSize("person")).toEqual({ width: 48, height: 80 });
+  });
+
+  it("returns 180x70 for containers, components and externals", () => {
+    expect(nodeSize("container")).toEqual({ width: 180, height: 70 });
+    expect(nodeSize("component")).toEqual({ width: 180, height: 70 });
+    expect(nodeSize("external-system")).toEqual({ width: 180, height: 70 });
+  });
+
+  it("returns 160x60 for code kinds (L4 compact)", () => {
+    expect(nodeSize("code-class")).toEqual({ width: 160, height: 60 });
+    expect(nodeSize("code-fn")).toEqual({ width: 160, height: 60 });
+  });
+
+  it("returns 0x0 for boundary/container-like placeholders sized by ELK", () => {
+    expect(nodeSize("system")).toEqual({ width: 0, height: 0 });
+    expect(nodeSize("system-boundary")).toEqual({ width: 0, height: 0 });
+    expect(nodeSize("relationship")).toEqual({ width: 0, height: 0 });
+  });
+});
 
 describe("layoutGraph", () => {
   it("returns geometry for every node", async () => {
     const result = await layoutGraph({
       level: "context",
       nodes: [
-        { id: "a", width: NODE_WIDTH, height: NODE_HEIGHT },
-        { id: "b", width: NODE_WIDTH, height: NODE_HEIGHT },
+        { id: "a", width: NODE_W, height: NODE_H },
+        { id: "b", width: NODE_W, height: NODE_H },
       ],
       edges: [{ id: "a->b", source: "a", target: "b" }],
     });
     expect(result.get("a")).toBeDefined();
     expect(result.get("b")).toBeDefined();
-    expect(result.get("a")!.width).toBe(NODE_WIDTH);
+    expect(result.get("a")!.width).toBe(NODE_W);
   });
 
   it("is deterministic across repeated runs", async () => {
@@ -25,8 +47,8 @@ describe("layoutGraph", () => {
       level: "container" as const,
       nodes: ["a", "b", "c", "d"].map((id) => ({
         id,
-        width: NODE_WIDTH,
-        height: NODE_HEIGHT,
+        width: NODE_W,
+        height: NODE_H,
       })),
       edges: [
         { id: "a->b", source: "a", target: "b" },
@@ -46,8 +68,8 @@ describe("layoutGraph", () => {
       level: "component",
       nodes: [
         { id: "boundary", width: 400, height: 300, children: ["c1", "c2"] },
-        { id: "c1", width: NODE_WIDTH, height: NODE_HEIGHT },
-        { id: "c2", width: NODE_WIDTH, height: NODE_HEIGHT },
+        { id: "c1", width: NODE_W, height: NODE_H },
+        { id: "c2", width: NODE_W, height: NODE_H },
       ],
       edges: [{ id: "c1->c2", source: "c1", target: "c2" }],
     });
@@ -60,8 +82,8 @@ describe("layoutGraph", () => {
     const result = await layoutGraph({
       level: "code",
       nodes: [
-        { id: "parent", width: NODE_WIDTH, height: NODE_HEIGHT },
-        { id: "leaf", width: NODE_WIDTH, height: NODE_HEIGHT },
+        { id: "parent", width: NODE_W, height: NODE_H },
+        { id: "leaf", width: NODE_W, height: NODE_H },
       ],
       edges: [{ id: "parent->leaf", source: "parent", target: "leaf" }],
     });
@@ -77,8 +99,8 @@ describe("layoutGraph", () => {
       level: "component",
       nodes: [
         { id: "boundary", width: 600, height: 400, children: ["c1", "c2"] },
-        { id: "c1", width: NODE_WIDTH, height: NODE_HEIGHT },
-        { id: "c2", width: NODE_WIDTH, height: NODE_HEIGHT },
+        { id: "c1", width: NODE_W, height: NODE_H },
+        { id: "c2", width: NODE_W, height: NODE_H },
       ],
       edges: [{ id: "c1->c2", source: "c1", target: "c2" }],
     });
@@ -114,7 +136,7 @@ describe("layoutGraph", () => {
         { id: "sys", width: 800, height: 600, children: ["cont"] },
         { id: "cont", width: 600, height: 400, children: ["comp"] },
         { id: "comp", width: 400, height: 250, children: ["leaf"] },
-        { id: "leaf", width: NODE_WIDTH, height: NODE_HEIGHT },
+        { id: "leaf", width: NODE_W, height: NODE_H },
       ],
       edges: [],
     });

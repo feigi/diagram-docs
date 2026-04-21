@@ -5,15 +5,37 @@ import type {
   ElkNode,
 } from "elkjs/lib/elk-api.js";
 import type { Geometry } from "./writer.js";
+import type { StyleKey } from "./styles.js";
 
 const ELK = ELKModule as unknown as new (
   args?: ELKConstructorArguments,
 ) => ElkInstance;
 
-export const NODE_WIDTH = 160;
-export const NODE_HEIGHT = 60;
 export const NODE_SPACING_X = 200;
 export const NODE_SPACING_Y = 120;
+
+export interface NodeSize {
+  width: number;
+  height: number;
+}
+
+export function nodeSize(kind: StyleKey): NodeSize {
+  switch (kind) {
+    case "person":
+      return { width: 48, height: 80 };
+    case "container":
+    case "component":
+    case "external-system":
+      return { width: 180, height: 70 };
+    case "code-class":
+    case "code-fn":
+      return { width: 160, height: 60 };
+    case "system":
+    case "system-boundary":
+    case "relationship":
+      return { width: 0, height: 0 };
+  }
+}
 
 export type Level = "context" | "container" | "component" | "code";
 
@@ -79,8 +101,11 @@ export async function layoutGraph(
     layoutOptions: {
       "elk.algorithm": ALGORITHMS[input.level],
       "elk.direction": "DOWN",
+      "elk.edgeRouting": "ORTHOGONAL",
       "elk.spacing.nodeNode": String(NODE_SPACING_Y),
       "elk.layered.spacing.nodeNodeBetweenLayers": String(NODE_SPACING_X),
+      "elk.layered.spacing.edgeNodeBetweenLayers": "40",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "30",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
     },
     children: rootIds.map(buildElkNode),
