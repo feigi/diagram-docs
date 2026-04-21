@@ -54,7 +54,8 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
   for (const a of sortById(model.actors)) {
     vertices.push({
       id: toDrawioId(a.id),
-      value: `${a.name}\n[Person]\n${a.description}`,
+      value: `${a.name}\n[Person]`,
+      tooltip: a.description || undefined,
       style: STYLES.person,
       kind: "person",
     });
@@ -71,7 +72,8 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
     if (!connected.has(c.id)) continue;
     vertices.push({
       id: toDrawioId(c.id),
-      value: `${c.name}\n[Container: ${c.technology}]\n${c.description}`,
+      value: `${c.name}\n[Container: ${c.technology}]`,
+      tooltip: c.description || undefined,
       style: STYLES.container,
       kind: "container",
       parent: "system",
@@ -79,11 +81,14 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
   }
 
   for (const e of sortById(model.externalSystems)) {
-    const tech = e.technology ? `\n[${e.technology}]` : "";
-    const isLib = e.tags?.includes("library");
+    const typeTag = e.tags?.includes("library")
+      ? "[Library]"
+      : "[External System]";
+    const techLine = e.technology ? `\n[${e.technology}]` : "";
     vertices.push({
       id: toDrawioId(e.id),
-      value: `${e.name}\n${isLib ? "[Library]" : "[External System]"}${tech}\n${e.description}`,
+      value: `${e.name}\n${typeTag}${techLine}`,
+      tooltip: e.description || undefined,
       style: STYLES["external-system"],
       kind: "external-system",
     });
@@ -94,7 +99,8 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
       id: edgeId(r.src, r.tgt, r.label),
       source: toDrawioId(r.src),
       target: toDrawioId(r.tgt),
-      value: r.tech ? `${r.label} [${r.tech}]` : r.label,
+      value: r.label,
+      tooltip: r.tech ? `[${r.tech}]` : undefined,
       style: STYLES.relationship,
     });
   }
