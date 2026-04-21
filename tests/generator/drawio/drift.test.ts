@@ -75,6 +75,7 @@ describe("checkDrawioDrift", () => {
     const warns = checkDrawioDrift(dir, model);
     const errors = warns.filter((w) => w.severity === "error");
     expect(errors.length).toBeGreaterThanOrEqual(1);
-    expect(errors[0]!.message.startsWith("drawio parse failed")).toBe(true);
+    expect(errors[0]!.file).toBe(file);
+    expect(errors[0]!.message.length).toBeGreaterThan(0);
   });
 });

@@ -421,17 +421,17 @@ export const generateCommand = new Command("generate")
         removeStaleSubmoduleDrawioFiles(configDir, model, config);
         await generateSubmoduleDrawio(configDir, model, config);
       }
-      let drawioDriftHadError = false;
-      for (const w of checkDrawioDrift(outputDir, model)) {
+      const driftWarnings = checkDrawioDrift(outputDir, model);
+      for (const w of driftWarnings) {
         if (w.severity === "error") {
-          const detail = w.message.replace(/^drawio parse failed:\s*/, "");
-          console.error(`Error: drawio parse failed for ${w.file}: ${detail}`);
-          drawioDriftHadError = true;
+          console.error(
+            `Error: drawio parse failed for ${w.file}: ${w.message}`,
+          );
         } else {
           console.error(`Warning: ${w.file}: ${w.message}`);
         }
       }
-      if (drawioDriftHadError) {
+      if (driftWarnings.some((w) => w.severity === "error")) {
         process.exitCode = 1;
       }
     }

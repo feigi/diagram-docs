@@ -4,13 +4,14 @@ import type { Geometry } from "./writer.js";
 import { isManagedStyle } from "./styles.js";
 
 export class DrawioParseError extends Error {
+  readonly detail: string;
   constructor(
     public readonly filePath: string,
     cause: unknown,
   ) {
-    super(
-      `Unable to parse drawio file ${filePath}: ${cause instanceof Error ? cause.message : String(cause)}`,
-    );
+    const detail = cause instanceof Error ? cause.message : String(cause);
+    super(`Unable to parse drawio file ${filePath}: ${detail}`);
+    this.detail = detail;
   }
 }
 
@@ -194,11 +195,9 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     if (!cell.edge) continue;
     if (cell.managed) continue;
     if (!cell.source || !cell.target) continue;
-    const missing = !survivingVertexIds.has(cell.source)
-      ? cell.source
-      : !survivingVertexIds.has(cell.target)
-        ? cell.target
-        : undefined;
+    let missing: string | undefined;
+    if (!survivingVertexIds.has(cell.source)) missing = cell.source;
+    else if (!survivingVertexIds.has(cell.target)) missing = cell.target;
     if (missing !== undefined) {
       warnings.push(
         `Dropped unmanaged edge ${id}: endpoint ${missing} no longer exists`,
