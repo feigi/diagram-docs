@@ -4,13 +4,15 @@ import type { ArchitectureModel } from "../../../src/analyzers/types.js";
 
 const model: ArchitectureModel = {
   version: 1,
-  system: { name: "Shop", description: "An online shop" },
-  actors: [{ id: "customer", name: "Customer", description: "Buys things" }],
+  system: { name: "Shop", description: "desc" },
+  actors: [
+    { id: "customer", name: "Customer", description: "A paying customer" },
+  ],
   externalSystems: [
     {
       id: "payment-api",
       name: "Payment API",
-      description: "",
+      description: "Stripe adapter",
       technology: "REST",
     },
   ],
@@ -74,5 +76,44 @@ describe("buildContextCells", () => {
     };
     const { vertices } = buildContextCells(withLib);
     expect(vertices.map((v) => v.id)).not.toContain("lodash");
+  });
+
+  it("keeps descriptions out of the actor/system/external values and uses tooltips", () => {
+    const { vertices } = buildContextCells(model);
+    const actor = vertices.find((v) => v.id === "customer")!;
+    expect(actor.value).toBe("Customer\n[Person]");
+    expect(actor.tooltip).toBe("A paying customer");
+    const system = vertices.find((v) => v.id === "system")!;
+    expect(system.value).toBe("Shop\n[Software System]");
+    expect(system.tooltip).toBe("desc");
+    const external = vertices.find((v) => v.id === "payment-api")!;
+    expect(external.value).toBe("Payment API\n[External System]\n[REST]");
+    expect(external.tooltip).toBe("Stripe adapter");
+  });
+
+  it("moves edge tech tag into edge tooltip and keeps value to the label only", () => {
+    const { edges } = buildContextCells(model);
+    const edge = edges[0];
+    expect(edge).toBeDefined();
+    expect(edge.value).toBe("uses");
+    expect(edge.tooltip).toBeUndefined();
+  });
+
+  it("moves explicit edge tech tag into tooltip", () => {
+    const modelWithTech: ArchitectureModel = {
+      ...model,
+      relationships: [
+        {
+          sourceId: "customer",
+          targetId: "web",
+          label: "calls",
+          technology: "JSON over HTTPS",
+        },
+      ],
+    };
+    const { edges } = buildContextCells(modelWithTech);
+    const edge = edges[0];
+    expect(edge.value).toBe("calls");
+    expect(edge.tooltip).toBe("[JSON over HTTPS]");
   });
 });

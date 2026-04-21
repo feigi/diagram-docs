@@ -39,7 +39,8 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
   for (const a of sortById(model.actors)) {
     vertices.push({
       id: toDrawioId(a.id),
-      value: `${a.name}\n[Person]\n${a.description}`,
+      value: `${a.name}\n[Person]`,
+      tooltip: a.description || undefined,
       style: STYLES.person,
       kind: "person",
     });
@@ -47,7 +48,8 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
 
   vertices.push({
     id: "system",
-    value: `${model.system.name}\n[Software System]\n${model.system.description}`,
+    value: `${model.system.name}\n[Software System]`,
+    tooltip: model.system.description || undefined,
     style: STYLES.system,
     kind: "system",
   });
@@ -56,9 +58,11 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
     model.externalSystems.filter((e) => !e.tags?.includes("library")),
   );
   for (const e of externals) {
+    const techLine = e.technology ? `\n[${e.technology}]` : "";
     vertices.push({
       id: toDrawioId(e.id),
-      value: `${e.name}\n[External System]${e.technology ? `\n[${e.technology}]` : ""}\n${e.description}`,
+      value: `${e.name}\n[External System]${techLine}`,
+      tooltip: e.description || undefined,
       style: STYLES["external-system"],
       kind: "external-system",
     });
@@ -98,7 +102,8 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
       id: edgeId(src, tgt, rel.label),
       source: src,
       target: tgt,
-      value: rel.technology ? `${rel.label} [${rel.technology}]` : rel.label,
+      value: rel.label,
+      tooltip: rel.technology ? `[${rel.technology}]` : undefined,
       style: STYLES.relationship,
     });
   }
