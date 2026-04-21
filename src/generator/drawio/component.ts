@@ -39,7 +39,8 @@ export function buildComponentCells(
   for (const c of sortById(localComponents)) {
     vertices.push({
       id: toDrawioId(c.id),
-      value: `${c.name}\n[Component: ${c.technology}]\n${c.description}`,
+      value: `${c.name}\n[Component: ${c.technology}]`,
+      tooltip: c.description || undefined,
       style: STYLES.component,
       kind: "component",
       parent: toDrawioId(container.id),
@@ -67,6 +68,7 @@ export function buildComponentCells(
       vertices.push({
         id: toDrawioId(rid),
         value: `${ext.name}\n[External System]`,
+        tooltip: ext.description || undefined,
         style: STYLES["external-system"],
         kind: kindFor(model, rid),
       });
@@ -74,6 +76,7 @@ export function buildComponentCells(
       vertices.push({
         id: toDrawioId(rid),
         value: `${otherContainer.name}\n[Container: ${otherContainer.technology}]`,
+        tooltip: otherContainer.description || undefined,
         style: STYLES.container,
         kind: kindFor(model, rid),
       });
@@ -81,6 +84,7 @@ export function buildComponentCells(
       vertices.push({
         id: toDrawioId(rid),
         value: `${otherComp.name}\n[Component: ${otherComp.technology}]`,
+        tooltip: otherComp.description || undefined,
         style: STYLES.component,
         kind: kindFor(model, rid),
       });
@@ -99,7 +103,8 @@ export function buildComponentCells(
       id: edgeId(r.sourceId, r.targetId, r.label),
       source: toDrawioId(r.sourceId),
       target: toDrawioId(r.targetId),
-      value: r.technology ? `${r.label} [${r.technology}]` : r.label,
+      value: r.label,
+      tooltip: r.technology ? `[${r.technology}]` : undefined,
       style: STYLES.relationship,
     });
   }
