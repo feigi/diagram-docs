@@ -45,6 +45,29 @@ describe("parseDrawioFile", () => {
       parseDrawioFile(path.join(FIXTURES, "corrupted.drawio")),
     ).toThrow(DrawioParseError);
   });
+
+  it("extracts UserObject-wrapped cells as managed with tooltip preserved", () => {
+    const result = parseDrawioFile(path.join(FIXTURES, "populated.drawio"));
+    const orders = result.cells.get("orders");
+    expect(orders).toBeDefined();
+    expect(orders!.managed).toBe(true);
+    expect(orders!.vertex).toBe(true);
+    expect(orders!.value).toBe("Orders");
+    expect(orders!.tooltip).toBe("Main orders service");
+    expect(orders!.geometry).toEqual({
+      x: 200,
+      y: 200,
+      width: 180,
+      height: 70,
+    });
+  });
+
+  it("treats attribute-based ddocs_managed as managed even when style lacks the tag", () => {
+    const result = parseDrawioFile(path.join(FIXTURES, "populated.drawio"));
+    const orders = result.cells.get("orders")!;
+    expect(orders.style).not.toContain("ddocs_managed=1");
+    expect(orders.managed).toBe(true);
+  });
 });
 
 import { reconcile } from "../../../src/generator/drawio/merge.js";
@@ -408,5 +431,50 @@ describe("reconcile", () => {
       { x: 200, y: 40 },
       { x: 300, y: 40 },
     ]);
+  });
+
+  it("round-trips a UserObject-managed cell across regen without losing overrides", () => {
+    const existing = {
+      cells: new Map([
+        [
+          "orders",
+          {
+            id: "orders",
+            value: "Orders",
+            tooltip: "Saved tooltip",
+            style: "rounded=1;fillColor=#aa0000",
+            vertex: true,
+            edge: false,
+            parent: "1",
+            geometry: { x: 500, y: 500, width: 220, height: 90 },
+            managed: true,
+          },
+        ],
+      ]),
+    } as ExistingDocument;
+    const fresh = {
+      vertices: [
+        {
+          id: "orders",
+          value: "Orders v2",
+          tooltip: "Fresh tooltip",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
+      ],
+      edges: [],
+    };
+    const layout = new Map([["orders", layoutGeom(0, 0)]]);
+    const result = reconcile({ existing, fresh, layout });
+    const orders = result.vertices[0];
+    expect(orders.value).toBe("Orders v2");
+    expect(orders.tooltip).toBe("Fresh tooltip");
+    expect(orders.style).toBe("rounded=1;fillColor=#aa0000");
+    expect(orders.geometry).toEqual({
+      x: 500,
+      y: 500,
+      width: 220,
+      height: 90,
+    });
   });
 });

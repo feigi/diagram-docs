@@ -51,41 +51,109 @@ export function parseDrawioFile(filePath: string): ExistingDocument {
     throw new DrawioParseError(filePath, err);
   }
 
-  const rootCells = extractCells(tree);
-  if (rootCells === null) {
+  const rootNode = extractRootNode(tree);
+  if (!rootNode) {
     throw new DrawioParseError(
       filePath,
       new Error(
-        "unexpected structure: no mxfile > diagram > mxGraphModel > root > mxCell",
+        "unexpected structure: no mxfile > diagram > mxGraphModel > root",
       ),
     );
   }
 
   const cells = new Map<string, ExistingCell>();
-  for (const raw of rootCells) {
-    const r = raw as Record<string, unknown>;
-    const id = r["@_id"] as string | undefined;
-    if (!id) continue;
-    const style = String(r["@_style"] ?? "");
-    const vertex = String(r["@_vertex"] ?? "") === "1";
-    const edge = String(r["@_edge"] ?? "") === "1";
-    const geometryNode = r["mxGeometry"] as Record<string, unknown> | undefined;
-    cells.set(id, {
-      id,
-      value: r["@_value"] as string | undefined,
-      tooltip: r["@_tooltip"] as string | undefined,
-      style,
-      vertex,
-      edge,
-      parent: r["@_parent"] as string | undefined,
-      source: r["@_source"] as string | undefined,
-      target: r["@_target"] as string | undefined,
-      geometry: parseGeometry(geometryNode),
-      waypoints: parseWaypoints(geometryNode),
-      managed: isManagedStyle(style),
-    });
+  for (const raw of iteratePlainCells(rootNode)) {
+    const cell = toExistingCellFromPlain(raw);
+    if (cell) cells.set(cell.id, cell);
+  }
+  for (const raw of iterateUserObjects(rootNode)) {
+    const cell = toExistingCellFromUserObject(raw, filePath);
+    if (cell) cells.set(cell.id, cell);
   }
   return { cells };
+}
+
+function extractRootNode(tree: unknown): Record<string, unknown> | null {
+  const mxfile = (tree as Record<string, unknown>)?.mxfile as
+    | Record<string, unknown>
+    | undefined;
+  const diag = mxfile?.diagram as Record<string, unknown> | undefined;
+  const model = diag?.mxGraphModel as Record<string, unknown> | undefined;
+  const root = model?.root as Record<string, unknown> | undefined;
+  return root ?? null;
+}
+
+function iteratePlainCells(root: Record<string, unknown>): unknown[] {
+  const cells = root.mxCell;
+  if (!cells) return [];
+  return Array.isArray(cells) ? cells : [cells];
+}
+
+function iterateUserObjects(root: Record<string, unknown>): unknown[] {
+  const objs = root.UserObject;
+  if (!objs) return [];
+  return Array.isArray(objs) ? objs : [objs];
+}
+
+function toExistingCellFromPlain(raw: unknown): ExistingCell | null {
+  const r = raw as Record<string, unknown>;
+  const id = r["@_id"] as string | undefined;
+  if (!id) return null;
+  const style = String(r["@_style"] ?? "");
+  const vertex = String(r["@_vertex"] ?? "") === "1";
+  const edge = String(r["@_edge"] ?? "") === "1";
+  const geometryNode = r["mxGeometry"] as Record<string, unknown> | undefined;
+  return {
+    id,
+    value: r["@_value"] as string | undefined,
+    tooltip: r["@_tooltip"] as string | undefined,
+    style,
+    vertex,
+    edge,
+    parent: r["@_parent"] as string | undefined,
+    source: r["@_source"] as string | undefined,
+    target: r["@_target"] as string | undefined,
+    geometry: parseGeometry(geometryNode),
+    waypoints: parseWaypoints(geometryNode),
+    managed: isManagedStyle(style),
+  };
+}
+
+function toExistingCellFromUserObject(
+  raw: unknown,
+  filePath: string,
+): ExistingCell | null {
+  const r = raw as Record<string, unknown>;
+  const id = r["@_id"] as string | undefined;
+  if (!id) return null;
+  const inner = r.mxCell as Record<string, unknown> | undefined;
+  if (!inner) {
+    throw new DrawioParseError(
+      filePath,
+      new Error(`UserObject "${id}" is missing child mxCell`),
+    );
+  }
+  const style = String(inner["@_style"] ?? "");
+  const vertex = String(inner["@_vertex"] ?? "") === "1";
+  const edge = String(inner["@_edge"] ?? "") === "1";
+  const geometryNode = inner["mxGeometry"] as
+    | Record<string, unknown>
+    | undefined;
+  const attrManaged = String(r["@_ddocs_managed"] ?? "") === "1";
+  return {
+    id,
+    value: r["@_label"] as string | undefined,
+    tooltip: r["@_tooltip"] as string | undefined,
+    style,
+    vertex,
+    edge,
+    parent: inner["@_parent"] as string | undefined,
+    source: inner["@_source"] as string | undefined,
+    target: inner["@_target"] as string | undefined,
+    geometry: parseGeometry(geometryNode),
+    waypoints: parseWaypoints(geometryNode),
+    managed: attrManaged || isManagedStyle(style),
+  };
 }
 
 import type { DiagramCells, VertexSpec, EdgeSpec } from "./context.js";
@@ -224,22 +292,6 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
   }
 
   return { vertices, edges, warnings };
-}
-
-function extractCells(tree: unknown): unknown[] | null {
-  const mxfile = (tree as Record<string, unknown>)?.mxfile as
-    | Record<string, unknown>
-    | undefined;
-  if (!mxfile) return null;
-  const diag = mxfile.diagram as Record<string, unknown> | undefined;
-  if (!diag) return null;
-  const model = diag.mxGraphModel as Record<string, unknown> | undefined;
-  if (!model) return null;
-  const root = model.root as Record<string, unknown> | undefined;
-  if (!root) return null;
-  const cells = root.mxCell;
-  if (!cells) return null;
-  return Array.isArray(cells) ? cells : [cells];
 }
 
 function parseGeometry(geom?: Record<string, unknown>): Geometry | undefined {

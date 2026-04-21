@@ -11,6 +11,11 @@
         <mxCell id="auth-&gt;db-uses" value="uses" style="endArrow=classic;ddocs_managed=1" edge="1" parent="1" source="auth" target="db">
           <mxGeometry relative="1" as="geometry"/>
         </mxCell>
+        <UserObject id="orders" label="Orders" tooltip="Main orders service" ddocs_managed="1">
+          <mxCell style="rounded=1;fillColor=#438DD5" vertex="1" parent="1">
+            <mxGeometry x="200" y="200" width="180" height="70" as="geometry"/>
+          </mxCell>
+        </UserObject>
         <mxCell id="my-note" value="user drew this" style="rounded=1;fillColor=#fff2cc" vertex="1" parent="1">
           <mxGeometry x="300" y="300" width="120" height="40" as="geometry"/>
         </mxCell>
