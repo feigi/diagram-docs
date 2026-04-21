@@ -75,4 +75,65 @@ describe("DrawioWriter", () => {
     const xml = w.serialise();
     expect(xml).toMatch(/id="auth"[^>]*parent="system"/);
   });
+
+  it("wraps vertex in UserObject when tooltip is set", () => {
+    const w = new DrawioWriter({ diagramName: "L2" });
+    w.addVertex({
+      id: "auth",
+      value: "Auth",
+      tooltip: "JWT-based auth service",
+      style: STYLES.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    const xml = w.serialise();
+    expect(xml).toContain("<UserObject");
+    expect(xml).toContain('id="auth"');
+    expect(xml).toContain('label="Auth"');
+    expect(xml).toContain('tooltip="JWT-based auth service"');
+    expect(xml).toContain('ddocs_managed="1"');
+    expect(xml).toMatch(/<UserObject[^>]*>\s*<mxCell[^>]*vertex="1"/);
+    expect(xml).not.toMatch(/<mxCell[^>]*value="Auth"/);
+  });
+
+  it("emits plain mxCell when no tooltip is set", () => {
+    const w = new DrawioWriter({ diagramName: "L2" });
+    w.addVertex({
+      id: "auth",
+      value: "Auth",
+      style: STYLES.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    const xml = w.serialise();
+    expect(xml).not.toContain("<UserObject");
+    expect(xml).toMatch(/<mxCell[^>]*id="auth"[^>]*value="Auth"/);
+  });
+
+  it("wraps edge in UserObject when tooltip is set", () => {
+    const w = new DrawioWriter({ diagramName: "L2" });
+    w.addVertex({
+      id: "a",
+      value: "A",
+      style: STYLES.container,
+      geometry: { x: 0, y: 0, width: 180, height: 70 },
+    });
+    w.addVertex({
+      id: "b",
+      value: "B",
+      style: STYLES.container,
+      geometry: { x: 300, y: 0, width: 180, height: 70 },
+    });
+    w.addEdge({
+      id: "a->b-uses",
+      source: "a",
+      target: "b",
+      value: "uses",
+      tooltip: "[HTTPS/REST]",
+      style: STYLES.relationship,
+    });
+    const xml = w.serialise();
+    expect(xml).toMatch(/<UserObject[^>]*id="a-&gt;b-uses"/);
+    expect(xml).toContain('label="uses"');
+    expect(xml).toContain('tooltip="[HTTPS/REST]"');
+    expect(xml).toMatch(/<UserObject[^>]*>\s*<mxCell[^>]*edge="1"/);
+  });
 });
