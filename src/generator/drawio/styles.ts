@@ -29,11 +29,14 @@ const BASE: Record<StyleKey, string> = {
   "code-fn":
     "rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontColor=#000000",
   // Opaque white label background + no border keeps edge labels legible
-  // when orthogonal routing causes them to overlap other edges.
+  // when orthogonal routing causes them to overlap other edges. Explicit
+  // black fontColor is required because drawio's dark-mode default flips
+  // fontColor to white — without this, edge labels render white-on-white
+  // and look like empty white rectangles.
   relationship:
     "endArrow=classic;html=1;rounded=0;strokeColor=#707070;fontSize=11;" +
     "edgeStyle=orthogonalEdgeStyle;curved=0;" +
-    "labelBackgroundColor=#ffffff;labelBorderColor=none",
+    "fontColor=#000000;labelBackgroundColor=#ffffff;labelBorderColor=none",
 };
 
 export function withManagedTag(style: string): string {
