@@ -138,15 +138,20 @@ export async function layoutGraph(
       "elk.layered.spacing.nodeNodeBetweenLayers": String(NODE_SPACING_X),
       // Reserve gutters between edges and edges/nodes so labels don't pile
       // up when several relationships share the same pair of layers.
-      "elk.layered.spacing.edgeNodeBetweenLayers": "40",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "30",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "60",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "40",
+      "elk.spacing.edgeEdge": "30",
+      "elk.spacing.edgeNode": "40",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
-      // Tell ELK to route labels off the line and reserve space between
-      // adjacent edge labels so they don't stack onto one routing band
-      // (the white labelBackgroundColor would mask text underneath).
+      // Route labels off the line and give each a generous gutter so two
+      // adjacent "Uses"-style labels don't settle on top of each other.
+      // drawio draws the label at the edge midpoint regardless of what
+      // ELK planned, so the label-spacing value is effectively lower-bound
+      // slack — increasing it pushes ELK to separate edges further, which
+      // in turn pulls their midpoints apart.
       "elk.edgeLabels.inline": "false",
       "elk.layered.edgeLabels.sideSelection": "SMART_UP",
-      "elk.spacing.edgeLabel": "8",
+      "elk.spacing.edgeLabel": "24",
     },
     children: rootIds.map(buildElkNode),
     edges: [...input.edges]

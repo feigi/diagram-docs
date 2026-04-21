@@ -22,8 +22,13 @@ const BASE: Record<StyleKey, string> = {
     "rounded=1;whiteSpace=wrap;html=1;fillColor=#438DD5;strokeColor=#3C7FC0;fontColor=#ffffff",
   component:
     "rounded=1;whiteSpace=wrap;html=1;fillColor=#85BBF0;strokeColor=#78A8D8;fontColor=#000000",
+  // `verticalAlign=top` pins the boundary label to the top of the dashed
+  // rectangle so it doesn't render in the middle of the box where children
+  // live (otherwise C4-style system/container labels ghost behind nested
+  // components). No fontColor — theme default handles light/dark; stroke
+  // stays mid-gray so the dashed outline shows on either canvas.
   "system-boundary":
-    "rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#444444;dashed=1;fontColor=#444444",
+    "rounded=1;whiteSpace=wrap;html=1;fillColor=none;strokeColor=#888888;dashed=1;verticalAlign=top;spacingTop=4",
   "code-class":
     "rounded=0;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontColor=#000000",
   "code-fn":
