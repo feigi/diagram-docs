@@ -167,6 +167,10 @@ export function reconcile(input: ReconcileInput): ReconcileResult {
     if (!cell.vertex) continue;
     if (cell.managed) continue;
     if (!cell.geometry) continue;
+    // Freehand (unmanaged) cell revived verbatim — geometry is preserved
+    // from the existing file, so `kind` is only needed to satisfy
+    // VertexSpec. Any value works; "container" is arbitrary and never
+    // consulted by layout because this branch runs after layoutGraph().
     vertices.push({
       id: cell.id,
       value: cell.value ?? "",
