@@ -9,6 +9,7 @@ bench-results.json
 *.tgz
 .serena/
 .ralph/
+.superpowers/
 
 # GSD planning docs (local-only)
 .planning/
