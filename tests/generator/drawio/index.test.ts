@@ -156,6 +156,49 @@ describe("generateDrawioFile", () => {
     expect(xml).toMatch(/id="svc"[\s\S]*?width="180"[^>]*height="70"/);
   });
 
+  it("propagates vertex and edge tooltips through to the serialised XML", async () => {
+    const tmpDir = tmp();
+    const filePath = path.join(tmpDir, "tooltip-flow.drawio");
+    await generateDrawioFile({
+      filePath,
+      diagramName: "L2",
+      level: "container",
+      cells: {
+        vertices: [
+          {
+            id: "svc",
+            value: "Svc\n[Container: Go]",
+            tooltip: "HTTP API over Postgres",
+            style: STYLES.container,
+            kind: "container",
+          },
+          {
+            id: "db",
+            value: "DB\n[Container: Postgres]",
+            tooltip: "Primary relational store",
+            style: STYLES.container,
+            kind: "container",
+          },
+        ],
+        edges: [
+          {
+            id: "svc->db-reads",
+            source: "svc",
+            target: "db",
+            value: "reads",
+            tooltip: "[JDBC]",
+            style: STYLES.relationship,
+          },
+        ],
+      },
+    });
+    const xml = fs.readFileSync(filePath, "utf-8");
+    expect(xml).toContain('tooltip="HTTP API over Postgres"');
+    expect(xml).toContain('tooltip="Primary relational store"');
+    expect(xml).toContain('tooltip="[JDBC]"');
+    expect(xml).toMatch(/<UserObject[^>]*id="svc-&gt;db-reads"/);
+  });
+
   it("does not truncate an existing file when the write fails", async () => {
     const dir = tmp();
     const out = path.join(dir, "c1-context.drawio");

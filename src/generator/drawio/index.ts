@@ -64,6 +64,7 @@ export async function generateDrawioFile(
     writer.addVertex({
       id: v.id,
       value: v.value,
+      tooltip: v.tooltip,
       style: v.style,
       geometry: v.geometry,
       parent: v.parent,
@@ -75,6 +76,7 @@ export async function generateDrawioFile(
       source: e.source,
       target: e.target,
       value: e.value,
+      tooltip: e.tooltip,
       style: e.style,
       parent: e.parent,
       waypoints: e.waypoints,
