@@ -56,6 +56,7 @@ export async function generateDrawioFile(
       id: e.id,
       source: e.source,
       target: e.target,
+      label: e.value,
     })),
   });
 

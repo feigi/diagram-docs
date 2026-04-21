@@ -59,6 +59,26 @@ export interface LayoutEdge {
   id: string;
   source: string;
   target: string;
+  label?: string;
+}
+
+/**
+ * Approximate label bounds for ELK so it reserves space per edge label. ELK
+ * needs explicit width/height — without them labels default to size 0 and
+ * stack on the same routing band, which triggers the white-bg mask-over-text
+ * pileup we see with orthogonal routing.
+ */
+const LABEL_FONT_PX = 6;
+const LABEL_MAX_WIDTH = 180;
+const LABEL_HEIGHT = 16;
+const LABEL_PADDING = 8;
+
+function labelBounds(text: string): { width: number; height: number } {
+  const width = Math.min(
+    text.length * LABEL_FONT_PX + LABEL_PADDING,
+    LABEL_MAX_WIDTH,
+  );
+  return { width, height: LABEL_HEIGHT };
 }
 
 export interface LayoutInput {
@@ -121,11 +141,24 @@ export async function layoutGraph(
       "elk.layered.spacing.edgeNodeBetweenLayers": "40",
       "elk.layered.spacing.edgeEdgeBetweenLayers": "30",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+      // Tell ELK to route labels off the line and reserve space between
+      // adjacent edge labels so they don't stack onto one routing band
+      // (the white labelBackgroundColor would mask text underneath).
+      "elk.edgeLabels.inline": "false",
+      "elk.layered.edgeLabels.sideSelection": "SMART_UP",
+      "elk.spacing.edgeLabel": "8",
     },
     children: rootIds.map(buildElkNode),
     edges: [...input.edges]
       .sort((a, b) => a.id.localeCompare(b.id))
-      .map((e) => ({ id: e.id, sources: [e.source], targets: [e.target] })),
+      .map((e) => {
+        const base = { id: e.id, sources: [e.source], targets: [e.target] };
+        if (!e.label) return base;
+        return {
+          ...base,
+          labels: [{ text: e.label, ...labelBounds(e.label) }],
+        };
+      }),
   };
 
   const laidOut = await elk.layout(graph);
