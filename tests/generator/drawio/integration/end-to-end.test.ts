@@ -10,7 +10,13 @@ import type { ArchitectureModel } from "../../../../src/analyzers/types.js";
 const MODEL: ArchitectureModel = {
   version: 1,
   system: { name: "Shop", description: "" },
-  actors: [{ id: "customer", name: "Customer", description: "" }],
+  actors: [
+    {
+      id: "customer",
+      name: "Customer",
+      description: "A shopper browsing the catalogue",
+    },
+  ],
   externalSystems: [
     { id: "payments", name: "Payments", description: "", technology: "REST" },
   ],
@@ -19,7 +25,7 @@ const MODEL: ArchitectureModel = {
       id: "web",
       applicationId: "web",
       name: "Web",
-      description: "",
+      description: "Storefront rendered in the browser",
       technology: "TS",
     },
     {
@@ -56,5 +62,39 @@ describe("drawio end-to-end", () => {
     expect(doc.cells.has("payments")).toBe(true);
     const edges = [...doc.cells.values()].filter((c) => c.edge);
     expect(edges.length).toBeGreaterThanOrEqual(3);
+  });
+
+  it("applies layout improvements: UserObject tooltips, narrow actors, orthogonal edges", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ddocs-e2e-layout-"));
+    const out = path.join(dir, "c2-container.drawio");
+    await generateDrawioFile({
+      filePath: out,
+      diagramName: "L2",
+      level: "container",
+      cells: buildContainerCells(MODEL),
+    });
+    const xml = fs.readFileSync(out, "utf-8");
+
+    // (1) Descriptions no longer live inside <mxCell value="...">.
+    expect(xml).not.toMatch(
+      /<mxCell[^>]*value="[^"]*A shopper browsing the catalogue/,
+    );
+    expect(xml).not.toMatch(
+      /<mxCell[^>]*value="[^"]*Storefront rendered in the browser/,
+    );
+
+    // (2) Descriptions appear as UserObject tooltips.
+    expect(xml).toMatch(
+      /<UserObject[^>]*tooltip="[^"]*A shopper browsing the catalogue/,
+    );
+    expect(xml).toMatch(
+      /<UserObject[^>]*tooltip="[^"]*Storefront rendered in the browser/,
+    );
+
+    // (3) Person vertices emit narrow geometry (48x80).
+    expect(xml).toMatch(/id="customer"[\s\S]*?width="48"[^>]*height="80"/);
+
+    // (4) Relationship style carries orthogonal routing.
+    expect(xml).toMatch(/style="[^"]*edgeStyle=orthogonalEdgeStyle/);
   });
 });
