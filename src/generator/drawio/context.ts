@@ -1,5 +1,6 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import { STYLES } from "./styles.js";
+import type { StyleKey } from "./styles.js";
 import {
   toDrawioId,
   edgeId,
@@ -10,7 +11,9 @@ import {
 export interface VertexSpec {
   id: string;
   value: string;
+  tooltip?: string;
   style: string;
+  kind: StyleKey;
   parent?: string;
 }
 
@@ -19,6 +22,7 @@ export interface EdgeSpec {
   source: string;
   target: string;
   value?: string;
+  tooltip?: string;
   style: string;
   parent?: string;
 }
@@ -37,6 +41,7 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
       id: toDrawioId(a.id),
       value: `${a.name}\n[Person]\n${a.description}`,
       style: STYLES.person,
+      kind: "person",
     });
   }
 
@@ -44,6 +49,7 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
     id: "system",
     value: `${model.system.name}\n[Software System]\n${model.system.description}`,
     style: STYLES.system,
+    kind: "system",
   });
 
   const externals = sortById(
@@ -54,6 +60,7 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
       id: toDrawioId(e.id),
       value: `${e.name}\n[External System]${e.technology ? `\n[${e.technology}]` : ""}\n${e.description}`,
       style: STYLES["external-system"],
+      kind: "external-system",
     });
   }
 

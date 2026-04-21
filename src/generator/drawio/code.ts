@@ -4,6 +4,7 @@ import type {
   CodeElement,
 } from "../../analyzers/types.js";
 import { STYLES } from "./styles.js";
+import type { StyleKey } from "./styles.js";
 import {
   toDrawioId,
   edgeId,
@@ -20,6 +21,10 @@ function styleFor(el: CodeElement): string {
     : STYLES["code-fn"];
 }
 
+function kindFor(el: CodeElement): StyleKey {
+  return CONTAINER_KINDS.has(el.kind) ? "code-class" : "code-fn";
+}
+
 export function buildCodeCells(
   model: ArchitectureModel,
   component: Component,
@@ -31,6 +36,7 @@ export function buildCodeCells(
     id: toDrawioId(component.id),
     value: `${component.name}\n[Component]`,
     style: STYLES["system-boundary"],
+    kind: "system-boundary",
   });
 
   const elements = sortById(
@@ -43,6 +49,7 @@ export function buildCodeCells(
       id: toDrawioId(el.id),
       value: `${el.name}\n[${el.kind}]`,
       style: styleFor(el),
+      kind: kindFor(el),
       parent: toDrawioId(component.id),
     });
   }
@@ -56,6 +63,7 @@ export function buildCodeCells(
         id: toDrawioId(r.targetId),
         value: r.targetName ?? r.targetId,
         style: STYLES["code-class"],
+        kind: "code-class",
       });
     }
     edges.push({

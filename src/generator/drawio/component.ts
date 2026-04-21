@@ -1,5 +1,6 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import { STYLES } from "./styles.js";
+import type { StyleKey } from "./styles.js";
 import {
   toDrawioId,
   edgeId,
@@ -7,6 +8,12 @@ import {
   sortRelationships,
 } from "./stability.js";
 import type { DiagramCells, VertexSpec, EdgeSpec } from "./context.js";
+
+function kindFor(model: ArchitectureModel, rid: string): StyleKey {
+  if (model.externalSystems.some((e) => e.id === rid)) return "external-system";
+  if (model.containers.some((c) => c.id === rid)) return "container";
+  return "component";
+}
 
 export function buildComponentCells(
   model: ArchitectureModel,
@@ -26,6 +33,7 @@ export function buildComponentCells(
     id: toDrawioId(container.id),
     value: `${container.name}\n[Container: ${container.technology}]`,
     style: STYLES["system-boundary"],
+    kind: "system-boundary",
   });
 
   for (const c of sortById(localComponents)) {
@@ -33,6 +41,7 @@ export function buildComponentCells(
       id: toDrawioId(c.id),
       value: `${c.name}\n[Component: ${c.technology}]\n${c.description}`,
       style: STYLES.component,
+      kind: "component",
       parent: toDrawioId(container.id),
     });
   }
@@ -59,24 +68,28 @@ export function buildComponentCells(
         id: toDrawioId(rid),
         value: `${ext.name}\n[External System]`,
         style: STYLES["external-system"],
+        kind: kindFor(model, rid),
       });
     } else if (otherContainer) {
       vertices.push({
         id: toDrawioId(rid),
         value: `${otherContainer.name}\n[Container: ${otherContainer.technology}]`,
         style: STYLES.container,
+        kind: kindFor(model, rid),
       });
     } else if (otherComp) {
       vertices.push({
         id: toDrawioId(rid),
         value: `${otherComp.name}\n[Component: ${otherComp.technology}]`,
         style: STYLES.component,
+        kind: kindFor(model, rid),
       });
     } else {
       vertices.push({
         id: toDrawioId(rid),
         value: rid,
         style: STYLES.component,
+        kind: kindFor(model, rid),
       });
     }
   }

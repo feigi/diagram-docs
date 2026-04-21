@@ -77,7 +77,14 @@ describe("reconcile", () => {
       ]),
     } as ExistingDocument;
     const fresh = {
-      vertices: [{ id: "auth", value: "new label", style: STYLES.container }],
+      vertices: [
+        {
+          id: "auth",
+          value: "new label",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
+      ],
       edges: [],
     };
     const layout = new Map([["auth", layoutGeom(0, 0)]]);
@@ -91,7 +98,14 @@ describe("reconcile", () => {
   it("places new cells using layout coords", () => {
     const existing = { cells: new Map() } as ExistingDocument;
     const fresh = {
-      vertices: [{ id: "a", value: "A", style: STYLES.container }],
+      vertices: [
+        {
+          id: "a",
+          value: "A",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
+      ],
       edges: [],
     };
     const layout = new Map([["a", layoutGeom(42, 99)]]);
@@ -183,7 +197,14 @@ describe("reconcile", () => {
       ]),
     } as ExistingDocument;
     const fresh = {
-      vertices: [{ id: "kept", value: "Kept", style: STYLES.component }],
+      vertices: [
+        {
+          id: "kept",
+          value: "Kept",
+          style: STYLES.component,
+          kind: "component" as const,
+        },
+      ],
       edges: [],
     };
     const layout = new Map([["kept", layoutGeom(0, 0)]]);
@@ -213,8 +234,18 @@ describe("reconcile", () => {
     } as ExistingDocument;
     const fresh = {
       vertices: [
-        { id: "a", value: "A", style: STYLES.container },
-        { id: "b", value: "B", style: STYLES.container },
+        {
+          id: "a",
+          value: "A",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
+        {
+          id: "b",
+          value: "B",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
       ],
       edges: [
         {
@@ -277,7 +308,14 @@ describe("reconcile", () => {
       ]),
     } as ExistingDocument;
     const fresh = {
-      vertices: [{ id: "a", value: "A", style: STYLES.container }],
+      vertices: [
+        {
+          id: "a",
+          value: "A",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
+      ],
       edges: [],
     };
     const layout = new Map([["a", layoutGeom(0, 0)]]);
@@ -337,8 +375,18 @@ describe("reconcile", () => {
     } as ExistingDocument;
     const fresh = {
       vertices: [
-        { id: "a", value: "A", style: STYLES.container },
-        { id: "b", value: "B", style: STYLES.container },
+        {
+          id: "a",
+          value: "A",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
+        {
+          id: "b",
+          value: "B",
+          style: STYLES.container,
+          kind: "container" as const,
+        },
       ],
       edges: [
         {

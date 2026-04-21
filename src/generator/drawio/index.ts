@@ -5,8 +5,7 @@ import { DrawioWriter } from "./writer.js";
 import { parseDrawioFile, reconcile } from "./merge.js";
 import {
   layoutGraph,
-  NODE_WIDTH,
-  NODE_HEIGHT,
+  nodeSize,
   type Level,
   type LayoutNode,
 } from "./layout.js";
@@ -33,13 +32,16 @@ export async function generateDrawioFile(
 
   const layoutNodes: LayoutNode[] = input.cells.vertices.map((v) => {
     const kids = childrenOf.get(v.id);
+    const base = nodeSize(v.kind);
+    const { width: baseW, height: baseH } =
+      base.width > 0 ? base : nodeSize("container");
     return {
       id: v.id,
       width:
         kids && kids.length > 0
-          ? Math.max(NODE_WIDTH * 2, kids.length * NODE_WIDTH)
-          : NODE_WIDTH,
-      height: kids && kids.length > 0 ? NODE_HEIGHT * 3 : NODE_HEIGHT,
+          ? Math.max(baseW * 2, kids.length * baseW)
+          : baseW,
+      height: kids && kids.length > 0 ? baseH * 3 : baseH,
       children: kids,
     };
   });

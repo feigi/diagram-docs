@@ -56,6 +56,7 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
       id: toDrawioId(a.id),
       value: `${a.name}\n[Person]\n${a.description}`,
       style: STYLES.person,
+      kind: "person",
     });
   }
 
@@ -63,6 +64,7 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
     id: "system",
     value: `${model.system.name}\n[Software System]`,
     style: STYLES["system-boundary"],
+    kind: "system-boundary",
   });
 
   for (const c of sortById(model.containers)) {
@@ -71,6 +73,7 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
       id: toDrawioId(c.id),
       value: `${c.name}\n[Container: ${c.technology}]\n${c.description}`,
       style: STYLES.container,
+      kind: "container",
       parent: "system",
     });
   }
@@ -82,6 +85,7 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
       id: toDrawioId(e.id),
       value: `${e.name}\n${isLib ? "[Library]" : "[External System]"}${tech}\n${e.description}`,
       style: STYLES["external-system"],
+      kind: "external-system",
     });
   }
 
