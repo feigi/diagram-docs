@@ -285,14 +285,9 @@ describe("reconcile", () => {
     expect(
       result.edges.find((e) => e.id === "freehand-a-to-b"),
     ).toBeUndefined();
-    expect(
-      result.warnings.some(
-        (w) =>
-          /^Dropped unmanaged edge .* endpoint .* no longer exists/.test(w) &&
-          w.includes("freehand-a-to-b") &&
-          w.includes("b"),
-      ),
-    ).toBe(true);
+    expect(result.warnings).toContain(
+      "Dropped unmanaged edge freehand-a-to-b: endpoint b no longer exists",
+    );
   });
 
   it("preserves waypoints when both endpoints are kept unchanged", () => {

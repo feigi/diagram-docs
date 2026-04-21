@@ -62,7 +62,7 @@ function checkFile(filePath: string, valid: Set<string>): DriftWarning[] {
           file: filePath,
           line: 0,
           id: "",
-          message: `drawio parse failed: ${err.message}`,
+          message: err.detail,
           severity: "error",
         },
       ];
