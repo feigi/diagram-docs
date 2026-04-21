@@ -1022,6 +1022,7 @@ describe("Integration: Submodule per-folder docs", () => {
         includeMembers: true,
       };
       cfg.submodules = { ...(cfg.submodules ?? {}), enabled: true };
+      cfg.output = { ...(cfg.output ?? {}), generators: ["d2"] };
       fs.writeFileSync(cfgPath, stringifyYaml(cfg), "utf-8");
 
       const { spawnSync } = await import("node:child_process");

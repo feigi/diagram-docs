@@ -73,7 +73,7 @@ export const configSchema = z
         generators: z
           .array(z.enum(["d2", "drawio"]))
           .min(1)
-          .default(["d2"]),
+          .default(["drawio"]),
       })
       .strict()
       .default({}),
