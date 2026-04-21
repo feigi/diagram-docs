@@ -59,9 +59,9 @@ describe("buildEffectiveConfig", () => {
     expect(config.scan.exclude).toEqual(originalExclude);
   });
 
-  it("defaults levels.code to false and exposes code config defaults", () => {
+  it("defaults levels.code to true and exposes code config defaults", () => {
     const config = buildEffectiveConfig(configSchema.parse({}));
-    expect(config.levels.code).toBe(false);
+    expect(config.levels.code).toBe(true);
     expect(config.code.includePrivate).toBe(false);
     expect(config.code.includeMembers).toBe(true);
     expect(config.code.minElements).toBe(2);

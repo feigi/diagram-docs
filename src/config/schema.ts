@@ -36,7 +36,7 @@ export const configSchema = z
         context: z.boolean().default(true),
         container: z.boolean().default(true),
         component: z.boolean().default(true),
-        code: z.boolean().default(false),
+        code: z.boolean().default(true),
       })
       .strict()
       .default({}),

@@ -43,9 +43,9 @@ describe("resolveConfig × levels.code", () => {
     expect(subCfg.levels.code).toBe(true);
   });
 
-  it("default is false when no config mentions levels.code", () => {
+  it("default is true when no config mentions levels.code", () => {
     writeConfig(tmp, "system:\n  name: Test\n");
     const cfg = resolveConfig(tmp, tmp);
-    expect(cfg.levels.code).toBe(false);
+    expect(cfg.levels.code).toBe(true);
   });
 });
