@@ -172,8 +172,14 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       // slack — increasing it pushes ELK to separate edges further, which
       // in turn pulls their midpoints apart.
       "elk.edgeLabels.inline": "false",
-      "elk.layered.edgeLabels.sideSelection": "SMART_UP",
+      "elk.layered.edgeLabels.sideSelection": "SMART_DOWN",
       "elk.spacing.edgeLabel": "12",
+      // Strip redundant bendpoints and collapse parallel edges sharing a
+      // corridor. Without these, orthogonal routing planned U-turns so
+      // labels could sit on a specific side — edges would exit a node,
+      // travel out, and re-enter the same corridor.
+      "elk.layered.unnecessaryBendpoints": "true",
+      "elk.layered.mergeEdges": "true",
     },
     children: rootIds.map(buildElkNode),
     edges: [...input.edges]
