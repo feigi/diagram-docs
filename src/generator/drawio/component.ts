@@ -11,6 +11,7 @@ import {
 import type { DiagramCells, VertexSpec, EdgeSpec } from "./context.js";
 
 function kindFor(model: ArchitectureModel, rid: string): StyleKey {
+  if (model.actors.some((a) => a.id === rid)) return "person";
   if (model.externalSystems.some((e) => e.id === rid)) return "external-system";
   if (model.containers.some((c) => c.id === rid)) return "container";
   return "component";
@@ -61,11 +62,20 @@ export function buildComponentCells(
   });
 
   for (const rid of [...refIds].sort()) {
+    const actor = model.actors.find((a) => a.id === rid);
     const ext = model.externalSystems.find((e) => e.id === rid);
     const otherContainer = model.containers.find((c) => c.id === rid);
     const otherComp = model.components.find((c) => c.id === rid);
 
-    if (ext) {
+    if (actor) {
+      vertices.push({
+        id: toDrawioId(rid),
+        value: `${actor.name}\n[Person]`,
+        tooltip: actor.description || undefined,
+        style: STYLES.person,
+        kind: "person",
+      });
+    } else if (ext) {
       vertices.push({
         id: toDrawioId(rid),
         value: `${ext.name}\n[External System]`,
