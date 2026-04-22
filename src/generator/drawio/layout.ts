@@ -236,10 +236,15 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       "elk.layered.spacing.nodeNodeBetweenLayers": String(NODE_SPACING_X),
       // Reserve gutters between edges and edges/nodes so labels don't pile
       // up when several relationships share the same pair of layers.
-      "elk.layered.spacing.edgeNodeBetweenLayers": "30",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "20",
-      "elk.spacing.edgeEdge": "15",
-      "elk.spacing.edgeNode": "20",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "35",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "25",
+      "elk.spacing.edgeEdge": "25",
+      "elk.spacing.edgeNode": "30",
+      // Nodes with many incident edges (e.g. the central orchestration hub
+      // in L3) get special pre-processing so their fanout doesn't pile up
+      // parallel edges on a single routing band.
+      "elk.layered.highDegreeNodes.treatment": "true",
+      "elk.layered.highDegreeNodes.threshold": "4",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
       // FREE lets ELK choose left/right exits when that's the shorter path —
       // FIXED_SIDE (top/bottom only) was forcing hierarchy-crossing edges
