@@ -69,10 +69,9 @@ export async function generateDrawioFile(
     const fanout = degree.get(v.id) ?? 0;
     // Width needed so ports spread over roughly the same horizontal band as
     // their targets. Each port needs ~baseW/2 of side real estate to avoid
-    // clustering at the node center. Threshold 2 so even a two-edge external
-    // (e.g. OpenSearch fed by both place + operator repositories) gets wider
-    // entry-port spread, which pulls edge entry points apart and reduces
-    // the chance of parallel segments piling up on the same band.
+    // clustering at the node center. Threshold 2 so even nodes with a small
+    // fan-in/out get separated entry points, which keeps parallel segments
+    // from piling up on the same routing band.
     const hubWidth = fanout >= 2 ? Math.round(fanout * (baseW * 0.55)) : 0;
     const childWidth =
       kids && kids.length > 0
