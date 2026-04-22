@@ -38,6 +38,16 @@ export async function generateDrawioFile(
     // scaling below has a non-zero seed.
     const { width: baseW, height: baseH } =
       base.width > 0 ? base : nodeSize("container");
+    // Pin actors to the first layer and externals to the last layer at
+    // context/container/component levels. Without this, edge direction
+    // determines layering, so an external that publishes *to* the system
+    // ends up in a different layer than one the system publishes *to*,
+    // scattering externals across multiple rows.
+    let layerConstraint: LayoutNode["layerConstraint"];
+    if (input.level !== "code") {
+      if (v.kind === "person") layerConstraint = "FIRST";
+      else if (v.kind === "external-system") layerConstraint = "LAST";
+    }
     return {
       id: v.id,
       width:
@@ -46,6 +56,7 @@ export async function generateDrawioFile(
           : baseW,
       height: kids && kids.length > 0 ? baseH * 3 : baseH,
       children: kids,
+      layerConstraint,
     };
   });
 
