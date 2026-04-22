@@ -99,6 +99,30 @@ describe("buildContextCells", () => {
     expect(edge.tooltip).toBeUndefined();
   });
 
+  it("drops external↔external relationships from the L1 view", () => {
+    const withExtToExt: ArchitectureModel = {
+      ...model,
+      externalSystems: [
+        ...model.externalSystems,
+        {
+          id: "bank",
+          name: "Bank",
+          description: "",
+          technology: "SWIFT",
+        },
+      ],
+      relationships: [
+        ...model.relationships,
+        { sourceId: "payment-api", targetId: "bank", label: "settles via" },
+      ],
+    };
+    const { edges } = buildContextCells(withExtToExt);
+    const extToExt = edges.find(
+      (e) => e.source === "payment-api" && e.target === "bank",
+    );
+    expect(extToExt).toBeUndefined();
+  });
+
   it("moves explicit edge tech tag into tooltip", () => {
     const modelWithTech: ArchitectureModel = {
       ...model,

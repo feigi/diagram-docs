@@ -30,11 +30,10 @@ export async function generateDrawioFile(
     childrenOf.set(v.parent, list);
   }
 
-  // Degree map used to widen hub nodes. Narrow hubs (e.g. the L1 `system`
-  // node with many externals below it) cram all exit ports into a 220-px
-  // window, which forces long horizontal detours to reach wide-spread
-  // targets. Widening proportional to fanout spreads the ports so each
-  // edge can drop roughly straight down.
+  // Degree map used to widen hub nodes. A hub that keeps the base container
+  // width crams all exit ports into that narrow band, forcing long
+  // horizontal detours to reach wide-spread targets. Widening proportional
+  // to fanout spreads the ports so each edge can drop roughly straight down.
   const degree = new Map<string, number>();
   for (const e of input.cells.edges) {
     degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
@@ -46,7 +45,8 @@ export async function generateDrawioFile(
     const base = nodeSize(v.kind);
     // Boundary/edge kinds return {0,0} (ELK INCLUDE_CHILDREN sizes them from
     // their contents). Fall back to a container footprint so the child-count
-    // scaling below has a non-zero seed.
+    // scaling below has a non-zero seed. `nodeSize` is exhaustive over
+    // `StyleKey`, so adding a new kind without a size forces a compile error.
     const { width: baseW, height: baseH } =
       base.width > 0 ? base : nodeSize("container");
     // Pin actors to the first layer and externals to the last layer at

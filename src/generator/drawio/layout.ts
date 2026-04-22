@@ -98,10 +98,10 @@ export interface LayoutEdge {
  * stack on the same routing band, which triggers the white-bg mask-over-text
  * pileup we see with orthogonal routing.
  */
-// drawio renders edge labels at ~11px font by default; a char is roughly 7px
-// wide, so the low ELK estimate here needs to match that to reserve enough
-// routing gutter. Underestimating causes labels from sibling edges to overlap
-// horizontally (two short parallel edges' labels land on the same band).
+// Rough px/char for the font drawio uses on relationship cells (see
+// `styles.ts` — `fontSize=11`). Lower bound for the ELK estimate; under-
+// estimating causes sibling edges' labels to land on the same routing band
+// and overlap horizontally.
 const LABEL_FONT_PX = 7;
 const LABEL_MAX_WIDTH = 240;
 const LABEL_HEIGHT = 18;
@@ -174,10 +174,26 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
 
   const edgesByOwner = new Map<string, LayoutEdge[]>();
   for (const e of input.edges) {
+    if (!byId.has(e.source) || !byId.has(e.target)) {
+      console.error(
+        `Warning: drawio layout: edge "${e.id}" references unknown node(s) ` +
+          `(source="${e.source}", target="${e.target}") — attached to root; ` +
+          `ELK will likely reject it`,
+      );
+    }
     const lca = lcaOf(e.source, e.target);
-    // If source/target share an ancestor that is a non-root node, attach the
-    // edge there; otherwise attach at the root so it can cross hierarchies.
-    const owner = lca && lca !== e.source && lca !== e.target ? lca : "root";
+    // Attach to the LCA when both endpoints are nested siblings under a
+    // non-root ancestor. Ancestor-descendant edges go to the ancestor itself
+    // (ELK INCLUDE_CHILDREN requires the edge to be declared on or above the
+    // ancestor). Cross-hierarchy edges (lca === null) fall back to root.
+    let owner: string;
+    if (lca === e.source || lca === e.target) {
+      owner = lca;
+    } else if (lca !== null) {
+      owner = lca;
+    } else {
+      owner = "root";
+    }
     const list = edgesByOwner.get(owner) ?? [];
     list.push(e);
     edgesByOwner.set(owner, list);
@@ -196,7 +212,12 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       });
 
   const buildElkNode = (id: string): ElkNode => {
-    const n = byId.get(id)!;
+    const n = byId.get(id);
+    if (!n) {
+      throw new Error(
+        `drawio layout: child "${id}" referenced by parent but missing from input.nodes`,
+      );
+    }
     const kids = childrenOf.get(id) ?? [];
     const nodeLayoutOptions: Record<string, string> = {
       ...(n.layoutOptions ?? {}),
@@ -328,12 +349,13 @@ function edgeRoute(
   offsetY: number,
 ): EdgeRoute | null {
   const section = edge.sections?.[0] as ElkEdgeSection | undefined;
-  if (!section) return null;
-  const path = [
-    section.startPoint,
-    ...(section.bendPoints ?? []),
-    section.endPoint,
-  ];
+  if (!section) {
+    console.error(
+      `Warning: drawio layout: ELK returned no route for edge "${edge.id}"; ` +
+        `drawio will fall back to its default auto-routing`,
+    );
+    return null;
+  }
   const waypoints = (section.bendPoints ?? []).map((p) => ({
     x: Math.round(p.x + offsetX),
     y: Math.round(p.y + offsetY),
@@ -341,22 +363,39 @@ function edgeRoute(
   const label = edge.labels?.[0] as ElkLabel | undefined;
   let labelOffset: Point | undefined;
   if (label && label.x !== undefined && label.y !== undefined) {
-    // Label coords are parent-relative; compare against the parent-relative
-    // polyline midpoint so the computed delta is frame-agnostic.
-    const labelCenter = {
-      x: label.x + (label.width ?? 0) / 2,
-      y: label.y + (label.height ?? 0) / 2,
-    };
+    // Build the parent-relative polyline only with defined endpoints — ELK
+    // types leave startPoint/endPoint optional; a missing end would produce
+    // NaN midpoints and corrupt the XML with `x="NaN" y="NaN"`.
+    const path: Array<{ x: number; y: number }> = [];
+    if (section.startPoint) path.push(section.startPoint);
+    for (const p of section.bendPoints ?? []) path.push(p);
+    if (section.endPoint) path.push(section.endPoint);
     const mid = polylineMidpoint(path);
-    const dx = Math.round(labelCenter.x - mid.x);
-    const dy = Math.round(labelCenter.y - mid.y);
-    if (Math.abs(dx) > 1 || Math.abs(dy) > 1) labelOffset = { x: dx, y: dy };
+    if (mid) {
+      // Label coords are parent-relative; compare against the parent-relative
+      // polyline midpoint so the computed delta is frame-agnostic.
+      const labelCenter = {
+        x: label.x + (label.width ?? 0) / 2,
+        y: label.y + (label.height ?? 0) / 2,
+      };
+      const dx = Math.round(labelCenter.x - mid.x);
+      const dy = Math.round(labelCenter.y - mid.y);
+      if (
+        Number.isFinite(dx) &&
+        Number.isFinite(dy) &&
+        (Math.abs(dx) > 1 || Math.abs(dy) > 1)
+      ) {
+        labelOffset = { x: dx, y: dy };
+      }
+    }
   }
   return { waypoints, labelOffset };
 }
 
-function polylineMidpoint(points: Array<{ x: number; y: number }>): Point {
-  if (points.length === 0) return { x: 0, y: 0 };
+function polylineMidpoint(
+  points: Array<{ x: number; y: number }>,
+): Point | null {
+  if (points.length === 0) return null;
   if (points.length === 1) return { x: points[0].x, y: points[0].y };
   const segs: number[] = [];
   let total = 0;
