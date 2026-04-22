@@ -30,6 +30,17 @@ export async function generateDrawioFile(
     childrenOf.set(v.parent, list);
   }
 
+  // Degree map used to widen hub nodes. Narrow hubs (e.g. the L1 `system`
+  // node with many externals below it) cram all exit ports into a 220-px
+  // window, which forces long horizontal detours to reach wide-spread
+  // targets. Widening proportional to fanout spreads the ports so each
+  // edge can drop roughly straight down.
+  const degree = new Map<string, number>();
+  for (const e of input.cells.edges) {
+    degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
+    degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
+  }
+
   const layoutNodes: LayoutNode[] = input.cells.vertices.map((v) => {
     const kids = childrenOf.get(v.id);
     const base = nodeSize(v.kind);
@@ -55,12 +66,18 @@ export async function generateDrawioFile(
       v.kind === "system-boundary"
         ? { "elk.padding": "[top=32,left=16,right=16,bottom=16]" }
         : {};
+    const fanout = degree.get(v.id) ?? 0;
+    // Width needed so FIXED_SIDE ports on top/bottom spread over roughly the
+    // same horizontal band as their targets. Each port needs ~baseW/2 of side
+    // real estate to avoid clustering at the node center.
+    const hubWidth = fanout >= 3 ? Math.round(fanout * (baseW * 0.55)) : 0;
+    const childWidth =
+      kids && kids.length > 0
+        ? Math.max(baseW * 2, kids.length * baseW)
+        : baseW;
     return {
       id: v.id,
-      width:
-        kids && kids.length > 0
-          ? Math.max(baseW * 2, kids.length * baseW)
-          : baseW,
+      width: Math.max(childWidth, hubWidth),
       height: kids && kids.length > 0 ? baseH * 3 : baseH,
       children: kids,
       layerConstraint,
