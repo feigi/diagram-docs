@@ -29,8 +29,8 @@ const ELK = ELKModule as unknown as new (
   args?: ELKConstructorArguments,
 ) => ElkInstance;
 
-export const NODE_SPACING_X = 200;
-export const NODE_SPACING_Y = 90;
+export const NODE_SPACING_X = 120;
+export const NODE_SPACING_Y = 50;
 
 export interface NodeSize {
   width: number;
@@ -174,12 +174,8 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       "elk.edgeLabels.inline": "false",
       "elk.layered.edgeLabels.sideSelection": "SMART_DOWN",
       "elk.spacing.edgeLabel": "12",
-      // Strip redundant bendpoints and collapse parallel edges sharing a
-      // corridor. Without these, orthogonal routing planned U-turns so
-      // labels could sit on a specific side — edges would exit a node,
-      // travel out, and re-enter the same corridor.
+      // Strip redundant bendpoints introduced by side-biased label routing.
       "elk.layered.unnecessaryBendpoints": "true",
-      "elk.layered.mergeEdges": "true",
     },
     children: rootIds.map(buildElkNode),
     edges: [...input.edges]
