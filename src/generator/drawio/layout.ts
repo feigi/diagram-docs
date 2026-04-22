@@ -29,7 +29,7 @@ const ELK = ELKModule as unknown as new (
   args?: ELKConstructorArguments,
 ) => ElkInstance;
 
-export const NODE_SPACING_X = 120;
+export const NODE_SPACING_X = 80;
 export const NODE_SPACING_Y = 50;
 
 export interface NodeSize {
@@ -159,6 +159,10 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       "elk.spacing.edgeEdge": "15",
       "elk.spacing.edgeNode": "20",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
+      // Force edges to enter/exit only top/bottom (matches DOWN flow). Without
+      // this, ELK can approach a target from the side and loops far out of the
+      // way to reach its chosen entry side.
+      "elk.portConstraints": "FIXED_SIDE",
       // More optimization passes + straighter edges → ORTHOGONAL routing
       // has a better chance of steering around nodes instead of cutting
       // corners on dense L3 component graphs.
@@ -173,7 +177,7 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       // in turn pulls their midpoints apart.
       "elk.edgeLabels.inline": "false",
       "elk.layered.edgeLabels.sideSelection": "SMART_DOWN",
-      "elk.spacing.edgeLabel": "12",
+      "elk.spacing.edgeLabel": "6",
       // Strip redundant bendpoints introduced by side-biased label routing.
       "elk.layered.unnecessaryBendpoints": "true",
     },
