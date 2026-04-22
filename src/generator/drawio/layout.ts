@@ -241,14 +241,16 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       "elk.spacing.edgeEdge": "15",
       "elk.spacing.edgeNode": "20",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
-      // Force edges to enter/exit only top/bottom (matches DOWN flow). Without
-      // this, ELK can approach a target from the side and loops far out of the
-      // way to reach its chosen entry side.
-      "elk.portConstraints": "FIXED_SIDE",
+      // FREE lets ELK choose left/right exits when that's the shorter path —
+      // FIXED_SIDE (top/bottom only) was forcing hierarchy-crossing edges
+      // (e.g. internal component → external system off to the side) to wrap
+      // around the container boundary because the bottom-exit port was far
+      // from the target, producing big U-shaped detours.
+      "elk.portConstraints": "FREE",
       // More optimization passes + straighter edges → ORTHOGONAL routing
       // has a better chance of steering around nodes instead of cutting
       // corners on dense L3 component graphs.
-      "elk.layered.thoroughness": "10",
+      "elk.layered.thoroughness": "25",
       "elk.layered.nodePlacement.strategy": "BRANDES_KOEPF",
       "elk.layered.nodePlacement.bk.edgeStraightening": "IMPROVE_STRAIGHTNESS",
       // Route labels off the line and give each a generous gutter so two
