@@ -93,6 +93,26 @@ describe("buildComponentCells", () => {
     expect(edge!.tooltip).toMatch(/^\[.+\]$/);
   });
 
+  it("renders an actor with person styling when referenced from a component", () => {
+    const withActor: ArchitectureModel = {
+      ...model,
+      actors: [
+        { id: "admin", name: "Admin", description: "Operator of the platform" },
+      ],
+      relationships: [
+        ...model.relationships,
+        { sourceId: "admin", targetId: "auth", label: "manages" },
+      ],
+    };
+    const { vertices } = buildComponentCells(withActor, "api");
+    const actor = vertices.find((v) => v.id === "admin");
+    expect(actor).toBeDefined();
+    expect(actor!.kind).toBe("person");
+    expect(actor!.value).toBe("Admin\n[Person]");
+    expect(actor!.tooltip).toBe("Operator of the platform");
+    expect(actor!.parent).toBeUndefined();
+  });
+
   it("omits tooltip when component description is empty", () => {
     const minimal: ArchitectureModel = {
       ...model,

@@ -124,6 +124,66 @@ describe("layoutGraph", () => {
     expect(c2.y + c2.height).toBeLessThanOrEqual(boundary.height);
   });
 
+  it("projects nested-sibling edge waypoints to absolute coordinates", async () => {
+    // When source and target share a non-root ancestor, the edge is declared
+    // on that ancestor (LCA) and ELK reports bendpoints in the ancestor's
+    // coordinate frame. The writer needs absolute coords so it can emit
+    // edges at the default drawio layer without per-edge parent handling.
+    // Force bend geometry by adding a blocking sibling the router has to
+    // detour around.
+    const result = await layoutGraph({
+      level: "component",
+      nodes: [
+        {
+          id: "boundary",
+          width: 800,
+          height: 500,
+          children: ["c1", "c2", "c3"],
+        },
+        { id: "c1", width: NODE_W, height: NODE_H },
+        { id: "c2", width: NODE_W, height: NODE_H },
+        { id: "c3", width: NODE_W, height: NODE_H },
+      ],
+      edges: [
+        { id: "c1->c3", source: "c1", target: "c3" },
+        { id: "c1->c2", source: "c1", target: "c2" },
+        { id: "c2->c3", source: "c2", target: "c3" },
+      ],
+    });
+    const boundary = result.nodes.get("boundary")!;
+    // Absolute bounding box of the boundary node (it's at root level, so its
+    // own coords are already absolute).
+    const bx0 = boundary.x;
+    const by0 = boundary.y;
+    const bx1 = boundary.x + boundary.width;
+    const by1 = boundary.y + boundary.height;
+    // Every routed edge that produced bendpoints must have all waypoints
+    // inside the boundary's absolute bbox (modulo the routing gutter).
+    // If projection were missing, bendpoints would land at parent-relative
+    // coords (i.e. near 0,0) and fall outside the boundary.
+    const edge = result.edges.get("c1->c3");
+    expect(edge).toBeDefined();
+    for (const wp of edge!.waypoints) {
+      expect(wp.x).toBeGreaterThanOrEqual(bx0 - 10);
+      expect(wp.x).toBeLessThanOrEqual(bx1 + 10);
+      expect(wp.y).toBeGreaterThanOrEqual(by0 - 10);
+      expect(wp.y).toBeLessThanOrEqual(by1 + 10);
+    }
+  });
+
+  it("throws when an edge references a node missing from input.nodes", async () => {
+    await expect(
+      layoutGraph({
+        level: "container",
+        nodes: [
+          { id: "boundary", width: 400, height: 300, children: ["c1"] },
+          { id: "c1", width: NODE_W, height: NODE_H },
+        ],
+        edges: [{ id: "c1->ghost", source: "c1", target: "ghost" }],
+      }),
+    ).rejects.toThrow();
+  });
+
   it("returns child geometry as parent-relative across three nesting levels", async () => {
     // Synthesise a three-deep hierarchy similar to L4: system -> container ->
     // component -> code element. If collect() were still accumulating parent
