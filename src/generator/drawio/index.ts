@@ -67,10 +67,13 @@ export async function generateDrawioFile(
         ? { "elk.padding": "[top=32,left=16,right=16,bottom=16]" }
         : {};
     const fanout = degree.get(v.id) ?? 0;
-    // Width needed so FIXED_SIDE ports on top/bottom spread over roughly the
-    // same horizontal band as their targets. Each port needs ~baseW/2 of side
-    // real estate to avoid clustering at the node center.
-    const hubWidth = fanout >= 3 ? Math.round(fanout * (baseW * 0.55)) : 0;
+    // Width needed so ports spread over roughly the same horizontal band as
+    // their targets. Each port needs ~baseW/2 of side real estate to avoid
+    // clustering at the node center. Threshold 2 so even a two-edge external
+    // (e.g. OpenSearch fed by both place + operator repositories) gets wider
+    // entry-port spread, which pulls edge entry points apart and reduces
+    // the chance of parallel segments piling up on the same band.
+    const hubWidth = fanout >= 2 ? Math.round(fanout * (baseW * 0.55)) : 0;
     const childWidth =
       kids && kids.length > 0
         ? Math.max(baseW * 2, kids.length * baseW)
