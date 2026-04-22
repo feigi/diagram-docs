@@ -5,6 +5,7 @@ import {
   edgeId,
   sortById,
   sortRelationships,
+  wrapEdgeLabel,
 } from "./stability.js";
 import type { DiagramCells, VertexSpec, EdgeSpec } from "./context.js";
 
@@ -99,7 +100,7 @@ export function buildContainerCells(model: ArchitectureModel): DiagramCells {
       id: edgeId(r.src, r.tgt, r.label),
       source: toDrawioId(r.src),
       target: toDrawioId(r.tgt),
-      value: r.label,
+      value: wrapEdgeLabel(r.label),
       tooltip: r.tech ? `[${r.tech}]` : undefined,
       style: STYLES.relationship,
     });

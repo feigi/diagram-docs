@@ -6,6 +6,7 @@ import {
   edgeId,
   sortById,
   sortRelationships,
+  wrapEdgeLabel,
 } from "./stability.js";
 
 export interface VertexSpec {
@@ -85,9 +86,16 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
   const contextRels = model.relationships.filter(
     (r) => contextIds.has(r.sourceId) && contextIds.has(r.targetId),
   );
+  // Drop external↔external relationships from the L1 context view. C4 Level 1
+  // documents how actors and external systems interact with the target system,
+  // not how externals wire to each other; keeping them forces ELK to allocate
+  // extra layers and scatters externals across the diagram.
+  const contextRelsFiltered = contextRels.filter(
+    (r) => !(externalIds.has(r.sourceId) && externalIds.has(r.targetId)),
+  );
 
   const seen = new Set<string>();
-  for (const rel of sortRelationships(contextRels)) {
+  for (const rel of sortRelationships(contextRelsFiltered)) {
     const src = internalIds.has(rel.sourceId)
       ? "system"
       : toDrawioId(rel.sourceId);
@@ -102,7 +110,7 @@ export function buildContextCells(model: ArchitectureModel): DiagramCells {
       id: edgeId(src, tgt, rel.label),
       source: src,
       target: tgt,
-      value: rel.label,
+      value: wrapEdgeLabel(rel.label),
       tooltip: rel.technology ? `[${rel.technology}]` : undefined,
       style: STYLES.relationship,
     });

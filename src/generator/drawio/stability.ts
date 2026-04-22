@@ -25,3 +25,39 @@ export function sortRelationships<
     return a.targetId.localeCompare(b.targetId);
   });
 }
+
+/**
+ * Line separator used inside wrapped edge labels. Drawio's edge style has
+ * {@code html=1}, so literal `\n` collapses to whitespace — `<br>` forces an
+ * actual line break at render time. Layout code splits on this token to
+ * estimate wrapped label bounds.
+ */
+export const EDGE_LABEL_BR = "<br>";
+
+/**
+ * Insert {@link EDGE_LABEL_BR} tags into an edge label so drawio renders it
+ * as a block of narrow lines instead of one long streak. Greedy word-wrap at
+ * {@link max} characters; oversized single words are emitted on their own
+ * line. Keeps the same text for both the rendered value and the ELK
+ * label-bounds estimate, so ELK reserves height proportional to line count.
+ */
+export function wrapEdgeLabel(text: string, max = 22): string {
+  if (!text) return text;
+  const words = text.split(/\s+/).filter(Boolean);
+  const lines: string[] = [];
+  let line = "";
+  for (const word of words) {
+    if (!line) {
+      line = word;
+      continue;
+    }
+    if (line.length + 1 + word.length <= max) {
+      line += ` ${word}`;
+    } else {
+      lines.push(line);
+      line = word;
+    }
+  }
+  if (line) lines.push(line);
+  return lines.join(EDGE_LABEL_BR);
+}

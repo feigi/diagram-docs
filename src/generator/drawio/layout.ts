@@ -71,6 +71,12 @@ export interface LayoutNode {
   width: number;
   height: number;
   children?: string[];
+  /**
+   * Optional ELK `layered.layering.layerConstraint`. Use to pin a node to the
+   * first or last layer regardless of edge direction (e.g. keep all external
+   * systems together at the bottom of an L1 context diagram).
+   */
+  layerConstraint?: "FIRST" | "LAST" | "FIRST_SEPARATE" | "LAST_SEPARATE";
 }
 
 export interface LayoutEdge {
@@ -86,17 +92,26 @@ export interface LayoutEdge {
  * stack on the same routing band, which triggers the white-bg mask-over-text
  * pileup we see with orthogonal routing.
  */
-const LABEL_FONT_PX = 6;
-const LABEL_MAX_WIDTH = 180;
-const LABEL_HEIGHT = 16;
+// drawio renders edge labels at ~11px font by default; a char is roughly 7px
+// wide, so the low ELK estimate here needs to match that to reserve enough
+// routing gutter. Underestimating causes labels from sibling edges to overlap
+// horizontally (two short parallel edges' labels land on the same band).
+const LABEL_FONT_PX = 7;
+const LABEL_MAX_WIDTH = 240;
+const LABEL_HEIGHT = 18;
 const LABEL_PADDING = 8;
 
 function labelBounds(text: string): { width: number; height: number } {
+  // Split on both `<br>` (wrapped edge labels, see stability.ts) and raw
+  // newlines so bounds scale with line count regardless of which the caller
+  // uses.
+  const lines = text.split(/<br\s*\/?>|\n/i);
+  const longest = lines.reduce((m, l) => Math.max(m, l.length), 0);
   const width = Math.min(
-    text.length * LABEL_FONT_PX + LABEL_PADDING,
+    longest * LABEL_FONT_PX + LABEL_PADDING,
     LABEL_MAX_WIDTH,
   );
-  return { width, height: LABEL_HEIGHT };
+  return { width, height: LABEL_HEIGHT * lines.length };
 }
 
 export interface LayoutInput {
@@ -128,10 +143,18 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
   const buildElkNode = (id: string): ElkNode => {
     const n = byId.get(id)!;
     const kids = childrenOf.get(id) ?? [];
+    const nodeLayoutOptions: Record<string, string> = {};
+    if (n.layerConstraint) {
+      nodeLayoutOptions["elk.layered.layering.layerConstraint"] =
+        n.layerConstraint;
+    }
     return {
       id,
       width: n.width,
       height: n.height,
+      ...(Object.keys(nodeLayoutOptions).length > 0
+        ? { layoutOptions: nodeLayoutOptions }
+        : {}),
       ...(kids.length > 0 ? { children: kids.map(buildElkNode) } : {}),
     };
   };
@@ -177,7 +200,9 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       // in turn pulls their midpoints apart.
       "elk.edgeLabels.inline": "false",
       "elk.layered.edgeLabels.sideSelection": "SMART_DOWN",
-      "elk.spacing.edgeLabel": "6",
+      // Generous label gutter so ELK separates edges whose labels would
+      // otherwise stack on the same band between two layers.
+      "elk.spacing.edgeLabel": "20",
       // Strip redundant bendpoints introduced by side-biased label routing.
       "elk.layered.unnecessaryBendpoints": "true",
     },
