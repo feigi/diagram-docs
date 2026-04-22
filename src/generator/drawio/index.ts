@@ -48,6 +48,13 @@ export async function generateDrawioFile(
       if (v.kind === "person") layerConstraint = "FIRST";
       else if (v.kind === "external-system") layerConstraint = "LAST";
     }
+    // Give the system-boundary title (`verticalAlign=top` in styles.ts)
+    // vertical breathing room so it doesn't overlap the first row of nested
+    // containers/components.
+    const layoutOptions: Record<string, string> =
+      v.kind === "system-boundary"
+        ? { "elk.padding": "[top=32,left=16,right=16,bottom=16]" }
+        : {};
     return {
       id: v.id,
       width:
@@ -57,6 +64,8 @@ export async function generateDrawioFile(
       height: kids && kids.length > 0 ? baseH * 3 : baseH,
       children: kids,
       layerConstraint,
+      layoutOptions:
+        Object.keys(layoutOptions).length > 0 ? layoutOptions : undefined,
     };
   });
 
