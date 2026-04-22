@@ -29,8 +29,8 @@ const ELK = ELKModule as unknown as new (
   args?: ELKConstructorArguments,
 ) => ElkInstance;
 
-export const NODE_SPACING_X = 320;
-export const NODE_SPACING_Y = 160;
+export const NODE_SPACING_X = 200;
+export const NODE_SPACING_Y = 90;
 
 export interface NodeSize {
   width: number;
@@ -154,10 +154,10 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       "elk.layered.spacing.nodeNodeBetweenLayers": String(NODE_SPACING_X),
       // Reserve gutters between edges and edges/nodes so labels don't pile
       // up when several relationships share the same pair of layers.
-      "elk.layered.spacing.edgeNodeBetweenLayers": "60",
-      "elk.layered.spacing.edgeEdgeBetweenLayers": "40",
-      "elk.spacing.edgeEdge": "30",
-      "elk.spacing.edgeNode": "40",
+      "elk.layered.spacing.edgeNodeBetweenLayers": "30",
+      "elk.layered.spacing.edgeEdgeBetweenLayers": "20",
+      "elk.spacing.edgeEdge": "15",
+      "elk.spacing.edgeNode": "20",
       "elk.hierarchyHandling": "INCLUDE_CHILDREN",
       // More optimization passes + straighter edges → ORTHOGONAL routing
       // has a better chance of steering around nodes instead of cutting
@@ -173,7 +173,7 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       // in turn pulls their midpoints apart.
       "elk.edgeLabels.inline": "false",
       "elk.layered.edgeLabels.sideSelection": "SMART_UP",
-      "elk.spacing.edgeLabel": "24",
+      "elk.spacing.edgeLabel": "12",
     },
     children: rootIds.map(buildElkNode),
     edges: [...input.edges]
