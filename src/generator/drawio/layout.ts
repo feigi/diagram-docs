@@ -77,6 +77,12 @@ export interface LayoutNode {
    * systems together at the bottom of an L1 context diagram).
    */
   layerConstraint?: "FIRST" | "LAST" | "FIRST_SEPARATE" | "LAST_SEPARATE";
+  /**
+   * Extra ELK layout options applied to this node (merged on top of the
+   * constraint above). Use for per-node tweaks like `elk.padding` on the
+   * system boundary so its title has room above nested containers.
+   */
+  layoutOptions?: Record<string, string>;
 }
 
 export interface LayoutEdge {
@@ -140,14 +146,66 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
     }
   }
 
+  // Parent chain for each node: ["node", "parent", "grandparent", ...].
+  // Used to find the lowest common ancestor of an edge's endpoints so edges
+  // between nested siblings get declared on their shared parent instead of
+  // the root. Root-declared edges get routed outside the parent's boundary,
+  // which produced U-shaped detours between nested containers in L2.
+  const parentOf = new Map<string, string>();
+  for (const [parent, kids] of childrenOf) {
+    for (const k of kids) parentOf.set(k, parent);
+  }
+  const ancestorsOf = (id: string): string[] => {
+    const chain = [id];
+    let cur = id;
+    while (parentOf.has(cur)) {
+      cur = parentOf.get(cur)!;
+      chain.push(cur);
+    }
+    return chain;
+  };
+  const lcaOf = (a: string, b: string): string | null => {
+    const aChain = new Set(ancestorsOf(a));
+    for (const ancestor of ancestorsOf(b)) {
+      if (aChain.has(ancestor)) return ancestor;
+    }
+    return null;
+  };
+
+  const edgesByOwner = new Map<string, LayoutEdge[]>();
+  for (const e of input.edges) {
+    const lca = lcaOf(e.source, e.target);
+    // If source/target share an ancestor that is a non-root node, attach the
+    // edge there; otherwise attach at the root so it can cross hierarchies.
+    const owner = lca && lca !== e.source && lca !== e.target ? lca : "root";
+    const list = edgesByOwner.get(owner) ?? [];
+    list.push(e);
+    edgesByOwner.set(owner, list);
+  }
+
+  const elkEdgesFor = (ownerId: string) =>
+    [...(edgesByOwner.get(ownerId) ?? [])]
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .map((e) => {
+        const base = { id: e.id, sources: [e.source], targets: [e.target] };
+        if (!e.label) return base;
+        return {
+          ...base,
+          labels: [{ text: e.label, ...labelBounds(e.label) }],
+        };
+      });
+
   const buildElkNode = (id: string): ElkNode => {
     const n = byId.get(id)!;
     const kids = childrenOf.get(id) ?? [];
-    const nodeLayoutOptions: Record<string, string> = {};
+    const nodeLayoutOptions: Record<string, string> = {
+      ...(n.layoutOptions ?? {}),
+    };
     if (n.layerConstraint) {
       nodeLayoutOptions["elk.layered.layering.layerConstraint"] =
         n.layerConstraint;
     }
+    const ownedEdges = elkEdgesFor(id);
     return {
       id,
       width: n.width,
@@ -156,6 +214,7 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
         ? { layoutOptions: nodeLayoutOptions }
         : {}),
       ...(kids.length > 0 ? { children: kids.map(buildElkNode) } : {}),
+      ...(ownedEdges.length > 0 ? { edges: ownedEdges } : {}),
     };
   };
 
@@ -207,16 +266,7 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
       "elk.layered.unnecessaryBendpoints": "true",
     },
     children: rootIds.map(buildElkNode),
-    edges: [...input.edges]
-      .sort((a, b) => a.id.localeCompare(b.id))
-      .map((e) => {
-        const base = { id: e.id, sources: [e.source], targets: [e.target] };
-        if (!e.label) return base;
-        return {
-          ...base,
-          labels: [{ text: e.label, ...labelBounds(e.label) }],
-        };
-      }),
+    edges: elkEdgesFor("root"),
   };
 
   const laidOut = await elk.layout(graph);
@@ -228,16 +278,28 @@ export async function layoutGraph(input: LayoutInput): Promise<LayoutResult> {
 
 function collectEdges(root: ElkNode): Map<string, EdgeRoute> {
   const out = new Map<string, EdgeRoute>();
-  visitEdges(root, out);
+  visitEdges(root, out, 0, 0);
   return out;
 }
 
-function visitEdges(node: ElkNode, out: Map<string, EdgeRoute>): void {
+function visitEdges(
+  node: ElkNode,
+  out: Map<string, EdgeRoute>,
+  parentX: number,
+  parentY: number,
+): void {
+  // ELK reports child positions relative to their immediate parent. When an
+  // edge lives on a nested parent, its bendpoints are in that parent's
+  // coordinate system — we project them to absolute coords here so the
+  // drawio writer can emit edges at the default layer (parent="1") without
+  // separate per-edge parent handling.
+  const absX = parentX + (node.x ?? 0);
+  const absY = parentY + (node.y ?? 0);
   for (const edge of (node.edges as ElkExtendedEdge[] | undefined) ?? []) {
-    const route = edgeRoute(edge);
+    const route = edgeRoute(edge, absX, absY);
     if (route) out.set(edge.id, route);
   }
-  for (const child of node.children ?? []) visitEdges(child, out);
+  for (const child of node.children ?? []) visitEdges(child, out, absX, absY);
 }
 
 /**
@@ -253,7 +315,11 @@ function visitEdges(node: ElkNode, out: Map<string, EdgeRoute>): void {
  *   geometric midpoint (which is how two parallel edges' labels end up
  *   stacked on the same spot).
  */
-function edgeRoute(edge: ElkExtendedEdge): EdgeRoute | null {
+function edgeRoute(
+  edge: ElkExtendedEdge,
+  offsetX: number,
+  offsetY: number,
+): EdgeRoute | null {
   const section = edge.sections?.[0] as ElkEdgeSection | undefined;
   if (!section) return null;
   const path = [
@@ -262,12 +328,14 @@ function edgeRoute(edge: ElkExtendedEdge): EdgeRoute | null {
     section.endPoint,
   ];
   const waypoints = (section.bendPoints ?? []).map((p) => ({
-    x: Math.round(p.x),
-    y: Math.round(p.y),
+    x: Math.round(p.x + offsetX),
+    y: Math.round(p.y + offsetY),
   }));
   const label = edge.labels?.[0] as ElkLabel | undefined;
   let labelOffset: Point | undefined;
   if (label && label.x !== undefined && label.y !== undefined) {
+    // Label coords are parent-relative; compare against the parent-relative
+    // polyline midpoint so the computed delta is frame-agnostic.
     const labelCenter = {
       x: label.x + (label.width ?? 0) / 2,
       y: label.y + (label.height ?? 0) / 2,
