@@ -74,8 +74,8 @@ export function emitContainerD2(
   }
   if (externals.length > 0) w.blank();
 
+  const containerIds = new Set(containers.map((c) => c.id));
   for (const e of spec.edges) {
-    const containerIds = new Set(containers.map((c) => c.id));
     const src = containerIds.has(e.sourceId)
       ? `${sysId}.${toD2Id(e.sourceId)}`
       : toD2Id(e.sourceId);
