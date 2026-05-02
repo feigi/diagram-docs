@@ -1,14 +1,14 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
+import type {
+  DiagramSpec,
+  VertexSpec as PVertex,
+} from "../projection/types.js";
+import { projectContext } from "../projection/context.js";
 import { STYLES } from "./styles.js";
 import type { StyleKey } from "./styles.js";
-import {
-  toDrawioId,
-  edgeId,
-  sortById,
-  sortRelationships,
-  wrapEdgeLabel,
-} from "./stability.js";
+import { toDrawioId, edgeId, wrapEdgeLabel } from "./stability.js";
 
+/** Drawio cell representation (style-aware, kept stable for L4 + layout). */
 export interface VertexSpec {
   id: string;
   value: string;
@@ -33,88 +33,104 @@ export interface DiagramCells {
   edges: EdgeSpec[];
 }
 
-export function buildContextCells(model: ArchitectureModel): DiagramCells {
+/**
+ * Map a projection vertex to a drawio cell. Boundary detection is structural:
+ * any vertex with a child (another vertex names it as parentId) is rendered
+ * with the system-boundary style.
+ */
+function toCell(v: PVertex, hasChildren: boolean): VertexSpec {
+  switch (v.kind) {
+    case "actor":
+      return {
+        id: toDrawioId(v.id),
+        value: `${v.name}\n[Person]`,
+        tooltip: v.description || undefined,
+        style: STYLES.person,
+        kind: "person",
+        parent: v.parentId ? toDrawioId(v.parentId) : undefined,
+      };
+    case "system":
+      return {
+        id: toDrawioId(v.id) === "system" ? "system" : toDrawioId(v.id),
+        value: `${v.name}\n[Software System]`,
+        tooltip: v.description || undefined,
+        style: hasChildren ? STYLES["system-boundary"] : STYLES.system,
+        kind: hasChildren ? "system-boundary" : "system",
+        parent: v.parentId ? toDrawioId(v.parentId) : undefined,
+      };
+    case "container": {
+      const techLine = v.technology ? `: ${v.technology}` : "";
+      return {
+        id: toDrawioId(v.id),
+        value: `${v.name}\n[Container${techLine}]`,
+        tooltip: v.description || undefined,
+        style: hasChildren ? STYLES["system-boundary"] : STYLES.container,
+        kind: hasChildren ? "system-boundary" : "container",
+        parent: v.parentId ? toDrawioId(v.parentId) : undefined,
+      };
+    }
+    case "component": {
+      const techLine = v.technology ? `: ${v.technology}` : "";
+      return {
+        id: toDrawioId(v.id),
+        value: `${v.name}\n[Component${techLine}]`,
+        tooltip: v.description || undefined,
+        style: STYLES.component,
+        kind: "component",
+        parent: v.parentId ? toDrawioId(v.parentId) : undefined,
+      };
+    }
+    case "external-system": {
+      const isLib = v.tags?.includes("library") ?? false;
+      const techLine = v.technology ? `\n[${v.technology}]` : "";
+      const typeTag = isLib ? "[Library]" : "[External System]";
+      return {
+        id: toDrawioId(v.id),
+        value: `${v.name}\n${typeTag}${techLine}`,
+        tooltip: v.description || undefined,
+        style: STYLES["external-system"],
+        kind: "external-system",
+        parent: v.parentId ? toDrawioId(v.parentId) : undefined,
+      };
+    }
+  }
+}
+
+/** Convert any DiagramSpec to drawio cells. Shared across L1/L2/L3. */
+export function cellsFromSpec(spec: DiagramSpec): DiagramCells {
   const vertices: VertexSpec[] = [];
   const edges: EdgeSpec[] = [];
 
-  for (const a of sortById(model.actors)) {
-    vertices.push({
-      id: toDrawioId(a.id),
-      value: `${a.name}\n[Person]`,
-      tooltip: a.description || undefined,
-      style: STYLES.person,
-      kind: "person",
-    });
+  const childCount = new Map<string, number>();
+  for (const v of spec.vertices) {
+    if (v.parentId) {
+      childCount.set(v.parentId, (childCount.get(v.parentId) ?? 0) + 1);
+    }
   }
 
-  vertices.push({
-    id: "system",
-    value: `${model.system.name}\n[Software System]`,
-    tooltip: model.system.description || undefined,
-    style: STYLES.system,
-    kind: "system",
-  });
-
-  const externals = sortById(
-    model.externalSystems.filter((e) => !e.tags?.includes("library")),
-  );
-  for (const e of externals) {
-    const techLine = e.technology ? `\n[${e.technology}]` : "";
-    vertices.push({
-      id: toDrawioId(e.id),
-      value: `${e.name}\n[External System]${techLine}`,
-      tooltip: e.description || undefined,
-      style: STYLES["external-system"],
-      kind: "external-system",
-    });
+  for (const v of spec.vertices) {
+    vertices.push(toCell(v, (childCount.get(v.id) ?? 0) > 0));
   }
 
-  const actorIds = new Set(model.actors.map((a) => a.id));
-  const externalIds = new Set(externals.map((e) => e.id));
-  const containerIds = new Set(model.containers.map((c) => c.id));
-  const componentIds = new Set(model.components.map((c) => c.id));
-  const internalIds = new Set([...containerIds, ...componentIds]);
-
-  const contextIds = new Set([
-    ...actorIds,
-    "system",
-    ...externalIds,
-    ...containerIds,
-    ...componentIds,
-  ]);
-
-  const contextRels = model.relationships.filter(
-    (r) => contextIds.has(r.sourceId) && contextIds.has(r.targetId),
-  );
-  // Drop external↔external relationships from the L1 context view. C4 Level 1
-  // documents how actors and external systems interact with the target system,
-  // not how externals wire to each other; keeping them forces ELK to allocate
-  // extra layers and scatters externals across the diagram.
-  const contextRelsFiltered = contextRels.filter(
-    (r) => !(externalIds.has(r.sourceId) && externalIds.has(r.targetId)),
-  );
-
-  const seen = new Set<string>();
-  for (const rel of sortRelationships(contextRelsFiltered)) {
-    const src = internalIds.has(rel.sourceId)
-      ? "system"
-      : toDrawioId(rel.sourceId);
-    const tgt = internalIds.has(rel.targetId)
-      ? "system"
-      : toDrawioId(rel.targetId);
-    if (src === tgt) continue;
-    const key = `${src}->${tgt}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
+  for (const e of spec.edges) {
     edges.push({
-      id: edgeId(src, tgt, rel.label),
-      source: src,
-      target: tgt,
-      value: wrapEdgeLabel(rel.label),
-      tooltip: rel.technology ? `[${rel.technology}]` : undefined,
+      id: edgeId(e.sourceId, e.targetId, e.label),
+      source: toDrawioId(e.sourceId),
+      target: toDrawioId(e.targetId),
+      value: wrapEdgeLabel(e.label),
+      tooltip: e.technology ? `[${e.technology}]` : undefined,
       style: STYLES.relationship,
     });
   }
 
   return { vertices, edges };
+}
+
+export function emitContextCells(spec: DiagramSpec): DiagramCells {
+  return cellsFromSpec(spec);
+}
+
+/** Public wrapper preserved for cli/commands/generate.ts. */
+export function buildContextCells(model: ArchitectureModel): DiagramCells {
+  return emitContextCells(projectContext(model));
 }
