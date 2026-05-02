@@ -169,15 +169,19 @@ describe("D2 Component Diagram", () => {
     );
   });
 
-  it("renders cross-container component reference with friendly name and raw id", () => {
+  it("renders cross-container component reference with friendly name (no refId suffix)", () => {
+    // Drift verdict: actors render at L3 + no refId suffix on cross-container labels.
     const model = loadModel(MODEL_PATH);
     // order-service's order-handler has a relationship to user-controller (in user-api)
     const d2 = generateComponentDiagram(model, "order-service");
 
     expect(d2).toContain("User Controller");
-    expect(d2).toContain("user-controller");
+    expect(d2).toContain("user_controller"); // D2 ID form (hyphens → underscores)
     expect(d2).toContain("class: component");
-    expect(d2).toContain("in User API");
+    // The "in User API" debug suffix is intentionally absent — dropped by projection.
+    expect(d2).not.toContain("in User API");
+    // The raw "| refId" debug suffix is intentionally absent.
+    expect(d2).not.toContain("| user-controller");
   });
 
   it("adds code-level link only for components in codeLinks set", () => {
