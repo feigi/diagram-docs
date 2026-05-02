@@ -1,10 +1,9 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
+import type { DiagramSpec } from "../projection/types.js";
 import { projectComponent } from "../projection/component.js";
 import { cellsFromSpec, type DiagramCells } from "./context.js";
 
-export function emitComponentCells(
-  spec: ReturnType<typeof projectComponent>,
-): DiagramCells {
+export function emitComponentCells(spec: DiagramSpec): DiagramCells {
   return cellsFromSpec(spec);
 }
 
