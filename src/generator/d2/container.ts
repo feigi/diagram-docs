@@ -1,6 +1,7 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import type { DiagramSpec } from "../projection/types.js";
 import { projectContainer } from "../projection/container.js";
+import { flushProjectionWarnings } from "../projection/index.js";
 import { D2Writer, wrapText } from "./writer.js";
 import { toD2Id } from "./stability.js";
 
@@ -95,5 +96,7 @@ export function generateContainerDiagram(
   model: ArchitectureModel,
   options?: ContainerDiagramOptions,
 ): string {
-  return emitContainerD2(projectContainer(model), options);
+  const spec = projectContainer(model);
+  flushProjectionWarnings(spec.warnings);
+  return emitContainerD2(spec, options);
 }

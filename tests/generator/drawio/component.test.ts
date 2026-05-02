@@ -113,6 +113,49 @@ describe("buildComponentCells", () => {
     expect(actor!.parent).toBeUndefined();
   });
 
+  it("includes technology line and [External System] tag for external refs at L3", () => {
+    const withExternal: ArchitectureModel = {
+      ...model,
+      externalSystems: [
+        {
+          id: "billing",
+          name: "Billing",
+          description: "",
+          technology: "Stripe",
+        },
+      ],
+      relationships: [
+        ...model.relationships,
+        { sourceId: "auth", targetId: "billing", label: "charges" },
+      ],
+    };
+    const { vertices } = buildComponentCells(withExternal, "api");
+    const ext = vertices.find((v) => v.id === "billing")!;
+    expect(ext.value).toBe("Billing\n[External System]\n[Stripe]");
+  });
+
+  it("renders [Library] tag for library-tagged externals at L3", () => {
+    const withLib: ArchitectureModel = {
+      ...model,
+      externalSystems: [
+        {
+          id: "lodash",
+          name: "lodash",
+          description: "",
+          technology: "npm",
+          tags: ["library"],
+        },
+      ],
+      relationships: [
+        ...model.relationships,
+        { sourceId: "auth", targetId: "lodash", label: "uses" },
+      ],
+    };
+    const { vertices } = buildComponentCells(withLib, "api");
+    const lib = vertices.find((v) => v.id === "lodash")!;
+    expect(lib.value).toBe("lodash\n[Library]\n[npm]");
+  });
+
   it("omits tooltip when component description is empty", () => {
     const minimal: ArchitectureModel = {
       ...model,

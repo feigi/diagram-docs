@@ -1,6 +1,7 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import type { DiagramSpec } from "../projection/types.js";
 import { projectContext } from "../projection/context.js";
+import { flushProjectionWarnings } from "../projection/index.js";
 import { D2Writer, wrapText } from "./writer.js";
 import { toD2Id } from "./stability.js";
 
@@ -58,10 +59,9 @@ export function emitContextD2(spec: DiagramSpec): string {
   return w.toString();
 }
 
-/**
- * Public wrapper preserved for callsites (cli/commands/generate.ts,
- * submodule-scaffold.ts, tests).
- */
+/** Public wrapper that owns the model→spec→D2 pipeline for L1. */
 export function generateContextDiagram(model: ArchitectureModel): string {
-  return emitContextD2(projectContext(model));
+  const spec = projectContext(model);
+  flushProjectionWarnings(spec.warnings);
+  return emitContextD2(spec);
 }

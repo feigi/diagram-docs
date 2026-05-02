@@ -1,5 +1,4 @@
 import { describe, it, expect } from "vitest";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { loadModel } from "../../src/core/model.js";
 import { generateContextDiagram } from "../../src/generator/d2/context.js";
@@ -167,6 +166,33 @@ describe("D2 Component Diagram", () => {
     expect(() => generateComponentDiagram(model, "nonexistent")).toThrow(
       "Container not found",
     );
+  });
+
+  it("renders actors as cross-container references at L3 (drift verdict)", () => {
+    const synthetic = {
+      version: 1,
+      system: { name: "S", description: "" },
+      actors: [{ id: "admin", name: "Admin", description: "" }],
+      externalSystems: [],
+      containers: [
+        { id: "api", name: "API", description: "", technology: "Go" },
+      ],
+      components: [
+        {
+          id: "ctrl",
+          containerId: "api",
+          name: "Ctrl",
+          description: "",
+          technology: "Go",
+        },
+      ],
+      relationships: [
+        { sourceId: "admin", targetId: "ctrl", label: "manages" },
+      ],
+    } as unknown as Parameters<typeof generateComponentDiagram>[0];
+    const d2 = generateComponentDiagram(synthetic, "api");
+    expect(d2).toContain("admin");
+    expect(d2).toContain("class: person");
   });
 
   it("renders cross-container component reference with friendly name (no refId suffix)", () => {
