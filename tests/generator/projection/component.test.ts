@@ -86,4 +86,30 @@ describe("projectComponent (L3)", () => {
     expect(boundary?.kind).toBe("container");
     expect(boundary?.parentId).toBeUndefined();
   });
+
+  it("drops dangling refIds and their edges, with a warning", () => {
+    const model = {
+      version: 1,
+      system: { name: "S", description: "" },
+      actors: [],
+      externalSystems: [],
+      containers: [
+        { id: "api", name: "API", description: "", technology: "X" },
+      ],
+      components: [
+        {
+          id: "c1",
+          containerId: "api",
+          name: "C1",
+          description: "",
+          technology: "X",
+        },
+      ],
+      relationships: [{ sourceId: "ghost", targetId: "c1", label: "x" }],
+    } as unknown as Parameters<typeof projectComponent>[0];
+    const spec = projectComponent(model, "api");
+    expect(spec.vertices.find((v) => v.id === "ghost")).toBeUndefined();
+    expect(spec.edges.find((e) => e.sourceId === "ghost")).toBeUndefined();
+    expect(spec.warnings.some((w) => w.includes("ghost"))).toBe(true);
+  });
 });

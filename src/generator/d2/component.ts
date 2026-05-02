@@ -1,6 +1,7 @@
 import type { ArchitectureModel } from "../../analyzers/types.js";
 import type { DiagramSpec } from "../projection/types.js";
 import { projectComponent } from "../projection/component.js";
+import { flushProjectionWarnings } from "../projection/index.js";
 import { D2Writer, wrapText } from "./writer.js";
 import { toD2Id } from "./stability.js";
 
@@ -58,26 +59,43 @@ export function emitComponentD2(
     (v) => !v.parentId && v.id !== boundary.id,
   );
   for (const v of externals) {
-    if (v.kind === "actor") {
-      w.shape(
-        toD2Id(v.id),
-        `${v.name}\\n\\n[Person]\\n${wrapText(v.description ?? "")}`,
-        { class: "person" },
-      );
-    } else if (v.kind === "external-system") {
-      w.shape(toD2Id(v.id), `${v.name}\\n[External System]`, {
-        class: "external-system",
-      });
-    } else if (v.kind === "container") {
-      w.shape(toD2Id(v.id), `${v.name}\\n[Container: ${v.technology ?? ""}]`, {
-        class: "container",
-      });
-    } else if (v.kind === "component") {
-      w.shape(
-        toD2Id(v.id),
-        `${v.name}\\n\\n[Component: ${v.technology ?? ""}]`,
-        { class: "component" },
-      );
+    switch (v.kind) {
+      case "actor":
+        w.shape(
+          toD2Id(v.id),
+          `${v.name}\\n\\n[Person]\\n${wrapText(v.description ?? "")}`,
+          { class: "person" },
+        );
+        break;
+      case "external-system":
+        w.shape(toD2Id(v.id), `${v.name}\\n[External System]`, {
+          class: "external-system",
+        });
+        break;
+      case "container":
+        w.shape(
+          toD2Id(v.id),
+          `${v.name}\\n[Container: ${v.technology ?? ""}]`,
+          { class: "container" },
+        );
+        break;
+      case "component":
+        w.shape(
+          toD2Id(v.id),
+          `${v.name}\\n\\n[Component: ${v.technology ?? ""}]`,
+          { class: "component" },
+        );
+        break;
+      case "system":
+        throw new Error(
+          `D2 L3 emitter: unexpected 'system' vertex "${v.id}" — projectComponent must not emit one at L3`,
+        );
+      default: {
+        const exhaustive: never = v.kind;
+        throw new Error(
+          `D2 L3 emitter: unhandled VertexKind "${exhaustive}" for ref "${(v as { id: string }).id}"`,
+        );
+      }
     }
   }
   if (externals.length > 0) w.blank();
@@ -103,5 +121,7 @@ export function generateComponentDiagram(
   containerId: string,
   options?: ComponentDiagramOptions,
 ): string {
-  return emitComponentD2(projectComponent(model, containerId), options);
+  const spec = projectComponent(model, containerId);
+  flushProjectionWarnings(spec.warnings);
+  return emitComponentD2(spec, options);
 }

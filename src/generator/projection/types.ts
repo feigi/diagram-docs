@@ -26,8 +26,11 @@ export interface VertexSpec {
 }
 
 /**
- * Structural representation of a diagram edge. `id` is unique within a
- * `DiagramSpec` (projection deduplicates by source+target before emitting).
+ * Structural representation of a diagram edge. Within a single
+ * `DiagramSpec.edges` array projection deduplicates by source+target where
+ * collapse can occur (L1, L2). At L3 same-pair edges are not deduplicated;
+ * the `id` is best-effort and may collide on identical (source,target) pairs
+ * — emitters that need a unique key should derive one from `(source,target,label)`.
  */
 export interface EdgeSpec {
   id: string;
@@ -40,4 +43,9 @@ export interface EdgeSpec {
 export interface DiagramSpec {
   vertices: VertexSpec[];
   edges: EdgeSpec[];
+  /**
+   * Non-fatal projection warnings (unresolved refs, dropped relationships,
+   * etc.). Emitter wrappers flush these to stderr before emitting.
+   */
+  warnings: string[];
 }

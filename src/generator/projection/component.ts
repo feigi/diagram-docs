@@ -7,10 +7,15 @@ import type { DiagramSpec, EdgeSpec, VertexSpec, VertexKind } from "./types.js";
  * container.
  *
  * Drift verdicts applied:
- * - Actors are emitted as cross-container references when they participate
- *   in a relationship (D2 emitter previously dropped them).
+ * - Actors that participate in an in-container relationship render as
+ *   cross-container references (the drawio emitter already did this; D2
+ *   used to drop them).
  * - Cross-container references carry only their plain name — no debug
  *   "| refId" suffix on the label.
+ * - External-system cross-container references include their `technology`
+ *   line and a "[Library]" type tag when tagged `library`. The shared
+ *   `cellsFromSpec` path makes this consistent across L1/L2/L3 (L3 drawio
+ *   used to render externals as a bare `name\n[External System]`).
  */
 export function projectComponent(
   model: ArchitectureModel,
@@ -23,6 +28,7 @@ export function projectComponent(
 
   const vertices: VertexSpec[] = [];
   const edges: EdgeSpec[] = [];
+  const warnings: string[] = [];
 
   const localComponents = (model.components ?? []).filter(
     (c) => c.containerId === containerId,
@@ -60,6 +66,7 @@ export function projectComponent(
     return false;
   });
 
+  const droppedRefs = new Set<string>();
   for (const rid of [...refIds].sort()) {
     const actor = model.actors.find((a) => a.id === rid);
     const ext = model.externalSystems.find((e) => e.id === rid);
@@ -93,10 +100,16 @@ export function projectComponent(
     }
     if (kind && name) {
       vertices.push({ id: rid, name, kind, technology, description, tags });
+    } else {
+      warnings.push(
+        `L3 (${containerId}): cross-container ref "${rid}" matches no actor, external system, container, or component; dropping it and any edges that touch it.`,
+      );
+      droppedRefs.add(rid);
     }
   }
 
   for (const r of sortRelationships(rels)) {
+    if (droppedRefs.has(r.sourceId) || droppedRefs.has(r.targetId)) continue;
     edges.push({
       id: `${r.sourceId}->${r.targetId}`,
       sourceId: r.sourceId,
@@ -106,5 +119,5 @@ export function projectComponent(
     });
   }
 
-  return { vertices, edges };
+  return { vertices, edges, warnings };
 }

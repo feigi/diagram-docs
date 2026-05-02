@@ -16,6 +16,7 @@ import type { DiagramSpec, EdgeSpec, VertexSpec } from "./types.js";
 export function projectContext(model: ArchitectureModel): DiagramSpec {
   const vertices: VertexSpec[] = [];
   const edges: EdgeSpec[] = [];
+  const warnings: string[] = [];
 
   for (const a of sortById(model.actors)) {
     vertices.push({
@@ -61,7 +62,18 @@ export function projectContext(model: ArchitectureModel): DiagramSpec {
 
   const seen = new Set<string>();
   for (const r of sortRelationships(model.relationships)) {
-    if (!visibleIds.has(r.sourceId) || !visibleIds.has(r.targetId)) continue;
+    if (!visibleIds.has(r.sourceId)) {
+      warnings.push(
+        `L1: relationship sourceId "${r.sourceId}" matches no actor, container, component, or external system; dropping "${r.sourceId} -> ${r.targetId}".`,
+      );
+      continue;
+    }
+    if (!visibleIds.has(r.targetId)) {
+      warnings.push(
+        `L1: relationship targetId "${r.targetId}" matches no actor, container, component, or external system; dropping "${r.sourceId} -> ${r.targetId}".`,
+      );
+      continue;
+    }
     if (externalIds.has(r.sourceId) && externalIds.has(r.targetId)) continue;
     const src = internalIds.has(r.sourceId) ? "system" : r.sourceId;
     const tgt = internalIds.has(r.targetId) ? "system" : r.targetId;
@@ -78,5 +90,5 @@ export function projectContext(model: ArchitectureModel): DiagramSpec {
     });
   }
 
-  return { vertices, edges };
+  return { vertices, edges, warnings };
 }

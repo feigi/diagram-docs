@@ -4,6 +4,7 @@ import type {
   VertexSpec as PVertex,
 } from "../projection/types.js";
 import { projectContext } from "../projection/context.js";
+import { flushProjectionWarnings } from "../projection/index.js";
 import { STYLES } from "./styles.js";
 import type { StyleKey } from "./styles.js";
 import { toDrawioId, edgeId, wrapEdgeLabel } from "./stability.js";
@@ -93,6 +94,10 @@ function toCell(v: PVertex, hasChildren: boolean): VertexSpec {
         parent: v.parentId ? toDrawioId(v.parentId) : undefined,
       };
     }
+    default: {
+      const exhaustive: never = v.kind;
+      throw new Error(`drawio: unhandled VertexKind "${exhaustive}"`);
+    }
   }
 }
 
@@ -132,5 +137,7 @@ export function emitContextCells(spec: DiagramSpec): DiagramCells {
 
 /** Public wrapper preserved for cli/commands/generate.ts. */
 export function buildContextCells(model: ArchitectureModel): DiagramCells {
-  return emitContextCells(projectContext(model));
+  const spec = projectContext(model);
+  flushProjectionWarnings(spec.warnings);
+  return emitContextCells(spec);
 }
