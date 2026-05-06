@@ -15,11 +15,10 @@ import type { Config } from "../config/schema.js";
  *
  * Invariant on `codeRelationships`: for every relationship, both `sourceId`
  * and `targetId` are ids that exist in `codeElements`. Cross-container
- * references and unresolved stdlib references are silently dropped during
- * resolution; their per-component aggregate counts are surfaced on stderr,
- * not in the return value. Callers (Projection, model-builder, llm-model-
- * builder) can therefore treat both id fields as guaranteed-resolvable
- * without re-validating against `codeElements`.
+ * references and unresolved stdlib references are dropped from the return
+ * value during resolution; per-component aggregate counts are surfaced on
+ * stderr instead. Callers can therefore treat both id fields as
+ * guaranteed-resolvable without re-validating against `codeElements`.
  */
 export interface BuildCodeModelResult {
   codeElements: CodeElement[];

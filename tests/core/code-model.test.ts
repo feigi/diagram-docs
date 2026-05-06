@@ -414,6 +414,11 @@ describe("buildCodeModel collision handling", () => {
         /picking api\.users\.Auditable-(other|userservice)/,
       ),
     );
+    // Aggregate-counter line guards `totalCollisions++` from regressing to
+    // a no-op (separate from the per-collision warning above).
+    expect(stderrSpy).toHaveBeenCalledWith(
+      expect.stringMatching(/Warning: L4: \d+ name-collision pick\(s\)/),
+    );
     expect(codeRelationships.length).toBe(1);
     stderrSpy.mockRestore();
   });
@@ -447,14 +452,27 @@ describe("buildCodeModel collision handling", () => {
   });
 
   it("classifies cross-container target drops distinctly from stdlib drops", () => {
+    // Augment the cross-container fixture with a stdlib reference so a
+    // single buildCodeModel call exercises BOTH classification branches and
+    // we can assert that the two aggregate stderr lines are independently
+    // emitted. Guards against the `isCrossContainer` branch regressing to
+    // always-stdlib (or vice versa) without a test catching it.
+    const fixture = JSON.parse(
+      JSON.stringify(crossContainerFixture),
+    ) as RawStructure;
+    fixture.applications[0].modules[0].codeElements[0].references!.push({
+      targetName: "java.io.Serializable",
+      kind: "implements",
+    });
     const stderrSpy = vi
       .spyOn(process.stderr, "write")
       .mockImplementation(() => true);
-    buildCodeModel(crossContainerFixture, crossContainerComponents, baseConfig);
+    buildCodeModel(fixture, crossContainerComponents, baseConfig);
     const messages = stderrSpy.mock.calls
       .map((args) => String(args[0]))
       .join("\n");
     expect(messages).toContain("cross container boundaries");
+    expect(messages).toContain("dropped as stdlib/external");
     stderrSpy.mockRestore();
   });
 
