@@ -21,7 +21,7 @@ npm test                   # All tests (vitest)
 npm run typecheck          # Type check only
 npm run lint               # ESLint on src/
 npm run format:check       # Prettier check (run before pushing — separate CI gate)
-./scripts/setup-worktree.sh  # Run once in a freshly-created git worktree to install deps and activate the husky pre-commit hook
+./scripts/setup-worktree.sh  # Run once in a freshly-created git worktree: installs deps so husky's `prepare` script generates `.husky/_/`, then verifies the pre-commit shim and `core.hooksPath` are in place. Local-only (self-skips under $CI).
 
 # Run a single test file
 npx vitest run tests/analyzers/java.test.ts
