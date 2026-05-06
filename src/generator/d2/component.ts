@@ -90,6 +90,10 @@ export function emitComponentD2(
         throw new Error(
           `D2 L3 emitter: unexpected 'system' vertex "${v.id}" — projectComponent must not emit one at L3`,
         );
+      case "code-element":
+        throw new Error(
+          `D2 L3 emitter: unexpected 'code-element' vertex "${v.id}" — projectComponent must not emit one at L3`,
+        );
       default: {
         const exhaustive: never = v.kind;
         throw new Error(

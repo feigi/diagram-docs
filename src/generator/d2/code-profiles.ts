@@ -55,11 +55,10 @@ const javaTsPyProfile: LanguageRenderingProfile = {
   },
   renderElements(w, elements) {
     for (const el of elements) {
-      // `type` is a symbol kind now — it carries `signature`, never `members`.
-      // So only container kinds (class/interface/enum) can render the member
-      // block; everything else falls through to the plain-shape branch.
       const isContainer =
-        el.kind === "class" || el.kind === "interface" || el.kind === "enum";
+        el.elementKind === "class" ||
+        el.elementKind === "interface" ||
+        el.elementKind === "enum";
       if (isContainer && (el.members?.length ?? 0) > 0) {
         w.container(toD2Id(el.id), el.name, () => {
           w.raw("shape: class");
@@ -68,23 +67,14 @@ const javaTsPyProfile: LanguageRenderingProfile = {
           }
         });
       } else {
-        const shape = el.kind === "function" ? undefined : "class";
+        const shape = el.elementKind === "function" ? undefined : "class";
         w.shape(toD2Id(el.id), el.name, shape ? { shape } : undefined);
       }
     }
   },
-  renderExternalRefs(w, externalRels) {
-    const seen = new Set<string>();
-    for (const r of externalRels) {
-      if (seen.has(r.targetId)) continue;
-      seen.add(r.targetId);
-      const label = r.targetName ?? r.targetId.split(".").pop() ?? r.targetId;
-      w.shape(toD2Id(r.targetId), label, { "style.stroke-dash": "3" });
-    }
-  },
-  renderRelationships(w, rels) {
-    for (const r of rels) {
-      w.connection(toD2Id(r.sourceId), toD2Id(r.targetId), r.kind);
+  renderRelationships(w, edges) {
+    for (const e of edges) {
+      w.connection(toD2Id(e.sourceId), toD2Id(e.targetId), e.label);
     }
   },
 };
@@ -96,24 +86,21 @@ const cProfile: LanguageRenderingProfile = {
   },
   renderElements(w, elements) {
     const types = elements.filter(
-      (e) => e.kind === "struct" || e.kind === "typedef",
+      (e) => e.elementKind === "struct" || e.elementKind === "typedef",
     );
     const publicFns = elements.filter(
-      (e) => e.kind === "function" && e.visibility !== "private",
+      (e) => e.elementKind === "function" && e.visibility !== "private",
     );
     const internalFns = elements.filter(
-      (e) => e.kind === "function" && e.visibility === "private",
+      (e) => e.elementKind === "function" && e.visibility === "private",
     );
 
     if (types.length > 0) {
       w.container("types", "Types", () => {
         for (const el of types) {
-          // `struct` carries members; `typedef` does not (symbol kind).
-          // Narrow here so TS knows `.members` is valid only on the struct
-          // branch — typedef renders as a bare class shape with its name.
           w.container(toD2Id(el.id), el.name, () => {
             w.raw("shape: class");
-            if (el.kind === "struct") {
+            if (el.elementKind === "struct") {
               for (const m of el.members ?? []) {
                 w.raw(memberLine(m));
               }
@@ -133,19 +120,10 @@ const cProfile: LanguageRenderingProfile = {
       });
     }
   },
-  renderExternalRefs(w, externalRels) {
-    const seen = new Set<string>();
-    for (const r of externalRels) {
-      if (seen.has(r.targetId)) continue;
-      seen.add(r.targetId);
-      const label = r.targetName ?? r.targetId.split(".").pop() ?? r.targetId;
-      w.shape(toD2Id(r.targetId), label, { "style.stroke-dash": "3" });
-    }
-  },
-  renderRelationships(w, rels) {
-    for (const r of rels) {
-      if (r.kind === "inherits" || r.kind === "implements") continue; // C has neither
-      w.connection(toD2Id(r.sourceId), toD2Id(r.targetId), r.kind);
+  renderRelationships(w, edges) {
+    for (const e of edges) {
+      if (e.label === "inherits" || e.label === "implements") continue; // C has neither
+      w.connection(toD2Id(e.sourceId), toD2Id(e.targetId), e.label);
     }
   },
 };

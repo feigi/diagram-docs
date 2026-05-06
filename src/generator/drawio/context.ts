@@ -94,6 +94,10 @@ function toCell(v: PVertex, hasChildren: boolean): VertexSpec {
         parent: v.parentId ? toDrawioId(v.parentId) : undefined,
       };
     }
+    case "code-element":
+      throw new Error(
+        `drawio: unexpected 'code-element' vertex "${v.id}" — cellsFromSpec is for L1/L2/L3, not L4 (use buildCodeCells / emitCodeCells)`,
+      );
     default: {
       const exhaustive: never = v.kind;
       throw new Error(`drawio: unhandled VertexKind "${exhaustive}"`);
