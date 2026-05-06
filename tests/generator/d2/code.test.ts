@@ -126,14 +126,30 @@ describe("generateCodeDiagram", () => {
   });
 
   it("renders external refs with valid D2 style syntax (not scalar 'style: dashed')", () => {
+    const otherComponent: Component = {
+      id: "other",
+      containerId: "api",
+      name: "other",
+      description: "",
+      technology: "",
+      moduleIds: ["other"],
+    } as any;
     const modelWithExternal: ArchitectureModel = {
       ...model,
+      components: [component, otherComponent],
       codeElements: [
         {
           id: "api.users.UserService",
           componentId: "users",
           kind: "class",
           name: "UserService",
+          visibility: "public",
+        },
+        {
+          id: "api.other.ExternalDep",
+          componentId: "other",
+          kind: "class",
+          name: "ExternalDep",
           visibility: "public",
         },
       ],
@@ -158,14 +174,23 @@ describe("generateCodeDiagram", () => {
 
   it("C profile renders external refs with valid D2 style syntax", () => {
     const cComponent: Component = { ...component, id: "ht" } as any;
+    const otherComponent: Component = { ...component, id: "other" } as any;
     const cModel: ArchitectureModel = {
       ...model,
+      components: [cComponent, otherComponent],
       codeElements: [
         {
           id: "lib.ht.hash_insert",
           componentId: "ht",
           kind: "function",
           name: "hash_insert",
+          visibility: "public",
+        },
+        {
+          id: "lib.other.external_helper",
+          componentId: "other",
+          kind: "function",
+          name: "external_helper",
           visibility: "public",
         },
       ],
@@ -267,6 +292,7 @@ describe("generateCodeDiagram", () => {
     const cComponent: Component = { ...component, id: "ht" } as any;
     const cModel: ArchitectureModel = {
       ...model,
+      components: [cComponent],
       codeElements: [
         {
           id: "lib.ht.hash_table",
