@@ -20,6 +20,8 @@ npm run dev -- <cmd>       # Run without building (tsx)
 npm test                   # All tests (vitest)
 npm run typecheck          # Type check only
 npm run lint               # ESLint on src/
+npm run format:check       # Prettier check (run before pushing — separate CI gate)
+./scripts/setup-worktree.sh  # Run once in a freshly-created git worktree to install deps and activate the husky pre-commit hook
 
 # Run a single test file
 npx vitest run tests/analyzers/java.test.ts
