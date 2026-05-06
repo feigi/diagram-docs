@@ -637,7 +637,11 @@ describe("buildCodeModel target-resolution invariant", () => {
     },
   ];
 
-  for (const { name, raw: rawF, components: compsF } of fixturesWithRelationships) {
+  for (const {
+    name,
+    raw: rawF,
+    components: compsF,
+  } of fixturesWithRelationships) {
     it(`every relationship's source and target id exist in codeElements (${name})`, () => {
       const stderrSpy = vi
         .spyOn(process.stderr, "write")
