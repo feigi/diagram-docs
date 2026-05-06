@@ -17,12 +17,7 @@ const baseConfig = makeConfig(true);
 describe("buildCodeModel", () => {
   it("short-circuits to empty when levels.code is false", () => {
     const result = buildCodeModel(raw, components, makeConfig(false));
-    expect(result).toEqual({
-      codeElements: [],
-      codeRelationships: [],
-      droppedReferences: [],
-      ambiguousResolutions: [],
-    });
+    expect(result).toEqual({ codeElements: [], codeRelationships: [] });
   });
 
   it("assigns qualified IDs rooted in containerId.componentId", () => {
@@ -619,178 +614,45 @@ describe("buildCodeModel collision handling", () => {
   });
 });
 
-describe("buildCodeModel droppedReferences", () => {
-  it("populates the array with both stdlib and cross-container drops", () => {
-    // Two containers. `user-api.users.UserService` references:
-    //   - `Logger` (exists only in a different container → cross-container)
-    //   - `java.io.Serializable` (no such element anywhere → stdlib)
-    const fixture: RawStructure = {
-      applications: [
-        {
-          id: "user-api",
-          name: "user-api",
-          language: "java",
-          path: "/tmp/user-api",
-          modules: [
-            {
-              id: "users",
-              path: "/tmp/user-api/users",
-              name: "users",
-              files: ["UserService.java"],
-              exports: [],
-              imports: [],
-              metadata: {},
-              codeElements: [
-                {
-                  id: "UserService",
-                  name: "UserService",
-                  kind: "class",
-                  visibility: "public",
-                  references: [
-                    { targetName: "Logger", kind: "uses" },
-                    {
-                      targetName: "java.io.Serializable",
-                      kind: "implements",
-                    },
-                  ],
-                  location: { file: "UserService.java", line: 1 },
-                },
-                {
-                  id: "UserRepo",
-                  name: "UserRepo",
-                  kind: "interface",
-                  visibility: "public",
-                  location: { file: "UserService.java", line: 20 },
-                },
-              ],
-            },
-          ],
-          externalDependencies: [],
-          internalImports: [],
-        },
-        {
-          id: "order-api",
-          name: "order-api",
-          language: "java",
-          path: "/tmp/order-api",
-          modules: [
-            {
-              id: "logging",
-              path: "/tmp/order-api/logging",
-              name: "logging",
-              files: ["Logger.java"],
-              exports: [],
-              imports: [],
-              metadata: {},
-              codeElements: [
-                {
-                  id: "Logger",
-                  name: "Logger",
-                  kind: "class",
-                  visibility: "public",
-                  location: { file: "Logger.java", line: 1 },
-                },
-                {
-                  id: "LogConfig",
-                  name: "LogConfig",
-                  kind: "class",
-                  visibility: "public",
-                  location: { file: "Logger.java", line: 10 },
-                },
-              ],
-            },
-          ],
-          externalDependencies: [],
-          internalImports: [],
-        },
-      ],
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    } as any;
-    const comps: Component[] = [
-      {
-        id: "users",
-        containerId: "user-api",
-        name: "users",
-        description: "",
-        technology: "",
-        moduleIds: ["users"],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
-      {
-        id: "logging",
-        containerId: "order-api",
-        name: "logging",
-        description: "",
-        technology: "",
-        moduleIds: ["logging"],
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any,
-    ];
-    const stderrSpy = vi
-      .spyOn(process.stderr, "write")
-      .mockImplementation(() => true);
-    const res = buildCodeModel(fixture, comps, baseConfig);
-    stderrSpy.mockRestore();
+describe("buildCodeModel target-resolution invariant", () => {
+  // Documented invariant on BuildCodeModelResult.codeRelationships: every
+  // sourceId and every targetId references an id present in codeElements.
+  // Verified across the public fixtures so a regression in resolution or
+  // filtering would fail here, not silently in an Emitter.
+  const fixturesWithRelationships: Array<{
+    name: string;
+    raw: RawStructure;
+    components: Component[];
+  }> = [
+    { name: "codeFixture", raw, components },
+    {
+      name: "crossComponentFixture",
+      raw: crossComponentFixture,
+      components: crossComponentComponents,
+    },
+    {
+      name: "crossContainerFixture",
+      raw: crossContainerFixture,
+      components: crossContainerComponents,
+    },
+  ];
 
-    const reasons = new Set(res.droppedReferences.map((d) => d.reason));
-    expect(reasons.has("stdlib")).toBe(true);
-    expect(reasons.has("cross-container")).toBe(true);
-
-    for (const drop of res.droppedReferences) {
-      expect(drop.sourceId).toBeTruthy();
-      expect(drop.targetRaw).toBeTruthy();
-      expect(drop.componentId).toBeTruthy();
-    }
-
-    // Spot-check the specific drop entries match the fixture.
-    const stdlib = res.droppedReferences.find((d) => d.reason === "stdlib")!;
-    expect(stdlib).toMatchObject({
-      sourceId: "user-api.users.UserService",
-      targetRaw: "java.io.Serializable",
-      componentId: "users",
+  for (const { name, raw: rawF, components: compsF } of fixturesWithRelationships) {
+    it(`every relationship's source and target id exist in codeElements (${name})`, () => {
+      const stderrSpy = vi
+        .spyOn(process.stderr, "write")
+        .mockImplementation(() => true);
+      const { codeElements, codeRelationships } = buildCodeModel(
+        rawF,
+        compsF,
+        baseConfig,
+      );
+      stderrSpy.mockRestore();
+      const ids = new Set(codeElements.map((e) => e.id));
+      for (const r of codeRelationships) {
+        expect(ids).toContain(r.sourceId);
+        expect(ids).toContain(r.targetId);
+      }
     });
-    const crossContainer = res.droppedReferences.find(
-      (d) => d.reason === "cross-container",
-    )!;
-    expect(crossContainer).toMatchObject({
-      sourceId: "user-api.users.UserService",
-      targetRaw: "Logger",
-      componentId: "users",
-    });
-  });
-
-  it("records an ambiguous resolution when resolver picks among multiple candidates", () => {
-    // Two Auditable interfaces in the same module create a same-component
-    // collision when UserService references `Auditable`. The resolver still
-    // picks one (so a CodeRelationship IS created), but the pick is
-    // surfaced via ambiguousResolutions — NOT droppedReferences, because
-    // no reference was actually dropped.
-    const collidingFixture = JSON.parse(JSON.stringify(raw));
-    collidingFixture.applications[0].modules[0].codeElements.push({
-      id: "Auditable",
-      name: "Auditable",
-      kind: "interface",
-      visibility: "public",
-      location: { file: "Other.java", line: 1 },
-    });
-    const stderrSpy = vi
-      .spyOn(process.stderr, "write")
-      .mockImplementation(() => true);
-    const res = buildCodeModel(collidingFixture, components, baseConfig);
-    stderrSpy.mockRestore();
-
-    // Collisions don't appear in droppedReferences — a relationship was created.
-    expect(res.droppedReferences).toEqual([]);
-    expect(res.codeRelationships.length).toBeGreaterThan(0);
-
-    expect(res.ambiguousResolutions.length).toBeGreaterThan(0);
-    for (const a of res.ambiguousResolutions) {
-      expect(a.sourceId).toBeTruthy();
-      expect(a.targetRaw).toBe("Auditable");
-      expect(a.componentId).toBe("users");
-      expect(a.candidateCount).toBeGreaterThan(1);
-      expect(a.pickedId).toMatch(/^api\.users\.Auditable-/);
-      expect(a.scope).toBe("component");
-    }
-  });
+  }
 });

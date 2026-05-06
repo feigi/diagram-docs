@@ -10,27 +10,20 @@ import type {
 } from "../analyzers/types.js";
 import type { Config } from "../config/schema.js";
 
-export interface DroppedReference {
-  sourceId: string;
-  targetRaw: string;
-  reason: "stdlib" | "cross-container";
-  componentId: string;
-}
-
-export interface AmbiguousResolution {
-  sourceId: string;
-  targetRaw: string;
-  componentId: string;
-  candidateCount: number;
-  pickedId: string;
-  scope: "component" | "container";
-}
-
+/**
+ * Result of building the L4 (Code) part of the model.
+ *
+ * Invariant on `codeRelationships`: for every relationship, both `sourceId`
+ * and `targetId` are ids that exist in `codeElements`. Cross-container
+ * references and unresolved stdlib references are silently dropped during
+ * resolution; their per-component aggregate counts are surfaced on stderr,
+ * not in the return value. Callers (Projection, model-builder, llm-model-
+ * builder) can therefore treat both id fields as guaranteed-resolvable
+ * without re-validating against `codeElements`.
+ */
 export interface BuildCodeModelResult {
   codeElements: CodeElement[];
   codeRelationships: CodeRelationship[];
-  droppedReferences: DroppedReference[];
-  ambiguousResolutions: AmbiguousResolution[];
 }
 
 interface ResolveContext {
@@ -48,12 +41,7 @@ export function buildCodeModel(
   config: Pick<Config, "levels" | "code">,
 ): BuildCodeModelResult {
   if (!config.levels?.code) {
-    return {
-      codeElements: [],
-      codeRelationships: [],
-      droppedReferences: [],
-      ambiguousResolutions: [],
-    };
+    return { codeElements: [], codeRelationships: [] };
   }
 
   const includePrivate = config.code?.includePrivate ?? false;
@@ -220,14 +208,17 @@ export function buildCodeModel(
   for (const list of ctx.byComponentName.values()) list.sort(byId);
   for (const list of ctx.byContainerName.values()) list.sort(byId);
 
-  // Machine-readable sinks for reference bookkeeping. `droppedReferences`
-  // holds refs that produced no edge (stdlib/external or cross-container);
-  // `ambiguousResolutions` holds refs where an edge WAS created but the
-  // resolver had to pick among >1 candidate. The stderr aggregate messages
-  // below are derived from these arrays so callers can introspect reasons
-  // without parsing log lines.
-  const droppedReferences: DroppedReference[] = [];
-  const ambiguousResolutions: AmbiguousResolution[] = [];
+  // Per-component aggregate counters. Drops and collisions are NOT returned
+  // to callers — they're stderr diagnostics only. If a future caller needs
+  // structured access to them, add an explicit `diagnostics` field to
+  // BuildCodeModelResult; do not re-introduce parallel arrays.
+  const stdlibByComponent = new Map<string, number>();
+  const crossContainerByComponent = new Map<string, number>();
+  const collisionsByComponent = new Map<string, number>();
+  let totalStdlib = 0;
+  let totalCrossContainer = 0;
+  let totalCollisions = 0;
+
   // Pre-compute cross-container name index so we can classify drops.
   const byGlobalName = new Map<string, CodeElement[]>();
   for (const el of filteredElements) {
@@ -248,15 +239,12 @@ export function buildCodeModel(
             ref,
             owner,
             ctx,
-            (count, where, picked, scope) => {
-              ambiguousResolutions.push({
-                sourceId: sourceQualified,
-                targetRaw: ref.targetName,
-                componentId: owner.componentId,
-                candidateCount: count,
-                pickedId: picked,
-                scope,
-              });
+            (count, where, picked) => {
+              collisionsByComponent.set(
+                owner.componentId,
+                (collisionsByComponent.get(owner.componentId) ?? 0) + 1,
+              );
+              totalCollisions++;
               process.stderr.write(
                 `Warning: L4: name collision resolving ${ref.kind} ${ref.targetName} ` +
                   `from ${sourceQualified}: ${count} candidates in ${where}, ` +
@@ -268,17 +256,22 @@ export function buildCodeModel(
             // Classify the drop: cross-container (architecture edge lost) vs
             // external (stdlib / third-party — expected noise).
             const global = byGlobalName.get(ref.targetName);
-            const reason: DroppedReference["reason"] =
-              global &&
-              global.some((el) => el.containerId !== owner.containerId)
-                ? "cross-container"
-                : "stdlib";
-            droppedReferences.push({
-              sourceId: sourceQualified,
-              targetRaw: ref.targetName,
-              reason,
-              componentId: owner.componentId,
-            });
+            const isCrossContainer =
+              global !== undefined &&
+              global.some((el) => el.containerId !== owner.containerId);
+            if (isCrossContainer) {
+              crossContainerByComponent.set(
+                owner.componentId,
+                (crossContainerByComponent.get(owner.componentId) ?? 0) + 1,
+              );
+              totalCrossContainer++;
+            } else {
+              stdlibByComponent.set(
+                owner.componentId,
+                (stdlibByComponent.get(owner.componentId) ?? 0) + 1,
+              );
+              totalStdlib++;
+            }
             continue;
           }
           relationships.push({
@@ -290,37 +283,6 @@ export function buildCodeModel(
         }
       }
     }
-  }
-
-  // Derive stderr aggregates from the two sinks in a single pass each — the
-  // totals fall out of the bucketing loop, no extra filter() scans needed.
-  const stdlibByComponent = new Map<string, number>();
-  const crossContainerByComponent = new Map<string, number>();
-  const collisionsByComponent = new Map<string, number>();
-  let totalStdlib = 0;
-  let totalCrossContainer = 0;
-  let totalCollisions = 0;
-  for (const drop of droppedReferences) {
-    if (drop.reason === "stdlib") {
-      stdlibByComponent.set(
-        drop.componentId,
-        (stdlibByComponent.get(drop.componentId) ?? 0) + 1,
-      );
-      totalStdlib++;
-    } else {
-      crossContainerByComponent.set(
-        drop.componentId,
-        (crossContainerByComponent.get(drop.componentId) ?? 0) + 1,
-      );
-      totalCrossContainer++;
-    }
-  }
-  for (const amb of ambiguousResolutions) {
-    collisionsByComponent.set(
-      amb.componentId,
-      (collisionsByComponent.get(amb.componentId) ?? 0) + 1,
-    );
-    totalCollisions++;
   }
 
   if (totalStdlib > 0) {
@@ -363,8 +325,6 @@ export function buildCodeModel(
   return {
     codeElements: filteredElements,
     codeRelationships: relationships,
-    droppedReferences,
-    ambiguousResolutions,
   };
 }
 
@@ -418,12 +378,7 @@ function resolveReference(
   ref: RawCodeReference,
   owner: { containerId: string; componentId: string },
   ctx: ResolveContext,
-  onCollision: (
-    count: number,
-    where: string,
-    pickedId: string,
-    scope: "component" | "container",
-  ) => void,
+  onCollision: (count: number, where: string, pickedId: string) => void,
 ): CodeElement | null {
   // FQN-keyed lookups first — these are unambiguous when the analyzer was
   // able to resolve the reference from imports/package context. Skip the
@@ -448,7 +403,6 @@ function resolveReference(
         sameComp.length,
         `component ${owner.componentId}`,
         sameComp[0].id,
-        "component",
       );
     }
     return sameComp[0];
@@ -463,7 +417,6 @@ function resolveReference(
         sameContainer.length,
         `container ${owner.containerId}`,
         sameContainer[0].id,
-        "container",
       );
     }
     return sameContainer[0];
