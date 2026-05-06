@@ -1,18 +1,23 @@
+import type { ArchitectureModel, Component } from "../../analyzers/types.js";
 import { D2Writer } from "./writer.js";
 import { sortById, toD2Id } from "./stability.js";
-import type { ArchitectureModel, Component } from "../../analyzers/types.js";
-import type { DiagramSpec, EdgeSpec, VertexSpec } from "../projection/types.js";
 import { projectCode } from "../projection/code.js";
 import { flushProjectionWarnings } from "../projection/index.js";
+import type {
+  CodeVertexSpec,
+  DiagramSpec,
+  EdgeSpec,
+  StructuralVertexSpec,
+} from "../projection/types.js";
 
 /**
  * Per-language rendering profile. The emitter handles structural concerns
- * (boundary header, cross-component stubs); the profile only decides how
- * local elements and relationships are *drawn*.
+ * (boundary header, cross-component containers); the profile only decides
+ * how local code-element vertices and relationship lines are *drawn*.
  */
 export interface LanguageRenderingProfile {
   renderHeader(w: D2Writer, component: { id: string; name: string }): void;
-  renderElements(w: D2Writer, elements: VertexSpec[]): void;
+  renderElements(w: D2Writer, elements: CodeVertexSpec[]): void;
   renderRelationships(w: D2Writer, relationships: EdgeSpec[]): void;
 }
 
@@ -22,18 +27,21 @@ export interface LanguageRenderingProfile {
  * Structural decisions live here, not in profiles:
  * - The local component boundary is the `kind: "component"` vertex without
  *   the `cross-component` tag.
- * - Local elements are `kind: "code-element"` vertices parented to the local
- *   boundary; profiles render them.
- * - Cross-component elements are rendered uniformly as stroke-dashed boxes
- *   (language-agnostic — both supported profiles agreed on this shape, so it
- *   moved out of the profile API).
+ * - Local elements are rendered via the profile.
+ * - Each foreign component referenced by a cross-component edge becomes a
+ *   stroke-dashed D2 container holding its referenced code-elements. Both
+ *   supported profiles agreed on this shape, so it lives in the emitter
+ *   rather than the profile API.
+ * - Edges are split internal-first / cross-component-second to keep emitted
+ *   D2 byte-stable across the projection-layer refactor.
  */
 export function emitCodeD2(
   spec: DiagramSpec,
   profile: LanguageRenderingProfile,
 ): string {
   const boundary = spec.vertices.find(
-    (v) => v.kind === "component" && !v.tags?.includes("cross-component"),
+    (v): v is StructuralVertexSpec =>
+      v.kind === "component" && !v.tags?.includes("cross-component"),
   );
   if (!boundary) {
     throw new Error("projectCode must emit a local component boundary vertex");
@@ -41,14 +49,35 @@ export function emitCodeD2(
 
   const locals = sortById(
     spec.vertices.filter(
-      (v) => v.kind === "code-element" && v.parentId === boundary.id,
+      (v): v is CodeVertexSpec =>
+        v.kind === "code-element" && v.parentId === boundary.id,
     ),
   );
-  const externals = sortById(
+  const foreignBoundaries = sortById(
     spec.vertices.filter(
-      (v) => v.kind === "code-element" && v.parentId !== boundary.id,
+      (v): v is StructuralVertexSpec =>
+        v.kind === "component" && !!v.tags?.includes("cross-component"),
     ),
   );
+  const foreignElementsByParent = new Map<string, CodeVertexSpec[]>();
+  for (const v of spec.vertices) {
+    if (v.kind !== "code-element" || v.parentId === boundary.id) continue;
+    const parent = v.parentId ?? "";
+    const list = foreignElementsByParent.get(parent) ?? [];
+    list.push(v);
+    foreignElementsByParent.set(parent, list);
+  }
+
+  const localIds = new Set(locals.map((v) => v.id));
+  const internalEdges: EdgeSpec[] = [];
+  const externalEdges: EdgeSpec[] = [];
+  for (const e of spec.edges) {
+    if (localIds.has(e.sourceId) && localIds.has(e.targetId)) {
+      internalEdges.push(e);
+    } else {
+      externalEdges.push(e);
+    }
+  }
 
   const w = new D2Writer();
   w.comment(`C4 Code-level diagram for component '${boundary.name}'`);
@@ -56,21 +85,21 @@ export function emitCodeD2(
   w.blank();
   profile.renderHeader(w, boundary);
   profile.renderElements(w, locals);
-  renderExternalRefs(w, externals);
-  profile.renderRelationships(w, spec.edges);
+  for (const fb of foreignBoundaries) {
+    const children = sortById(foreignElementsByParent.get(fb.id) ?? []);
+    w.container(toD2Id(fb.id), `${fb.name}\\n[External Component]`, () => {
+      w.raw("style.stroke-dash: 3");
+      for (const child of children) {
+        w.shape(toD2Id(child.id), child.name, { "style.stroke-dash": "3" });
+      }
+    });
+  }
+  profile.renderRelationships(w, internalEdges);
+  profile.renderRelationships(w, externalEdges);
   return w.toString();
 }
 
-function renderExternalRefs(w: D2Writer, externals: VertexSpec[]): void {
-  for (const v of externals) {
-    w.shape(toD2Id(v.id), v.name, { "style.stroke-dash": "3" });
-  }
-}
-
-/**
- * Public wrapper preserved for cli/commands/generate.ts. Accepts the model +
- * component pair, projects to a DiagramSpec, flushes warnings, then emits.
- */
+/** Convenience wrapper: project then emit. Flushes warnings to stderr. */
 export function generateCodeDiagram(
   model: ArchitectureModel,
   component: Component,

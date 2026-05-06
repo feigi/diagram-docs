@@ -28,6 +28,7 @@ import { generateContainerDiagram } from "../../generator/d2/container.js";
 import { generateComponentDiagram } from "../../generator/d2/component.js";
 import { generateCodeDiagram } from "../../generator/d2/code.js";
 import { getProfileForLanguage } from "../../generator/d2/code-profiles.js";
+import { hasProjectionWarnings } from "../../generator/projection/index.js";
 import { scaffoldCodeFile } from "../../generator/d2/code-scaffold.js";
 import { scaffoldUserFiles } from "../../generator/d2/scaffold.js";
 import {
@@ -434,6 +435,13 @@ export const generateCommand = new Command("generate")
       if (driftWarnings.some((w) => w.severity === "error")) {
         process.exitCode = 1;
       }
+    }
+
+    // Projection warnings (dropped L4 edges, unresolved code-element refs)
+    // signal a malformed or stale model — surface as a non-zero exit so CI
+    // doesn't pass green when the rendered diagrams silently lose edges.
+    if (hasProjectionWarnings()) {
+      process.exitCode = 1;
     }
 
     console.error(`Done in ${formatElapsed(Date.now() - startTime)}.`);

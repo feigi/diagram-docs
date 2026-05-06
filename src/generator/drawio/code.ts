@@ -1,7 +1,12 @@
 import type { ArchitectureModel, Component } from "../../analyzers/types.js";
-import type { DiagramSpec, VertexSpec } from "../projection/types.js";
 import { projectCode } from "../projection/code.js";
 import { flushProjectionWarnings } from "../projection/index.js";
+import type {
+  CodeVertexElementKind,
+  CodeVertexSpec,
+  DiagramSpec,
+  StructuralVertexSpec,
+} from "../projection/types.js";
 import { STYLES } from "./styles.js";
 import type { StyleKey } from "./styles.js";
 import { toDrawioId, edgeId } from "./stability.js";
@@ -11,17 +16,20 @@ import type {
   EdgeSpec as DrawioEdge,
 } from "./context.js";
 
-const CONTAINER_ELEMENT_KINDS = new Set([
-  "class",
-  "interface",
-  "enum",
-  "struct",
-]);
+const CONTAINER_ELEMENT_KINDS: ReadonlySet<CodeVertexElementKind> =
+  new Set<CodeVertexElementKind>(["class", "interface", "enum", "struct"]);
 
-function styleKeyFor(elementKind: string | undefined): StyleKey {
-  return CONTAINER_ELEMENT_KINDS.has(elementKind ?? "")
-    ? "code-class"
-    : "code-fn";
+function styleKeyFor(elementKind: CodeVertexElementKind): StyleKey {
+  return CONTAINER_ELEMENT_KINDS.has(elementKind) ? "code-class" : "code-fn";
+}
+
+const CROSS_COMPONENT = "cross-component";
+
+// `dashed=2` is drawio's "dotted" stroke — visually distinct from the
+// `dashed=1` already on system-boundary, so a foreign-component cell
+// reads as cross-component without color changes.
+function withDottedStroke(style: string): string {
+  return style.includes("dashed=2") ? style : `${style};dashed=2`;
 }
 
 export function emitCodeCells(spec: DiagramSpec): DiagramCells {
@@ -30,13 +38,7 @@ export function emitCodeCells(spec: DiagramSpec): DiagramCells {
 
   for (const v of spec.vertices) {
     if (v.kind === "component") {
-      vertices.push({
-        id: toDrawioId(v.id),
-        value: `${v.name}\n[Component]`,
-        style: STYLES["system-boundary"],
-        kind: "system-boundary",
-        parent: v.parentId ? toDrawioId(v.parentId) : undefined,
-      });
+      vertices.push(toBoundaryCell(v));
       continue;
     }
     if (v.kind === "code-element") {
@@ -44,7 +46,7 @@ export function emitCodeCells(spec: DiagramSpec): DiagramCells {
       continue;
     }
     throw new Error(
-      `drawio L4 emitter: unexpected vertex kind "${v.kind}" for id "${v.id}"`,
+      `drawio L4 emitter: unexpected vertex kind "${(v as { kind: string }).kind}" for id "${(v as { id: string }).id}"`,
     );
   }
 
@@ -61,18 +63,34 @@ export function emitCodeCells(spec: DiagramSpec): DiagramCells {
   return { vertices, edges };
 }
 
-function toCodeCell(v: VertexSpec): DrawioVertex {
-  const styleKey = styleKeyFor(v.elementKind);
+function toBoundaryCell(v: StructuralVertexSpec): DrawioVertex {
+  const isCrossComponent = v.tags?.includes(CROSS_COMPONENT) ?? false;
+  const baseStyle = STYLES["system-boundary"];
   return {
     id: toDrawioId(v.id),
-    value: `${v.name}\n[${v.elementKind ?? "type"}]`,
-    style: STYLES[styleKey],
+    value: isCrossComponent
+      ? `${v.name}\n[External Component]`
+      : `${v.name}\n[Component]`,
+    style: isCrossComponent ? withDottedStroke(baseStyle) : baseStyle,
+    kind: "system-boundary",
+    parent: v.parentId ? toDrawioId(v.parentId) : undefined,
+  };
+}
+
+function toCodeCell(v: CodeVertexSpec): DrawioVertex {
+  const styleKey = styleKeyFor(v.elementKind);
+  const isCrossComponent = v.tags?.includes(CROSS_COMPONENT) ?? false;
+  const baseStyle = STYLES[styleKey];
+  return {
+    id: toDrawioId(v.id),
+    value: `${v.name}\n[${v.elementKind}]`,
+    style: isCrossComponent ? withDottedStroke(baseStyle) : baseStyle,
     kind: styleKey,
     parent: v.parentId ? toDrawioId(v.parentId) : undefined,
   };
 }
 
-/** Public wrapper preserved for cli/commands/generate.ts. */
+/** Convenience wrapper: project then emit cells. Flushes warnings to stderr. */
 export function buildCodeCells(
   model: ArchitectureModel,
   component: Component,

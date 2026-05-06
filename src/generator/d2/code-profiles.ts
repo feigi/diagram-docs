@@ -3,6 +3,8 @@ import type { LanguageRenderingProfile } from "./code.js";
 
 export type ProfileLanguage = "java" | "typescript" | "python" | "c";
 
+export type SupportedLanguage = ProfileLanguage;
+
 export function getProfileForLanguage(
   lang: ProfileLanguage,
 ): LanguageRenderingProfile {
@@ -122,7 +124,9 @@ const cProfile: LanguageRenderingProfile = {
   },
   renderRelationships(w, edges) {
     for (const e of edges) {
-      if (e.label === "inherits" || e.label === "implements") continue; // C has neither
+      // C has neither inheritance nor interfaces — drop those edge kinds
+      // even if a hand-written model relabels them.
+      if (e.kind === "inherits" || e.kind === "implements") continue;
       w.connection(toD2Id(e.sourceId), toD2Id(e.targetId), e.label);
     }
   },
