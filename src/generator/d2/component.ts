@@ -5,6 +5,13 @@ import { flushProjectionWarnings } from "../projection/index.js";
 import { D2Writer, wrapText } from "./writer.js";
 import { toD2Id } from "./stability.js";
 
+function assertNever(v: never): never {
+  const stray = v as { kind?: string; id?: string };
+  throw new Error(
+    `D2 L3 emitter: unhandled VertexKind "${stray.kind}" for ref "${stray.id}"`,
+  );
+}
+
 export interface ComponentDiagramOptions {
   /** Component IDs that have a C4 code-level diagram to link to. */
   codeLinks?: Set<string>;
@@ -95,10 +102,7 @@ export function emitComponentD2(
           `D2 L3 emitter: unexpected 'code-element' vertex "${v.id}" — projectComponent must not emit one at L3`,
         );
       default: {
-        const exhaustive: never = v.kind;
-        throw new Error(
-          `D2 L3 emitter: unhandled VertexKind "${exhaustive}" for ref "${(v as { id: string }).id}"`,
-        );
+        assertNever(v);
       }
     }
   }

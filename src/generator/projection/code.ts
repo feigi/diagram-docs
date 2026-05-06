@@ -5,10 +5,11 @@ import type {
 } from "../../analyzers/types.js";
 import { sortById, sortRelationships } from "../d2/stability.js";
 import type {
-  CodeVertexElementKind,
   CodeVertexMember,
+  CodeVertexSpec,
   DiagramSpec,
   EdgeSpec,
+  StructuralVertexSpec,
   VertexSpec,
 } from "./types.js";
 
@@ -25,8 +26,12 @@ import type {
  *   demand (only when at least one edge crosses into it) and is itself tagged
  *   `"cross-component"`.
  * - Edges carry `relationship.kind` in `EdgeSpec.label` (matches the existing
- *   L1–L3 convention where `label` is whatever the emitter wants to render on
- *   the connection).
+ *   L1–L3 convention) and the same value in `EdgeSpec.kind` so emitters can
+ *   filter without re-parsing free-form labels.
+ *
+ * Post-condition: every `EdgeSpec.sourceId` and `EdgeSpec.targetId` appears as
+ * a `VertexSpec.id` in the result. Emitters can rely on this to render edges
+ * without dangling references.
  *
  * Invariant assumption (from `core/code-model.ts`): every `CodeRelationship`
  * has source and target ids that exist in `model.codeElements`. Projection is
@@ -46,13 +51,7 @@ export function projectCode(
   const edges: EdgeSpec[] = [];
   const warnings: string[] = [];
 
-  vertices.push({
-    id: component.id,
-    name: component.name,
-    kind: "component",
-    technology: component.technology || undefined,
-    description: component.description || undefined,
-  });
+  vertices.push(makeComponentVertex(component));
 
   const allElements = model.codeElements ?? [];
   const elementById = new Map(allElements.map((e) => [e.id, e]));
@@ -71,7 +70,16 @@ export function projectCode(
 
   const rels = sortRelationships(model.codeRelationships ?? []);
   for (const r of rels) {
-    if (!localIds.has(r.sourceId)) continue;
+    if (!localIds.has(r.sourceId)) {
+      // Source belongs to another local component: expected, no warning.
+      // Source unknown to the whole model: contract violation, surface it.
+      if (!elementById.has(r.sourceId)) {
+        warnings.push(
+          `L4 (${componentId}): relationship source "${r.sourceId}" has no matching code element; dropping edge to "${r.targetId}".`,
+        );
+      }
+      continue;
+    }
 
     if (localIds.has(r.targetId)) {
       edges.push(makeEdge(r));
@@ -97,11 +105,7 @@ export function projectCode(
     if (!foreignComponentIds.has(foreignComp.id)) {
       foreignComponentIds.add(foreignComp.id);
       vertices.push({
-        id: foreignComp.id,
-        name: foreignComp.name,
-        kind: "component",
-        technology: foreignComp.technology || undefined,
-        description: foreignComp.description || undefined,
+        ...makeComponentVertex(foreignComp),
         tags: ["cross-component"],
       });
     }
@@ -120,7 +124,22 @@ export function projectCode(
   return { vertices, edges, warnings };
 }
 
-function makeCodeVertex(el: CodeElement, parentId: string): VertexSpec {
+function makeComponentVertex(component: {
+  id: string;
+  name: string;
+  technology?: string;
+  description?: string;
+}): StructuralVertexSpec {
+  return {
+    id: component.id,
+    name: component.name,
+    kind: "component",
+    technology: component.technology || undefined,
+    description: component.description || undefined,
+  };
+}
+
+function makeCodeVertex(el: CodeElement, parentId: string): CodeVertexSpec {
   const members: CodeVertexMember[] | undefined =
     "members" in el && el.members
       ? el.members.map((m) => ({ name: m.name, signature: m.signature }))
@@ -130,8 +149,7 @@ function makeCodeVertex(el: CodeElement, parentId: string): VertexSpec {
     name: el.name,
     kind: "code-element",
     parentId,
-    elementKind: el.kind as CodeVertexElementKind,
-    language: el.language,
+    elementKind: el.kind,
     members,
     visibility: el.visibility,
   };
@@ -143,5 +161,6 @@ function makeEdge(r: CodeRelationship): EdgeSpec {
     sourceId: r.sourceId,
     targetId: r.targetId,
     label: r.label ?? r.kind,
+    kind: r.kind,
   };
 }

@@ -72,7 +72,7 @@ export function projectComponent(
     const ext = model.externalSystems.find((e) => e.id === rid);
     const otherContainer = model.containers.find((c) => c.id === rid);
     const otherComp = (model.components ?? []).find((c) => c.id === rid);
-    let kind: VertexKind | undefined;
+    let kind: Exclude<VertexKind, "code-element"> | undefined;
     let name: string | undefined;
     let technology: string | undefined;
     let description: string | undefined;

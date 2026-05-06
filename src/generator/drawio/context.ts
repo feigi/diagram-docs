@@ -9,6 +9,11 @@ import { STYLES } from "./styles.js";
 import type { StyleKey } from "./styles.js";
 import { toDrawioId, edgeId, wrapEdgeLabel } from "./stability.js";
 
+function assertNever(v: never): never {
+  const stray = v as { kind?: string };
+  throw new Error(`drawio: unhandled VertexKind "${stray.kind}"`);
+}
+
 /** Drawio cell representation (style-aware, kept stable for L4 + layout). */
 export interface VertexSpec {
   id: string;
@@ -98,10 +103,8 @@ function toCell(v: PVertex, hasChildren: boolean): VertexSpec {
       throw new Error(
         `drawio: unexpected 'code-element' vertex "${v.id}" — cellsFromSpec is for L1/L2/L3, not L4 (use buildCodeCells / emitCodeCells)`,
       );
-    default: {
-      const exhaustive: never = v.kind;
-      throw new Error(`drawio: unhandled VertexKind "${exhaustive}"`);
-    }
+    default:
+      return assertNever(v);
   }
 }
 
