@@ -1,7 +1,13 @@
 import { Command } from "commander";
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { findConfigFile, loadConfig } from "../../config/loader.js";
-import { collectRemovePaths, removePath } from "../../core/remove.js";
+import {
+  collectArchitectureDirs,
+  collectRemovePaths,
+  pruneEmptyAncestors,
+  removePath,
+} from "../../core/remove.js";
 
 export const removeCommand = new Command("remove")
   .description("Remove all diagram-docs generated files")
@@ -49,7 +55,30 @@ export const removeCommand = new Command("remove")
       }
     }
 
+    let prunedCount = 0;
+    if (options.all) {
+      const archEntries = await collectArchitectureDirs(configDir, config);
+      const planned = new Set(targets);
+      for (const { archDir, boundary } of archEntries) {
+        const parents = pruneEmptyAncestors(archDir, boundary, planned);
+        for (const p of parents) {
+          const rel = path.relative(cwd, p);
+          if (options.dryRun) {
+            console.log(`[dry-run] ${rel}`);
+          } else {
+            try {
+              fs.rmdirSync(p);
+              console.error(`Removed: ${rel}`);
+            } catch (err) {
+              if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+            }
+          }
+          prunedCount++;
+        }
+      }
+    }
+
     if (!options.dryRun) {
-      console.error(`\nRemoved ${targets.length} item(s).`);
+      console.error(`\nRemoved ${targets.length + prunedCount} item(s).`);
     }
   });

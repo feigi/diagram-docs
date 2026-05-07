@@ -3,7 +3,12 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { stringify as stringifyYaml } from "yaml";
-import { collectRemovePaths, removePath } from "../../src/core/remove.js";
+import {
+  collectArchitectureDirs,
+  collectRemovePaths,
+  pruneEmptyAncestors,
+  removePath,
+} from "../../src/core/remove.js";
 import { configSchema } from "../../src/config/schema.js";
 
 function makeConfig(overrides = {}) {
@@ -258,6 +263,148 @@ describe("collectRemovePaths — with --all", () => {
     const config = makeConfig();
     const result = await collectRemovePaths(tmpDir, configPath, config, true);
     expect(result).toContain(expectedArchDir);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// collectArchitectureDirs
+// ---------------------------------------------------------------------------
+
+describe("collectArchitectureDirs", () => {
+  it("returns the root output dir bounded by configDir", async () => {
+    const config = makeConfig({ output: { dir: "docs/architecture" } });
+    const result = await collectArchitectureDirs(tmpDir, config);
+    expect(result[0]).toEqual({
+      archDir: path.join(tmpDir, "docs/architecture"),
+      boundary: tmpDir,
+    });
+  });
+
+  it("returns submodule entries from architecture-model.yaml bounded by appPath", async () => {
+    const model = {
+      version: 1,
+      system: { name: "Test", description: "" },
+      actors: [],
+      containers: [
+        {
+          id: "svc-auth",
+          applicationId: "svc-auth",
+          name: "Auth",
+          path: "services/auth",
+          technology: "Node.js",
+          description: "",
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, "architecture-model.yaml"),
+      stringifyYaml(model),
+      "utf-8",
+    );
+
+    const config = makeConfig({ submodules: { docsDir: "docs" } });
+    const result = await collectArchitectureDirs(tmpDir, config);
+
+    const appAbs = path.join(tmpDir, "services/auth");
+    expect(result).toContainEqual({
+      archDir: path.join(appAbs, "docs", "architecture"),
+      boundary: appAbs,
+    });
+  });
+
+  it("falls back to filesystem walk when model is absent", async () => {
+    mkdir("apps/worker/docs/architecture/_generated");
+    touch("apps/worker/docs/architecture/_generated/c3-component.d2");
+
+    const config = makeConfig();
+    const result = await collectArchitectureDirs(tmpDir, config);
+
+    const archDir = path.join(tmpDir, "apps/worker/docs/architecture");
+    expect(result).toContainEqual({
+      archDir,
+      boundary: path.dirname(archDir),
+    });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// pruneEmptyAncestors
+// ---------------------------------------------------------------------------
+
+describe("pruneEmptyAncestors", () => {
+  it("returns [] when start's parent equals boundary", () => {
+    const arch = mkdir("architecture");
+    const removed = pruneEmptyAncestors(arch, tmpDir, new Set([arch]));
+    expect(removed).toEqual([]);
+  });
+
+  it("returns one parent when it becomes empty after planned removal", () => {
+    const arch = mkdir("docs/architecture");
+    const removed = pruneEmptyAncestors(arch, tmpDir, new Set([arch]));
+    expect(removed).toEqual([path.join(tmpDir, "docs")]);
+  });
+
+  it("walks multiple empty levels", () => {
+    const arch = mkdir("a/b/c/architecture");
+    const removed = pruneEmptyAncestors(arch, tmpDir, new Set([arch]));
+    expect(removed).toEqual([
+      path.join(tmpDir, "a/b/c"),
+      path.join(tmpDir, "a/b"),
+      path.join(tmpDir, "a"),
+    ]);
+  });
+
+  it("stops at first non-empty parent", () => {
+    const arch = mkdir("docs/architecture");
+    touch("docs/README.md");
+    const removed = pruneEmptyAncestors(arch, tmpDir, new Set([arch]));
+    expect(removed).toEqual([]);
+  });
+
+  it("treats only-planned-siblings as empty", () => {
+    const arch = mkdir("docs/architecture");
+    const sibling = touch("docs/notes.md");
+    const removed = pruneEmptyAncestors(arch, tmpDir, new Set([arch, sibling]));
+    expect(removed).toEqual([path.join(tmpDir, "docs")]);
+  });
+
+  it("does not remove the boundary itself", () => {
+    const arch = mkdir("docs/architecture");
+    const removed = pruneEmptyAncestors(arch, tmpDir, new Set([arch]));
+    expect(removed).not.toContain(tmpDir);
+  });
+
+  it("never crosses the boundary", () => {
+    // arch lives outside boundary — walk should not happen
+    const outsideBoundary = mkdir("only-this/dir");
+    const arch = mkdir("other-tree/architecture");
+    const removed = pruneEmptyAncestors(arch, outsideBoundary, new Set([arch]));
+    expect(removed).toEqual([]);
+  });
+
+  it("handles non-existent parent gracefully", () => {
+    const fakeStart = path.join(tmpDir, "ghost/architecture");
+    const removed = pruneEmptyAncestors(
+      fakeStart,
+      tmpDir,
+      new Set([fakeStart]),
+    );
+    expect(removed).toEqual([]);
+  });
+
+  it("converges across sibling arch dirs sharing a parent via shared planned set", () => {
+    const arch1 = mkdir("services/auth/docs/architecture");
+    const arch2 = mkdir("services/api/docs/architecture");
+    const planned = new Set([arch1, arch2]);
+
+    const boundary1 = path.join(tmpDir, "services/auth");
+    const boundary2 = path.join(tmpDir, "services/api");
+
+    const removed1 = pruneEmptyAncestors(arch1, boundary1, planned);
+    const removed2 = pruneEmptyAncestors(arch2, boundary2, planned);
+
+    expect(removed1).toEqual([path.join(tmpDir, "services/auth/docs")]);
+    expect(removed2).toEqual([path.join(tmpDir, "services/api/docs")]);
   });
 });
 
