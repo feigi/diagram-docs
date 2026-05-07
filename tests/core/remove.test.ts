@@ -374,12 +374,19 @@ describe("pruneEmptyAncestors", () => {
     expect(removed).not.toContain(tmpDir);
   });
 
-  it("never crosses the boundary", () => {
-    // arch lives outside boundary — walk should not happen
+  it("returns [] when start lives outside boundary", () => {
     const outsideBoundary = mkdir("only-this/dir");
     const arch = mkdir("other-tree/architecture");
     const removed = pruneEmptyAncestors(arch, outsideBoundary, new Set([arch]));
     expect(removed).toEqual([]);
+  });
+
+  it("stops mid-walk when ancestor reaches boundary", () => {
+    const arch = mkdir("boundary/sub/architecture");
+    const boundary = path.join(tmpDir, "boundary");
+    const removed = pruneEmptyAncestors(arch, boundary, new Set([arch]));
+    expect(removed).toEqual([path.join(tmpDir, "boundary/sub")]);
+    expect(removed).not.toContain(boundary);
   });
 
   it("handles non-existent parent gracefully", () => {
