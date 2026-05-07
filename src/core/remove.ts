@@ -58,7 +58,7 @@ export async function collectRemovePaths(
 
   if (all) {
     // Discover submodule architecture dirs before the model is marked for deletion
-    const submoduleDirs = await discoverSubmoduleDirs(
+    const submoduleEntries = await discoverSubmoduleDirs(
       configDir,
       modelPath,
       config,
@@ -68,7 +68,7 @@ export async function collectRemovePaths(
     candidates.push(path.resolve(configDir, config.output.dir));
 
     // 7. submodule {appPath}/{docsDir}/architecture/ dirs
-    candidates.push(...submoduleDirs);
+    candidates.push(...submoduleEntries.map((e) => e.archDir));
   }
 
   candidates.push(modelPath);
@@ -170,18 +170,56 @@ async function discoverSubmoduleConfigStubs(
   return matches.filter((m) => m !== rootConfig);
 }
 
+// ---------------------------------------------------------------------------
+// Architecture directories
+// ---------------------------------------------------------------------------
+
 /**
- * Discover per-application architecture dirs created by submodule generation.
+ * Architecture directory paired with the ancestor boundary that the
+ * parent-prune walk must not cross.
+ */
+export interface ArchitectureDir {
+  archDir: string;
+  boundary: string;
+}
+
+/**
+ * Collect all architecture output directories with their prune boundaries.
+ *
+ * - Root: {config.output.dir} bounded by configDir.
+ * - Submodules: {appPath}/{docsDir}/architecture bounded by {appPath}.
+ */
+export async function collectArchitectureDirs(
+  configDir: string,
+  config: Config,
+): Promise<ArchitectureDir[]> {
+  const modelPath = path.join(configDir, "architecture-model.yaml");
+  return [
+    {
+      archDir: path.resolve(configDir, config.output.dir),
+      boundary: path.resolve(configDir),
+    },
+    ...(await discoverSubmoduleDirs(configDir, modelPath, config)),
+  ];
+}
+
+/**
+ * Discover per-application architecture dirs created by submodule generation,
+ * each paired with the prune boundary that walks must stop at.
  *
  * Strategy:
  * 1. Read architecture-model.yaml and use container paths directly.
  * 2. Fallback: glob for `** /architecture/_generated/c3-component.d2` files.
+ *
+ * In fallback mode the submodule's appPath is unknown — uses the parent of
+ * the architecture dir as a conservative boundary so the prune never crosses
+ * out of the submodule's docs dir.
  */
 async function discoverSubmoduleDirs(
   configDir: string,
   modelPath: string,
   config: Config,
-): Promise<string[]> {
+): Promise<ArchitectureDir[]> {
   if (fs.existsSync(modelPath)) {
     try {
       const raw = fs.readFileSync(modelPath, "utf-8");
@@ -191,7 +229,11 @@ async function discoverSubmoduleDirs(
         const appPath =
           container.path ?? container.applicationId.replace(/-/g, "/");
         const docsDir = override?.docsDir ?? config.submodules.docsDir;
-        return path.join(configDir, appPath, docsDir, "architecture");
+        const appAbs = path.resolve(configDir, appPath);
+        return {
+          archDir: path.join(appAbs, docsDir, "architecture"),
+          boundary: appAbs,
+        };
       });
     } catch (err) {
       warnModelParseFailure(configDir, modelPath, err);
@@ -221,103 +263,6 @@ async function discoverSubmoduleDirs(
     archDirs.add(path.dirname(m));
   }
 
-  return [...archDirs];
-}
-
-// ---------------------------------------------------------------------------
-// Architecture directories (for parent-dir pruning under `--all`)
-// ---------------------------------------------------------------------------
-
-/**
- * An architecture directory and the ancestor boundary the parent-prune walk
- * must not cross. The boundary is the project root for the main output dir,
- * and the submodule app dir for each submodule architecture dir.
- */
-export interface ArchitectureDir {
-  archDir: string;
-  boundary: string;
-}
-
-/**
- * Collect all architecture output directories together with the boundary
- * directory the parent-prune walk must stop at.
- *
- * - Root: {config.output.dir} bounded by configDir.
- * - Submodules: {appPath}/{docsDir}/architecture bounded by {appPath}.
- *
- * Returns absolute paths whether or not they currently exist on disk;
- * callers filter to existing entries as needed.
- */
-export async function collectArchitectureDirs(
-  configDir: string,
-  config: Config,
-): Promise<ArchitectureDir[]> {
-  const result: ArchitectureDir[] = [];
-
-  result.push({
-    archDir: path.resolve(configDir, config.output.dir),
-    boundary: path.resolve(configDir),
-  });
-
-  const modelPath = path.join(configDir, "architecture-model.yaml");
-  result.push(
-    ...(await discoverSubmoduleArchEntries(configDir, modelPath, config)),
-  );
-
-  return result;
-}
-
-/**
- * Submodule arch entries (archDir + appPath boundary).
- * Mirrors `discoverSubmoduleDirs` but pairs each dir with its boundary.
- */
-async function discoverSubmoduleArchEntries(
-  configDir: string,
-  modelPath: string,
-  config: Config,
-): Promise<ArchitectureDir[]> {
-  if (fs.existsSync(modelPath)) {
-    try {
-      const raw = fs.readFileSync(modelPath, "utf-8");
-      const model = architectureModelSchema.parse(parseYaml(raw));
-      return model.containers.map((container) => {
-        const override = config.submodules.overrides[container.applicationId];
-        const appPath =
-          container.path ?? container.applicationId.replace(/-/g, "/");
-        const docsDir = override?.docsDir ?? config.submodules.docsDir;
-        const appAbs = path.resolve(configDir, appPath);
-        return {
-          archDir: path.join(appAbs, docsDir, "architecture"),
-          boundary: appAbs,
-        };
-      });
-    } catch (err) {
-      warnModelParseFailure(configDir, modelPath, err);
-    }
-  }
-
-  const ignoreOpts = {
-    cwd: configDir,
-    ignore: ["**/node_modules/**", "**/.git/**"],
-    absolute: true,
-  };
-
-  const [componentMatches, fragmentMatches] = await Promise.all([
-    glob("**/architecture/_generated/c3-component.d2", ignoreOpts),
-    glob("**/architecture/architecture-model.yaml", ignoreOpts),
-  ]);
-
-  const archDirs = new Set<string>();
-  for (const m of componentMatches) {
-    archDirs.add(path.dirname(path.dirname(m)));
-  }
-  for (const m of fragmentMatches) {
-    archDirs.add(path.dirname(m));
-  }
-
-  // In fallback mode the submodule's appPath is unknown — use the parent of
-  // the architecture dir as a conservative boundary so the prune never
-  // crosses out of the submodule's docs dir.
   return [...archDirs].map((archDir) => ({
     archDir,
     boundary: path.dirname(archDir),
@@ -340,6 +285,18 @@ export function removePath(target: string): void {
     } else {
       fs.unlinkSync(target);
     }
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+  }
+}
+
+/**
+ * Remove a directory only if it is empty. Silently ignores ENOENT.
+ * Errors on a non-empty directory (ENOTEMPTY).
+ */
+export function removeEmptyDir(target: string): void {
+  try {
+    fs.rmdirSync(target);
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
@@ -374,8 +331,9 @@ export function pruneEmptyAncestors(
     let entries: string[];
     try {
       entries = fs.readdirSync(parent);
-    } catch {
-      break;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") break;
+      throw err;
     }
     const remaining = entries
       .map((e) => path.join(parent, e))

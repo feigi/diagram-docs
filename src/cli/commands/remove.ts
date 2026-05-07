@@ -1,11 +1,11 @@
 import { Command } from "commander";
-import * as fs from "node:fs";
 import * as path from "node:path";
 import { findConfigFile, loadConfig } from "../../config/loader.js";
 import {
   collectArchitectureDirs,
   collectRemovePaths,
   pruneEmptyAncestors,
+  removeEmptyDir,
   removePath,
 } from "../../core/remove.js";
 
@@ -66,12 +66,8 @@ export const removeCommand = new Command("remove")
           if (options.dryRun) {
             console.log(`[dry-run] ${rel}`);
           } else {
-            try {
-              fs.rmdirSync(p);
-              console.error(`Removed: ${rel}`);
-            } catch (err) {
-              if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
-            }
+            removeEmptyDir(p);
+            console.error(`Removed: ${rel}`);
           }
           prunedCount++;
         }
