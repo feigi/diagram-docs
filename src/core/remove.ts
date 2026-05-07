@@ -186,8 +186,17 @@ export interface ArchitectureDir {
 /**
  * Collect all architecture output directories with their prune boundaries.
  *
- * - Root: {config.output.dir} bounded by configDir.
- * - Submodules: {appPath}/{docsDir}/architecture bounded by {appPath}.
+ * Boundaries (the directory the prune walk must not cross or remove):
+ * - Root output dir: configDir.
+ * - Submodules from a parsed architecture-model.yaml: each container's
+ *   resolved appPath.
+ * - Submodules discovered via filesystem walk (model absent or unparseable):
+ *   configDir, since the appPath is unknowable from disk alone. Pruning
+ *   still halts naturally at the first non-empty parent.
+ *
+ * Must be called BEFORE any deletion happens — model parsing reads
+ * architecture-model.yaml, which `collectRemovePaths` includes in its target
+ * list and the CLI removes during the deletion phase.
  */
 export async function collectArchitectureDirs(
   configDir: string,
@@ -208,18 +217,18 @@ export async function collectArchitectureDirs(
  * each paired with the prune boundary that walks must stop at.
  *
  * Strategy:
- * 1. Read architecture-model.yaml and use container paths directly.
- * 2. Fallback: glob for `** /architecture/_generated/c3-component.d2` files.
- *
- * In fallback mode the submodule's appPath is unknown — uses the parent of
- * the architecture dir as a conservative boundary so the prune never crosses
- * out of the submodule's docs dir.
+ * 1. Read architecture-model.yaml and use container paths directly; boundary
+ *    is the resolved appPath.
+ * 2. Fallback: glob for diagram-docs markers under `** /architecture/`;
+ *    boundary is configDir because appPath is unknown.
  */
 async function discoverSubmoduleDirs(
   configDir: string,
   modelPath: string,
   config: Config,
 ): Promise<ArchitectureDir[]> {
+  const configAbs = path.resolve(configDir);
+
   if (fs.existsSync(modelPath)) {
     try {
       const raw = fs.readFileSync(modelPath, "utf-8");
@@ -263,10 +272,66 @@ async function discoverSubmoduleDirs(
     archDirs.add(path.dirname(m));
   }
 
-  return [...archDirs].map((archDir) => ({
-    archDir,
-    boundary: path.dirname(archDir),
-  }));
+  return [...archDirs].map((archDir) => ({ archDir, boundary: configAbs }));
+}
+
+// ---------------------------------------------------------------------------
+// Orchestration
+// ---------------------------------------------------------------------------
+
+export interface RemovalResult {
+  /** Targets that were (or would be, in dry-run) removed, in deletion order. */
+  removedTargets: string[];
+  /** Empty parent dirs that were (or would be, in dry-run) pruned. */
+  prunedParents: string[];
+}
+
+export interface RunRemoveOptions {
+  all: boolean;
+  dryRun: boolean;
+}
+
+/**
+ * Execute the `remove` workflow end-to-end.
+ *
+ * Architecture-dir discovery runs before deletion because
+ * `collectArchitectureDirs` reads architecture-model.yaml — and that file
+ * is among the targets `collectRemovePaths` returns.
+ */
+export async function runRemove(
+  configDir: string,
+  configPath: string,
+  config: Config,
+  opts: RunRemoveOptions,
+): Promise<RemovalResult> {
+  const targets = await collectRemovePaths(
+    configDir,
+    configPath,
+    config,
+    opts.all,
+  );
+  const archEntries = opts.all
+    ? await collectArchitectureDirs(configDir, config)
+    : [];
+
+  const removedTargets: string[] = [];
+  for (const t of targets) {
+    if (!opts.dryRun) removePath(t);
+    removedTargets.push(t);
+  }
+
+  const prunedParents: string[] = [];
+  const planned = new Set(targets);
+  for (const { archDir, boundary } of archEntries) {
+    const parents = pruneEmptyAncestors(archDir, boundary, planned);
+    for (const p of parents) {
+      if (opts.dryRun || removeEmptyDir(p)) {
+        prunedParents.push(p);
+      }
+    }
+  }
+
+  return { removedTargets, prunedParents };
 }
 
 // ---------------------------------------------------------------------------
@@ -291,14 +356,24 @@ export function removePath(target: string): void {
 }
 
 /**
- * Remove a directory only if it is empty. Silently ignores ENOENT.
- * Errors on a non-empty directory (ENOTEMPTY).
+ * Remove a directory only if it is empty. Returns true on success, false if
+ * the directory was already gone (ENOENT) or could not be removed because
+ * something appeared in it after the emptiness check (ENOTEMPTY) or the path
+ * is no longer a directory (ENOTDIR). Other errors propagate.
+ *
+ * Tolerating ENOTEMPTY/ENOTDIR keeps the CLI prune loop alive across races
+ * (another process writing into a parent between readdir and rmdir).
  */
-export function removeEmptyDir(target: string): void {
+export function removeEmptyDir(target: string): boolean {
   try {
     fs.rmdirSync(target);
+    return true;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    const code = (err as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTEMPTY" || code === "ENOTDIR") {
+      return false;
+    }
+    throw err;
   }
 }
 
@@ -309,11 +384,12 @@ export function removeEmptyDir(target: string): void {
  * `planned` is a mutable set of paths considered already-removed when
  * deciding emptiness. Callers seed it with the full deletion target list so
  * dry-run prediction matches actual post-deletion state, and pass the same
- * Set across multiple invocations so sibling architecture dirs converging on
- * a shared parent see each other's pruned ancestors.
+ * Set across multiple invocations so siblings sharing a boundary see each
+ * other's pruned ancestors during the run.
  *
  * Returns the parents that were (or would be, in dry-run) removed, in
- * ascend order. Stops on the first non-empty parent or on the boundary.
+ * ascend order. Stops on the first non-empty parent, on the boundary, or
+ * if `start` is not a descendant of `boundary`.
  */
 export function pruneEmptyAncestors(
   start: string,

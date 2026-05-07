@@ -7,7 +7,9 @@ import {
   collectArchitectureDirs,
   collectRemovePaths,
   pruneEmptyAncestors,
+  removeEmptyDir,
   removePath,
+  runRemove,
 } from "../../src/core/remove.js";
 import { configSchema } from "../../src/config/schema.js";
 
@@ -312,7 +314,7 @@ describe("collectArchitectureDirs", () => {
     });
   });
 
-  it("falls back to filesystem walk when model is absent", async () => {
+  it("falls back to filesystem walk when model is absent — bounded by configDir", async () => {
     mkdir("apps/worker/docs/architecture/_generated");
     touch("apps/worker/docs/architecture/_generated/c3-component.d2");
 
@@ -320,10 +322,60 @@ describe("collectArchitectureDirs", () => {
     const result = await collectArchitectureDirs(tmpDir, config);
 
     const archDir = path.join(tmpDir, "apps/worker/docs/architecture");
-    expect(result).toContainEqual({
-      archDir,
-      boundary: path.dirname(archDir),
+    expect(result).toContainEqual({ archDir, boundary: tmpDir });
+  });
+
+  it("uses overrides[applicationId].docsDir for submodule boundary", async () => {
+    const model = {
+      version: 1,
+      system: { name: "Test", description: "" },
+      actors: [],
+      containers: [
+        {
+          id: "svc-auth",
+          applicationId: "svc-auth",
+          name: "Auth",
+          path: "services/auth",
+          technology: "Node.js",
+          description: "",
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, "architecture-model.yaml"),
+      stringifyYaml(model),
+      "utf-8",
+    );
+
+    const config = makeConfig({
+      submodules: {
+        docsDir: "docs",
+        overrides: { "svc-auth": { docsDir: "documentation" } },
+      },
     });
+    const result = await collectArchitectureDirs(tmpDir, config);
+
+    const appAbs = path.join(tmpDir, "services/auth");
+    expect(result).toContainEqual({
+      archDir: path.join(appAbs, "documentation", "architecture"),
+      boundary: appAbs,
+    });
+  });
+
+  it("falls back to filesystem walk when model is unparseable", async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, "architecture-model.yaml"),
+      ":::not valid yaml:::",
+      "utf-8",
+    );
+    mkdir("apps/worker/docs/architecture/_generated");
+    touch("apps/worker/docs/architecture/_generated/c3-component.d2");
+
+    const config = makeConfig();
+    const result = await collectArchitectureDirs(tmpDir, config);
+
+    const archDir = path.join(tmpDir, "apps/worker/docs/architecture");
+    expect(result).toContainEqual({ archDir, boundary: tmpDir });
   });
 });
 
@@ -418,6 +470,207 @@ describe("pruneEmptyAncestors", () => {
 // ---------------------------------------------------------------------------
 // removePath
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// removeEmptyDir
+// ---------------------------------------------------------------------------
+
+describe("removeEmptyDir", () => {
+  it("removes an empty directory and returns true", () => {
+    const dir = mkdir("empty");
+    expect(removeEmptyDir(dir)).toBe(true);
+    expect(fs.existsSync(dir)).toBe(false);
+  });
+
+  it("returns false for missing dir without throwing", () => {
+    const missing = path.join(tmpDir, "ghost");
+    expect(removeEmptyDir(missing)).toBe(false);
+  });
+
+  it("returns false (does not throw) when directory is non-empty", () => {
+    const dir = mkdir("with-child");
+    touch("with-child/file.txt");
+    expect(removeEmptyDir(dir)).toBe(false);
+    expect(fs.existsSync(dir)).toBe(true);
+  });
+
+  it("returns false when target is a file (ENOTDIR)", () => {
+    const file = touch("not-a-dir.txt");
+    expect(removeEmptyDir(file)).toBe(false);
+    expect(fs.existsSync(file)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// runRemove (orchestration)
+// ---------------------------------------------------------------------------
+
+describe("runRemove", () => {
+  function makeFixture() {
+    const configPath = touch("diagram-docs.yaml");
+    const model = {
+      version: 1,
+      system: { name: "Test", description: "" },
+      actors: [],
+      containers: [
+        {
+          id: "svc-auth",
+          applicationId: "svc-auth",
+          name: "Auth",
+          path: "services/auth",
+          technology: "Node.js",
+          description: "",
+        },
+      ],
+    };
+    fs.writeFileSync(
+      path.join(tmpDir, "architecture-model.yaml"),
+      stringifyYaml(model),
+      "utf-8",
+    );
+    mkdir("services/auth/docs/architecture");
+    mkdir("docs/architecture");
+    return { configPath };
+  }
+
+  it("prunes empty submodule docs/ after removing architecture/ (--all)", async () => {
+    const { configPath } = makeFixture();
+    const config = makeConfig({
+      output: { dir: "docs/architecture" },
+      submodules: { docsDir: "docs" },
+    });
+
+    const result = await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: false,
+    });
+
+    expect(
+      fs.existsSync(path.join(tmpDir, "services/auth/docs/architecture")),
+    ).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "services/auth/docs"))).toBe(false);
+    // Boundary preserved
+    expect(fs.existsSync(path.join(tmpDir, "services/auth"))).toBe(true);
+    expect(result.prunedParents).toContain(
+      path.join(tmpDir, "services/auth/docs"),
+    );
+  });
+
+  it("dry-run does not delete or prune anything but reports both", async () => {
+    const { configPath } = makeFixture();
+    const config = makeConfig({
+      output: { dir: "docs/architecture" },
+      submodules: { docsDir: "docs" },
+    });
+
+    const result = await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: true,
+    });
+
+    // Files still on disk
+    expect(
+      fs.existsSync(path.join(tmpDir, "services/auth/docs/architecture")),
+    ).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, "services/auth/docs"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, "architecture-model.yaml"))).toBe(
+      true,
+    );
+    // But report would-prune
+    expect(result.prunedParents).toContain(
+      path.join(tmpDir, "services/auth/docs"),
+    );
+  });
+
+  it("--all=false does not run prune even when output dirs exist", async () => {
+    const { configPath } = makeFixture();
+    const config = makeConfig({
+      output: { dir: "docs/architecture" },
+      submodules: { docsDir: "docs" },
+    });
+
+    const result = await runRemove(tmpDir, configPath, config, {
+      all: false,
+      dryRun: false,
+    });
+
+    expect(result.prunedParents).toHaveLength(0);
+    expect(fs.existsSync(path.join(tmpDir, "services/auth/docs"))).toBe(true);
+  });
+
+  it("prunes the root docs/ when output.dir is its only child", async () => {
+    const configPath = touch("diagram-docs.yaml");
+    mkdir("docs/architecture");
+    const config = makeConfig({ output: { dir: "docs/architecture" } });
+
+    const result = await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: false,
+    });
+
+    expect(fs.existsSync(path.join(tmpDir, "docs"))).toBe(false);
+    expect(result.prunedParents).toContain(path.join(tmpDir, "docs"));
+  });
+
+  it("does not prune root docs/ when it has unrelated siblings", async () => {
+    const configPath = touch("diagram-docs.yaml");
+    mkdir("docs/architecture");
+    touch("docs/README.md");
+    const config = makeConfig({ output: { dir: "docs/architecture" } });
+
+    await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: false,
+    });
+
+    expect(fs.existsSync(path.join(tmpDir, "docs"))).toBe(true);
+    expect(fs.existsSync(path.join(tmpDir, "docs/README.md"))).toBe(true);
+  });
+
+  it("prunes via filesystem fallback when model is absent (regression: tight boundary)", async () => {
+    const configPath = touch("diagram-docs.yaml");
+    // Submodule discoverable only by marker — no model file at root
+    mkdir("apps/worker/docs/architecture/_generated");
+    touch("apps/worker/docs/architecture/_generated/c3-component.d2");
+    const config = makeConfig({ submodules: { docsDir: "docs" } });
+
+    await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: false,
+    });
+
+    // Boundary is configDir in fallback: docs/ becomes empty and is pruned;
+    // apps/worker/ becomes empty and is pruned; apps/ becomes empty and is pruned.
+    expect(
+      fs.existsSync(path.join(tmpDir, "apps/worker/docs/architecture")),
+    ).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "apps/worker/docs"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "apps/worker"))).toBe(false);
+    expect(fs.existsSync(path.join(tmpDir, "apps"))).toBe(false);
+    // configDir itself is the boundary — never removed
+    expect(fs.existsSync(tmpDir)).toBe(true);
+  });
+
+  it("does not lose submodule prune when model is among targets (regression: ordering)", async () => {
+    // This catches the bug where collectArchitectureDirs is invoked AFTER
+    // collectRemovePaths' targets have been deleted: model is gone, fallback
+    // markers are gone, and the submodule entry never makes it into prune.
+    const { configPath } = makeFixture();
+    const config = makeConfig({
+      output: { dir: "docs/architecture" },
+      submodules: { docsDir: "docs" },
+    });
+
+    const result = await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: false,
+    });
+
+    expect(result.prunedParents).toContain(
+      path.join(tmpDir, "services/auth/docs"),
+    );
+  });
+});
 
 describe("removePath", () => {
   it("removes a file", () => {
