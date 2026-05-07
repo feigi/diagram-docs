@@ -225,6 +225,106 @@ async function discoverSubmoduleDirs(
 }
 
 // ---------------------------------------------------------------------------
+// Architecture directories (for parent-dir pruning under `--all`)
+// ---------------------------------------------------------------------------
+
+/**
+ * An architecture directory and the ancestor boundary the parent-prune walk
+ * must not cross. The boundary is the project root for the main output dir,
+ * and the submodule app dir for each submodule architecture dir.
+ */
+export interface ArchitectureDir {
+  archDir: string;
+  boundary: string;
+}
+
+/**
+ * Collect all architecture output directories together with the boundary
+ * directory the parent-prune walk must stop at.
+ *
+ * - Root: {config.output.dir} bounded by configDir.
+ * - Submodules: {appPath}/{docsDir}/architecture bounded by {appPath}.
+ *
+ * Returns absolute paths whether or not they currently exist on disk;
+ * callers filter to existing entries as needed.
+ */
+export async function collectArchitectureDirs(
+  configDir: string,
+  config: Config,
+): Promise<ArchitectureDir[]> {
+  const result: ArchitectureDir[] = [];
+
+  result.push({
+    archDir: path.resolve(configDir, config.output.dir),
+    boundary: path.resolve(configDir),
+  });
+
+  const modelPath = path.join(configDir, "architecture-model.yaml");
+  result.push(
+    ...(await discoverSubmoduleArchEntries(configDir, modelPath, config)),
+  );
+
+  return result;
+}
+
+/**
+ * Submodule arch entries (archDir + appPath boundary).
+ * Mirrors `discoverSubmoduleDirs` but pairs each dir with its boundary.
+ */
+async function discoverSubmoduleArchEntries(
+  configDir: string,
+  modelPath: string,
+  config: Config,
+): Promise<ArchitectureDir[]> {
+  if (fs.existsSync(modelPath)) {
+    try {
+      const raw = fs.readFileSync(modelPath, "utf-8");
+      const model = architectureModelSchema.parse(parseYaml(raw));
+      return model.containers.map((container) => {
+        const override = config.submodules.overrides[container.applicationId];
+        const appPath =
+          container.path ?? container.applicationId.replace(/-/g, "/");
+        const docsDir = override?.docsDir ?? config.submodules.docsDir;
+        const appAbs = path.resolve(configDir, appPath);
+        return {
+          archDir: path.join(appAbs, docsDir, "architecture"),
+          boundary: appAbs,
+        };
+      });
+    } catch (err) {
+      warnModelParseFailure(configDir, modelPath, err);
+    }
+  }
+
+  const ignoreOpts = {
+    cwd: configDir,
+    ignore: ["**/node_modules/**", "**/.git/**"],
+    absolute: true,
+  };
+
+  const [componentMatches, fragmentMatches] = await Promise.all([
+    glob("**/architecture/_generated/c3-component.d2", ignoreOpts),
+    glob("**/architecture/architecture-model.yaml", ignoreOpts),
+  ]);
+
+  const archDirs = new Set<string>();
+  for (const m of componentMatches) {
+    archDirs.add(path.dirname(path.dirname(m)));
+  }
+  for (const m of fragmentMatches) {
+    archDirs.add(path.dirname(m));
+  }
+
+  // In fallback mode the submodule's appPath is unknown — use the parent of
+  // the architecture dir as a conservative boundary so the prune never
+  // crosses out of the submodule's docs dir.
+  return [...archDirs].map((archDir) => ({
+    archDir,
+    boundary: path.dirname(archDir),
+  }));
+}
+
+// ---------------------------------------------------------------------------
 // Deletion
 // ---------------------------------------------------------------------------
 
@@ -243,4 +343,49 @@ export function removePath(target: string): void {
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
   }
+}
+
+/**
+ * Walk up from `start`'s parent removing empty ancestor directories, bounded
+ * by `boundary` (never removed, never crossed).
+ *
+ * `planned` is a mutable set of paths considered already-removed when
+ * deciding emptiness. Callers seed it with the full deletion target list so
+ * dry-run prediction matches actual post-deletion state, and pass the same
+ * Set across multiple invocations so sibling architecture dirs converging on
+ * a shared parent see each other's pruned ancestors.
+ *
+ * Returns the parents that were (or would be, in dry-run) removed, in
+ * ascend order. Stops on the first non-empty parent or on the boundary.
+ */
+export function pruneEmptyAncestors(
+  start: string,
+  boundary: string,
+  planned: Set<string>,
+): string[] {
+  const resolvedBoundary = path.resolve(boundary);
+  const removed: string[] = [];
+  let parent = path.dirname(path.resolve(start));
+
+  while (
+    parent !== resolvedBoundary &&
+    parent.startsWith(resolvedBoundary + path.sep)
+  ) {
+    let entries: string[];
+    try {
+      entries = fs.readdirSync(parent);
+    } catch {
+      break;
+    }
+    const remaining = entries
+      .map((e) => path.join(parent, e))
+      .filter((p) => !planned.has(p));
+    if (remaining.length > 0) break;
+
+    removed.push(parent);
+    planned.add(parent);
+    parent = path.dirname(parent);
+  }
+
+  return removed;
 }
