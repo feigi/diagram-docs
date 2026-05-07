@@ -1,13 +1,7 @@
 import { Command } from "commander";
 import * as path from "node:path";
 import { findConfigFile, loadConfig } from "../../config/loader.js";
-import {
-  collectArchitectureDirs,
-  collectRemovePaths,
-  pruneEmptyAncestors,
-  removeEmptyDir,
-  removePath,
-} from "../../core/remove.js";
+import { runRemove } from "../../core/remove.js";
 
 export const removeCommand = new Command("remove")
   .description("Remove all diagram-docs generated files")
@@ -32,49 +26,28 @@ export const removeCommand = new Command("remove")
     // loadConfig is safe here since we already confirmed the file exists.
     const { config, configDir } = loadConfig(resolvedConfigPath);
 
-    const targets = await collectRemovePaths(
-      configDir,
-      resolvedConfigPath,
-      config,
-      options.all ?? false,
-    );
+    const result = await runRemove(configDir, resolvedConfigPath, config, {
+      all: options.all ?? false,
+      dryRun: options.dryRun ?? false,
+    });
 
-    if (targets.length === 0) {
+    const total = result.removedTargets.length + result.prunedParents.length;
+    if (total === 0) {
       console.error("Nothing to remove.");
       return;
     }
 
     const cwd = process.cwd();
-    for (const target of targets) {
-      const rel = path.relative(cwd, target);
+    for (const p of [...result.removedTargets, ...result.prunedParents]) {
+      const rel = path.relative(cwd, p);
       if (options.dryRun) {
         console.log(`[dry-run] ${rel}`);
       } else {
-        removePath(target);
         console.error(`Removed: ${rel}`);
       }
     }
 
-    let prunedCount = 0;
-    if (options.all) {
-      const archEntries = await collectArchitectureDirs(configDir, config);
-      const planned = new Set(targets);
-      for (const { archDir, boundary } of archEntries) {
-        const parents = pruneEmptyAncestors(archDir, boundary, planned);
-        for (const p of parents) {
-          const rel = path.relative(cwd, p);
-          if (options.dryRun) {
-            console.log(`[dry-run] ${rel}`);
-          } else {
-            removeEmptyDir(p);
-            console.error(`Removed: ${rel}`);
-          }
-          prunedCount++;
-        }
-      }
-    }
-
     if (!options.dryRun) {
-      console.error(`\nRemoved ${targets.length + prunedCount} item(s).`);
+      console.error(`\nRemoved ${total} item(s).`);
     }
   });
