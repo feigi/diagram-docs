@@ -390,6 +390,12 @@ describe("pruneEmptyAncestors", () => {
     expect(removed).toEqual([]);
   });
 
+  it("returns [] when start equals boundary (degenerate)", () => {
+    const both = mkdir("docs");
+    const removed = pruneEmptyAncestors(both, both, new Set([both]));
+    expect(removed).toEqual([]);
+  });
+
   it("returns one parent when it becomes empty after planned removal", () => {
     const arch = mkdir("docs/architecture");
     const removed = pruneEmptyAncestors(arch, tmpDir, new Set([arch]));
@@ -499,6 +505,20 @@ describe("removeEmptyDir", () => {
     expect(removeEmptyDir(file)).toBe(false);
     expect(fs.existsSync(file)).toBe(true);
   });
+
+  it.skipIf(process.platform === "win32" || process.getuid?.() === 0)(
+    "propagates non-tolerated errors (e.g., EACCES)",
+    () => {
+      const parent = mkdir("locked");
+      const child = mkdir("locked/inner");
+      fs.chmodSync(parent, 0o500);
+      try {
+        expect(() => removeEmptyDir(child)).toThrow();
+      } finally {
+        fs.chmodSync(parent, 0o755);
+      }
+    },
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -651,6 +671,36 @@ describe("runRemove", () => {
     expect(fs.existsSync(tmpDir)).toBe(true);
   });
 
+  it("populates skippedTargets and failedPrunes as empty in nominal case", async () => {
+    const { configPath } = makeFixture();
+    const config = makeConfig({
+      output: { dir: "docs/architecture" },
+      submodules: { docsDir: "docs" },
+    });
+
+    const result = await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: false,
+    });
+    expect(result.skippedTargets).toEqual([]);
+    expect(result.failedPrunes).toEqual([]);
+  });
+
+  it("dry-run never reports skippedTargets or failedPrunes", async () => {
+    const { configPath } = makeFixture();
+    const config = makeConfig({
+      output: { dir: "docs/architecture" },
+      submodules: { docsDir: "docs" },
+    });
+
+    const result = await runRemove(tmpDir, configPath, config, {
+      all: true,
+      dryRun: true,
+    });
+    expect(result.skippedTargets).toEqual([]);
+    expect(result.failedPrunes).toEqual([]);
+  });
+
   it("does not lose submodule prune when model is among targets (regression: ordering)", async () => {
     // This catches the bug where collectArchitectureDirs is invoked AFTER
     // collectRemovePaths' targets have been deleted: model is gone, fallback
@@ -673,23 +723,23 @@ describe("runRemove", () => {
 });
 
 describe("removePath", () => {
-  it("removes a file", () => {
+  it("removes a file and returns true", () => {
     const file = touch("some-file.txt");
     expect(fs.existsSync(file)).toBe(true);
-    removePath(file);
+    expect(removePath(file)).toBe(true);
     expect(fs.existsSync(file)).toBe(false);
   });
 
-  it("removes a directory recursively", () => {
+  it("removes a directory recursively and returns true", () => {
     const dir = mkdir("nested/dir");
     touch("nested/dir/child.txt");
     expect(fs.existsSync(dir)).toBe(true);
-    removePath(path.join(tmpDir, "nested"));
+    expect(removePath(path.join(tmpDir, "nested"))).toBe(true);
     expect(fs.existsSync(path.join(tmpDir, "nested"))).toBe(false);
   });
 
-  it("does not throw for missing path", () => {
+  it("returns false for missing path without throwing", () => {
     const missing = path.join(tmpDir, "does-not-exist");
-    expect(() => removePath(missing)).not.toThrow();
+    expect(removePath(missing)).toBe(false);
   });
 });

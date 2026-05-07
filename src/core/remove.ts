@@ -57,7 +57,6 @@ export async function collectRemovePaths(
   candidates.push(...submoduleConfigStubs);
 
   if (all) {
-    // Discover submodule architecture dirs before the model is marked for deletion
     const submoduleEntries = await discoverSubmoduleDirs(
       configDir,
       modelPath,
@@ -280,10 +279,21 @@ async function discoverSubmoduleDirs(
 // ---------------------------------------------------------------------------
 
 export interface RemovalResult {
-  /** Targets that were (or would be, in dry-run) removed, in deletion order. */
+  /** Targets that were (or would be, in dry-run) removed. */
   removedTargets: string[];
+  /**
+   * Targets that disappeared between collection and deletion (race). Always
+   * empty in dry-run.
+   */
+  skippedTargets: string[];
   /** Empty parent dirs that were (or would be, in dry-run) pruned. */
   prunedParents: string[];
+  /**
+   * Parent dirs that the prune walk predicted as removable but `rmdirSync`
+   * refused (ENOTEMPTY or ENOTDIR — concurrent writer). Always empty in
+   * dry-run.
+   */
+  failedPrunes: string[];
 }
 
 export interface RunRemoveOptions {
@@ -315,23 +325,41 @@ export async function runRemove(
     : [];
 
   const removedTargets: string[] = [];
+  const skippedTargets: string[] = [];
   for (const t of targets) {
-    if (!opts.dryRun) removePath(t);
-    removedTargets.push(t);
+    if (opts.dryRun) {
+      removedTargets.push(t);
+    } else if (removePath(t)) {
+      removedTargets.push(t);
+    } else {
+      skippedTargets.push(t);
+    }
   }
 
   const prunedParents: string[] = [];
+  const failedPrunes: string[] = [];
   const planned = new Set(targets);
   for (const { archDir, boundary } of archEntries) {
     const parents = pruneEmptyAncestors(archDir, boundary, planned);
     for (const p of parents) {
-      if (opts.dryRun || removeEmptyDir(p)) {
+      if (opts.dryRun) {
         prunedParents.push(p);
+        continue;
+      }
+      // Window between pruneEmptyAncestors' readdir and our rmdir is short,
+      // but split-state matters: ENOENT here = benign (parent deleted by
+      // another process or concurrent prune walk); ENOTEMPTY/ENOTDIR =
+      // surprise we should surface.
+      const existedBefore = fs.existsSync(p);
+      if (removeEmptyDir(p)) {
+        prunedParents.push(p);
+      } else if (existedBefore) {
+        failedPrunes.push(p);
       }
     }
   }
 
-  return { removedTargets, prunedParents };
+  return { removedTargets, skippedTargets, prunedParents, failedPrunes };
 }
 
 // ---------------------------------------------------------------------------
@@ -339,10 +367,10 @@ export async function runRemove(
 // ---------------------------------------------------------------------------
 
 /**
- * Remove a single path (file or directory).
- * Silently ignores ENOENT (already gone).
+ * Remove a single path (file or directory). Returns true if removal happened,
+ * false if the path was already gone (ENOENT). Other errors propagate.
  */
-export function removePath(target: string): void {
+export function removePath(target: string): boolean {
   try {
     const stat = fs.statSync(target);
     if (stat.isDirectory()) {
@@ -350,19 +378,21 @@ export function removePath(target: string): void {
     } else {
       fs.unlinkSync(target);
     }
+    return true;
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw err;
   }
 }
 
 /**
- * Remove a directory only if it is empty. Returns true on success, false if
- * the directory was already gone (ENOENT) or could not be removed because
- * something appeared in it after the emptiness check (ENOTEMPTY) or the path
- * is no longer a directory (ENOTDIR). Other errors propagate.
+ * Remove `target` if it is an empty directory. Returns true on removal,
+ * false if `rmdirSync` rejects with ENOENT (already gone), ENOTEMPTY
+ * (non-empty), or ENOTDIR (not a directory). Other errors propagate.
  *
- * Tolerating ENOTEMPTY/ENOTDIR keeps the CLI prune loop alive across races
- * (another process writing into a parent between readdir and rmdir).
+ * Tolerating ENOTEMPTY/ENOTDIR keeps `pruneEmptyAncestors` advancing across
+ * races where another process writes into a parent between readdir and
+ * rmdir.
  */
 export function removeEmptyDir(target: string): boolean {
   try {
@@ -388,8 +418,8 @@ export function removeEmptyDir(target: string): boolean {
  * other's pruned ancestors during the run.
  *
  * Returns the parents that were (or would be, in dry-run) removed, in
- * ascend order. Stops on the first non-empty parent, on the boundary, or
- * if `start` is not a descendant of `boundary`.
+ * ascending (child-to-ancestor) order. Stops on the first non-empty parent,
+ * on the boundary, or if `start` is not a descendant of `boundary`.
  */
 export function pruneEmptyAncestors(
   start: string,

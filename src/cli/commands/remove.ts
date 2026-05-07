@@ -48,6 +48,16 @@ export const removeCommand = new Command("remove")
     }
 
     if (!options.dryRun) {
-      console.error(`\nRemoved ${total} item(s).`);
+      for (const p of result.skippedTargets) {
+        console.error(`Skipped (already gone): ${path.relative(cwd, p)}`);
+      }
+      for (const p of result.failedPrunes) {
+        console.error(
+          `Warning: could not prune ${path.relative(cwd, p)} (not empty or replaced).`,
+        );
+      }
+      console.error(
+        `\nRemoved ${result.removedTargets.length} target(s), pruned ${result.prunedParents.length} empty parent(s).`,
+      );
     }
   });
