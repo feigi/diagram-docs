@@ -21,7 +21,7 @@ import {
   writeManifestV2,
   createDefaultManifestV2,
 } from "../../core/manifest.js";
-import { runScanAll } from "../../core/scan.js";
+import { runScanAll, computeModelCacheKey } from "../../core/scan.js";
 import { slugify } from "../../core/slugify.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
@@ -503,10 +503,25 @@ async function resolveModel(
     (p) => p.type === "container",
   );
 
-  // 4. If nothing changed, reuse existing model — but first check for deletions.
+  // 4. If nothing changed, reuse existing model — but first check for deletions
+  // and verify the on-disk model was actually produced from this scan (guards
+  // against interrupted LLM runs that updated per-project caches but never
+  // finished writing architecture-model.yaml).
   const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
+  const currentModelCacheKey = computeModelCacheKey(
+    projectResults
+      .filter((r) => r.project.type === "container")
+      .map((r) => r.modelChecksum),
+  );
+  const savedManifest = readManifest(configDir);
+  const modelCacheValid =
+    savedManifest?.lastModel?.checksum === currentModelCacheKey;
 
-  if (staleContainers.length === 0 && fs.existsSync(autoModelPath)) {
+  if (
+    staleContainers.length === 0 &&
+    fs.existsSync(autoModelPath) &&
+    modelCacheValid
+  ) {
     const existingModel = loadModel(autoModelPath);
     const discoveredIds = new Set(containers.map((c) => slugify(c.path)));
     const deletedContainers = existingModel.containers.filter(
@@ -623,7 +638,7 @@ async function resolveModel(
   const manifest = readManifest(configDir) ?? createDefaultManifest();
   manifest.lastModel = {
     timestamp: new Date().toISOString(),
-    checksum: rawStructure.checksum,
+    checksum: currentModelCacheKey,
   };
   writeManifest(configDir, manifest);
   console.error(

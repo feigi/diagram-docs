@@ -535,6 +535,18 @@ export interface ProjectScanResult {
    * do NOT set this.
    */
   modelStale: boolean;
+  /** The model checksum for this project at the time of the scan. */
+  modelChecksum: string;
+}
+
+/**
+ * Compute a combined cache key from per-project model checksums.
+ * Used to detect when architecture-model.yaml is stale relative to the
+ * current scan even if staleContainers is empty (e.g. after an interrupted
+ * LLM run that updated per-project caches but never wrote the model).
+ */
+export function computeModelCacheKey(modelChecksums: string[]): string {
+  return [...modelChecksums].sort().join(",");
 }
 
 /**
@@ -579,6 +591,7 @@ export async function runProjectScan(options: {
         scan: cache.scan,
         fromCache: true,
         modelStale: cache.modelChecksum !== modelChecksum,
+        modelChecksum,
       };
     }
   }
@@ -656,7 +669,7 @@ export async function runProjectScan(options: {
 
   writeProjectScan(projectAbsPath, scan, scanChecksum, modelChecksum);
 
-  return { project, scan, fromCache: false, modelStale };
+  return { project, scan, fromCache: false, modelStale, modelChecksum };
 }
 
 /**
