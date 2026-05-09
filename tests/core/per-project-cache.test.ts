@@ -231,12 +231,22 @@ describe("runProjectScan (two-fingerprint cache)", () => {
     });
     expect(result.fromCache).toBe(false);
     expect(result.modelStale).toBe(true);
+    expect(result.modelChecksum).toMatch(/^sha256:/);
 
     const cache = readProjectCache(path.join(tmpRoot, project.path));
     expect(cache).not.toBeNull();
     expect(cache!.scanChecksum).toMatch(/^sha256:/);
     expect(cache!.modelChecksum).toMatch(/^sha256:/);
+    expect(cache!.modelChecksum).toBe(result.modelChecksum);
     expect(cache!.scanChecksum).not.toBe(cache!.modelChecksum);
+  });
+
+  it("returns the same modelChecksum on a cache hit as on the originating scan", async () => {
+    const config = buildEffectiveConfig(configSchema.parse({}));
+    const fresh = await runProjectScan({ rootDir: tmpRoot, project, config });
+    const cached = await runProjectScan({ rootDir: tmpRoot, project, config });
+    expect(cached.fromCache).toBe(true);
+    expect(cached.modelChecksum).toBe(fresh.modelChecksum);
   });
 
   it("toggling levels.code re-scans but leaves modelStale = false", async () => {
@@ -329,5 +339,77 @@ describe("runScanAll (model-stale aggregation)", () => {
     expect(second.staleProjects.length).toBe(projects.length);
     // ...but the L1–L3 model is still valid for every project.
     expect(second.modelStaleProjects).toEqual([]);
+  });
+
+  it("modelCacheKey is non-empty, persisted on rawStructure, and stable across cache hits", async () => {
+    const cfg = buildEffectiveConfig(configSchema.parse({}));
+    const projects = await discoverApplications(tmpRoot, cfg);
+
+    const first = await runScanAll({
+      rootDir: tmpRoot,
+      config: cfg,
+      projects,
+    });
+    expect(first.modelCacheKey).toBeTruthy();
+    expect(first.modelCacheKey).toBe(first.rawStructure.modelCacheKey);
+
+    // Second run hits per-project caches; combined model cache key is stable.
+    const second = await runScanAll({
+      rootDir: tmpRoot,
+      config: cfg,
+      projects,
+    });
+    expect(second.modelCacheKey).toBe(first.modelCacheKey);
+  });
+
+  it("modelCacheKey changes when a source file changes", async () => {
+    const cfg = buildEffectiveConfig(configSchema.parse({}));
+    const projects = await discoverApplications(tmpRoot, cfg);
+
+    const before = await runScanAll({
+      rootDir: tmpRoot,
+      config: cfg,
+      projects,
+    });
+
+    // Add a source file the project hasher will pick up. SOURCE_EXTENSIONS
+    // (see src/core/checksum.ts) covers .java, so use that for any container.
+    const container = projects.find((p) => p.type === "container");
+    if (!container) throw new Error("monorepo fixture has no container");
+    const targetFile = path.join(tmpRoot, container.path, "CacheKeyProbe.java");
+    fs.writeFileSync(targetFile, "class CacheKeyProbe {}\n", "utf-8");
+
+    const after = await runScanAll({
+      rootDir: tmpRoot,
+      config: cfg,
+      projects,
+    });
+    expect(after.modelCacheKey).not.toBe(before.modelCacheKey);
+  });
+
+  it("modelCacheKey includes library projects so adding one invalidates the cache", async () => {
+    const cfg = buildEffectiveConfig(configSchema.parse({}));
+    const allProjects = await discoverApplications(tmpRoot, cfg);
+    const containersOnly = allProjects.filter((p) => p.type === "container");
+    const withLibrary = allProjects;
+    if (containersOnly.length === allProjects.length) {
+      throw new Error("monorepo fixture has no library project");
+    }
+
+    const containerKey = (
+      await runScanAll({
+        rootDir: tmpRoot,
+        config: cfg,
+        projects: containersOnly,
+      })
+    ).modelCacheKey;
+    const fullKey = (
+      await runScanAll({
+        rootDir: tmpRoot,
+        config: cfg,
+        projects: withLibrary,
+      })
+    ).modelCacheKey;
+    expect(fullKey).not.toBe(containerKey);
   });
 });

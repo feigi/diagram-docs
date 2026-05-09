@@ -21,7 +21,7 @@ import {
   writeManifestV2,
   createDefaultManifestV2,
 } from "../../core/manifest.js";
-import { runScanAll, computeModelCacheKey } from "../../core/scan.js";
+import { runScanAll } from "../../core/scan.js";
 import { slugify } from "../../core/slugify.js";
 import { generateContextDiagram } from "../../generator/d2/context.js";
 import { generateContainerDiagram } from "../../generator/d2/container.js";
@@ -503,16 +503,13 @@ async function resolveModel(
     (p) => p.type === "container",
   );
 
-  // 4. If nothing changed, reuse existing model — but first check for deletions
-  // and verify the on-disk model was actually produced from this scan (guards
-  // against interrupted LLM runs that updated per-project caches but never
-  // finished writing architecture-model.yaml).
+  // 4. If nothing changed, reuse existing model — first check for deletions,
+  // then verify the on-disk model was actually produced from this scan
+  // (per-project caches and `lastModel` are written at different points; an
+  // aborted run can leave caches fresh while the combined model is missing
+  // or stale).
   const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
-  const currentModelCacheKey = computeModelCacheKey(
-    projectResults
-      .filter((r) => r.project.type === "container")
-      .map((r) => r.modelChecksum),
-  );
+  const currentModelCacheKey = rawStructure.modelCacheKey ?? "";
   const savedManifest = readManifest(configDir);
   const modelCacheValid =
     savedManifest?.lastModel?.checksum === currentModelCacheKey;

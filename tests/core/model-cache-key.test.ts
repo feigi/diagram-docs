@@ -26,7 +26,15 @@ describe("computeModelCacheKey", () => {
     );
   });
 
-  it("returns empty string for no checksums", () => {
-    expect(computeModelCacheKey([])).toBe("");
+  it("returns a length-prefixed sentinel for no checksums (no collision with non-empty keys)", () => {
+    expect(computeModelCacheKey([])).toBe("0:");
+    expect(computeModelCacheKey([""])).not.toBe(computeModelCacheKey([]));
+    expect(computeModelCacheKey([])).not.toBe(computeModelCacheKey(["aaa"]));
+  });
+
+  it("uses a length prefix so adding/removing entries cannot collide", () => {
+    expect(computeModelCacheKey(["a", "b"])).not.toBe(
+      computeModelCacheKey(["a,b"]),
+    );
   });
 });
