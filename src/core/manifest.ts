@@ -29,7 +29,16 @@ export function readManifest(rootDir: string): Manifest | null {
   if (!fs.existsSync(mp)) return null;
 
   const raw = fs.readFileSync(mp, "utf-8");
-  return parseYaml(raw) as Manifest;
+  try {
+    return parseYaml(raw) as Manifest;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `Warning: failed to parse manifest at ${mp}: ${msg}\n` +
+        "Treating as missing; caches will be re-derived.",
+    );
+    return null;
+  }
 }
 
 export function writeManifest(rootDir: string, manifest: Manifest): void {

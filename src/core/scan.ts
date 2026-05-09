@@ -535,18 +535,26 @@ export interface ProjectScanResult {
    * do NOT set this.
    */
   modelStale: boolean;
-  /** The model checksum for this project at the time of the scan. */
+  /**
+   * Per-project fingerprint folded into `computeModelCacheKey` so generate
+   * can detect when the on-disk combined model is stale relative to the
+   * current scan output.
+   */
   modelChecksum: string;
 }
 
 /**
- * Compute a combined cache key from per-project model checksums.
- * Used to detect when architecture-model.yaml is stale relative to the
- * current scan even if staleContainers is empty (e.g. after an interrupted
- * LLM run that updated per-project caches but never wrote the model).
+ * Combine per-project model checksums into a single cache key. Generate
+ * persists this on `manifest.lastModel.checksum` and validates it on the
+ * cache-hit path so a run that aborts between writing per-project caches
+ * and writing `architecture-model.yaml` is detected on the next run.
+ *
+ * Length-prefixed to keep the empty-input case (`"0:"`) from colliding
+ * with any non-empty key shape.
  */
 export function computeModelCacheKey(modelChecksums: string[]): string {
-  return [...modelChecksums].sort().join(",");
+  const sorted = [...modelChecksums].sort();
+  return `${sorted.length}:${sorted.join(",")}`;
 }
 
 /**
@@ -691,6 +699,7 @@ export async function runScanAll(options: {
   projectResults: ProjectScanResult[];
   staleProjects: DiscoveredProject[];
   modelStaleProjects: DiscoveredProject[];
+  modelCacheKey: string;
 }> {
   const { rootDir, config, projects, getProjectConfig, force, verbose } =
     options;
@@ -772,12 +781,23 @@ export async function runScanAll(options: {
     .sort()
     .join(",");
 
+  const modelCacheKey = computeModelCacheKey(
+    projectResults.map((r) => r.modelChecksum),
+  );
+
   const rawStructure: RawStructure = {
     version: 1,
     scannedAt: new Date().toISOString(),
     checksum: `combined:${combinedChecksum}`,
+    modelCacheKey,
     applications: allApplications,
   };
 
-  return { rawStructure, projectResults, staleProjects, modelStaleProjects };
+  return {
+    rawStructure,
+    projectResults,
+    staleProjects,
+    modelStaleProjects,
+    modelCacheKey,
+  };
 }

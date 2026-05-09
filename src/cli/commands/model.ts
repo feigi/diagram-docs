@@ -65,7 +65,7 @@ export const modelCommand = new Command("model")
     );
 
     let yamlContent: string;
-    const scanChecksum = rawStructure.checksum;
+    const modelCacheKey = rawStructure.modelCacheKey;
 
     if (options.llm) {
       // Read config YAML for LLM context
@@ -169,12 +169,15 @@ export const modelCommand = new Command("model")
       );
     }
 
-    // Record scan checksum so generate can detect stale models
-    if (scanChecksum) {
+    // Record the model cache key so a subsequent `generate` recognises this
+    // model as fresh. Older raw-structure.json files predating this field
+    // leave `lastModel.checksum` unset, forcing a one-time rebuild — that's
+    // the safe direction.
+    if (modelCacheKey) {
       const manifest = readManifest(configDir) ?? createDefaultManifest();
       manifest.lastModel = {
         timestamp: new Date().toISOString(),
-        checksum: scanChecksum,
+        checksum: modelCacheKey,
       };
       writeManifest(configDir, manifest);
     }
