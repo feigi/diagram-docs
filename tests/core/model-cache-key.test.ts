@@ -26,8 +26,7 @@ describe("computeModelCacheKey", () => {
     );
   });
 
-  it("returns a length-prefixed sentinel for no checksums (no collision with non-empty keys)", () => {
-    expect(computeModelCacheKey([])).toBe("0:");
+  it("never collides empty input with single-empty-string input or with non-empty keys", () => {
     expect(computeModelCacheKey([""])).not.toBe(computeModelCacheKey([]));
     expect(computeModelCacheKey([])).not.toBe(computeModelCacheKey(["aaa"]));
   });

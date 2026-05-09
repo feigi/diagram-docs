@@ -29,8 +29,9 @@ export function readManifest(rootDir: string): Manifest | null {
   if (!fs.existsSync(mp)) return null;
 
   const raw = fs.readFileSync(mp, "utf-8");
+  let parsed: unknown;
   try {
-    return parseYaml(raw) as Manifest;
+    parsed = parseYaml(raw);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(
@@ -39,6 +40,14 @@ export function readManifest(rootDir: string): Manifest | null {
     );
     return null;
   }
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    (parsed as { version?: unknown }).version === 1
+  ) {
+    return parsed as Manifest;
+  }
+  return null;
 }
 
 export function writeManifest(rootDir: string, manifest: Manifest): void {
@@ -79,8 +88,24 @@ export function readManifestV2(rootDir: string): ManifestV2 | null {
   if (!fs.existsSync(mp)) return null;
 
   const raw = fs.readFileSync(mp, "utf-8");
-  const parsed = parseYaml(raw);
-  if (parsed?.version === 2) return parsed as ManifestV2;
+  let parsed: unknown;
+  try {
+    parsed = parseYaml(raw);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(
+      `Warning: failed to parse manifest at ${mp}: ${msg}\n` +
+        "Treating as missing; caches will be re-derived.",
+    );
+    return null;
+  }
+  if (
+    parsed &&
+    typeof parsed === "object" &&
+    (parsed as { version?: unknown }).version === 2
+  ) {
+    return parsed as ManifestV2;
+  }
   return null;
 }
 

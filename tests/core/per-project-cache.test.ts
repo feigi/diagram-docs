@@ -353,7 +353,6 @@ describe("runScanAll (model-stale aggregation)", () => {
     expect(first.modelCacheKey).toBeTruthy();
     expect(first.modelCacheKey).toBe(first.rawStructure.modelCacheKey);
 
-    // Second run hits per-project caches; combined model cache key is stable.
     const second = await runScanAll({
       rootDir: tmpRoot,
       config: cfg,
@@ -372,8 +371,7 @@ describe("runScanAll (model-stale aggregation)", () => {
       projects,
     });
 
-    // Add a source file the project hasher will pick up. SOURCE_EXTENSIONS
-    // (see src/core/checksum.ts) covers .java, so use that for any container.
+    // .java is recognised by the project source-file hasher, so any container in the fixture works.
     const container = projects.find((p) => p.type === "container");
     if (!container) throw new Error("monorepo fixture has no container");
     const targetFile = path.join(tmpRoot, container.path, "CacheKeyProbe.java");

@@ -171,8 +171,8 @@ export const modelCommand = new Command("model")
 
     // Record the model cache key so a subsequent `generate` recognises this
     // model as fresh. Older raw-structure.json files predating this field
-    // leave `lastModel.checksum` unset, forcing a one-time rebuild — that's
-    // the safe direction.
+    // leave `lastModel.checksum` at its prior value (which has a different
+    // shape than the new key), forcing a one-time rebuild — the safe direction.
     if (modelCacheKey) {
       const manifest = readManifest(configDir) ?? createDefaultManifest();
       manifest.lastModel = {
@@ -180,5 +180,10 @@ export const modelCommand = new Command("model")
         checksum: modelCacheKey,
       };
       writeManifest(configDir, manifest);
+    } else {
+      console.error(
+        "Warning: raw-structure.json predates modelCacheKey; cache-validity hint not recorded. " +
+          "Re-run `diagram-docs scan` so the next `generate` can reuse this model.",
+      );
     }
   });

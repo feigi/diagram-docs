@@ -21,8 +21,7 @@ export interface RawStructure {
    * Combined fingerprint over all per-project model checksums. Generate's
    * cache-hit guard compares this against `manifest.lastModel.checksum` so
    * an interrupted run that never wrote `architecture-model.yaml` is detected
-   * on the next invocation. Optional for backward compat with raw-structure
-   * files written before this field existed.
+   * on the next invocation.
    */
   modelCacheKey?: string;
   applications: ScannedApplication[];

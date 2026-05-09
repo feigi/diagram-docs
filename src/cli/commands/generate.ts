@@ -504,12 +504,19 @@ async function resolveModel(
   );
 
   // 4. If nothing changed, reuse existing model — first check for deletions,
-  // then verify the on-disk model was actually produced from this scan
-  // (per-project caches and `lastModel` are written at different points; an
-  // aborted run can leave caches fresh while the combined model is missing
-  // or stale).
+  // then verify the on-disk model was actually produced from this scan. An
+  // interrupted run between `scan` and `model`/`generate` (e.g. Ctrl-C while
+  // the LLM agent is running) leaves per-project caches fresh but the combined
+  // `architecture-model.yaml` (and `lastModel`) absent or stale; the cache-key
+  // mismatch on the next run forces a rebuild instead of reusing the stale model.
   const autoModelPath = path.resolve(configDir, "architecture-model.yaml");
-  const currentModelCacheKey = rawStructure.modelCacheKey ?? "";
+  const currentModelCacheKey = rawStructure.modelCacheKey;
+  if (currentModelCacheKey === undefined) {
+    // runScanAll always sets this; reaching here means a producer regression.
+    throw new Error(
+      "internal error: runScanAll produced rawStructure without modelCacheKey",
+    );
+  }
   const savedManifest = readManifest(configDir);
   const modelCacheValid =
     savedManifest?.lastModel?.checksum === currentModelCacheKey;
