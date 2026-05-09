@@ -359,9 +359,16 @@ export async function runScan({
     console.error(`  ${app.language}: ${app.path} (${app.buildFile})`);
   }
 
-  // Check cache — include scan-relevant config so config changes invalidate it
+  // Check cache — include scan-relevant config so config changes invalidate it.
+  // Also derive a separate model-fingerprint checksum so the legacy single-scan
+  // path produces a `modelCacheKey` consistent with `runScanAll`'s output.
   const manifest = readManifest(rootDir) ?? createDefaultManifest();
-  const configFingerprint = buildScanFingerprint(
+  const scanFingerprint = buildScanFingerprint(
+    effectiveExcludes,
+    effectiveConfig,
+    { includeScanInclude: true },
+  );
+  const modelFingerprint = buildModelFingerprint(
     effectiveExcludes,
     effectiveConfig,
     { includeScanInclude: true },
@@ -375,12 +382,14 @@ export async function runScan({
         );
       }, SPINNER_INTERVAL)
     : undefined;
-  const checksum = await computeChecksum(
+  const sourceHash = await computeChecksum(
     rootDir,
     discovered.map((d) => d.path),
     effectiveExcludes,
-    configFingerprint,
   );
+  const checksum = mixFingerprint(sourceHash, scanFingerprint);
+  const modelChecksum = mixFingerprint(sourceHash, modelFingerprint);
+  const modelCacheKey = computeModelCacheKey([modelChecksum]);
   if (spinnerTimer) {
     clearInterval(spinnerTimer);
     process.stderr.write("\r\x1b[K✔ Checksum computed\n");
@@ -395,6 +404,10 @@ export async function runScan({
     if (fs.existsSync(cachedPath)) {
       const cached = fs.readFileSync(cachedPath, "utf-8");
       const rawStructure: RawStructure = JSON.parse(cached);
+      // Backfill `modelCacheKey` for caches written before this field existed.
+      if (rawStructure.modelCacheKey === undefined) {
+        rawStructure.modelCacheKey = modelCacheKey;
+      }
       return { rawStructure, fromCache: true };
     }
   }
@@ -500,6 +513,7 @@ export async function runScan({
     version: 1,
     scannedAt: new Date().toISOString(),
     checksum,
+    modelCacheKey,
     applications: rolledUpApplications,
   };
 
@@ -549,8 +563,8 @@ export interface ProjectScanResult {
  * cache-hit path so a run that aborts between writing per-project caches
  * and writing `architecture-model.yaml` is detected on the next run.
  *
- * Length-prefixed to keep the empty-input case (`"0:"`) from colliding
- * with any non-empty key shape.
+ * Length-prefixed so distinct input arrays cannot collide via the comma
+ * separator — e.g. `["a","b"]` (`"2:a,b"`) vs `["a,b"]` (`"1:a,b"`).
  */
 export function computeModelCacheKey(modelChecksums: string[]): string {
   const sorted = [...modelChecksums].sort();
